@@ -58,16 +58,16 @@ func (e FieldKind) Valid() bool {
 
 // Defines values for MetadataAccess.
 const (
-	Public     MetadataAccess = "public"
-	Restricted MetadataAccess = "restricted"
+	MetadataAccessPublic     MetadataAccess = "public"
+	MetadataAccessRestricted MetadataAccess = "restricted"
 )
 
 // Valid indicates whether the value is a known member of the MetadataAccess enum.
 func (e MetadataAccess) Valid() bool {
 	switch e {
-	case Public:
+	case MetadataAccessPublic:
 		return true
-	case Restricted:
+	case MetadataAccessRestricted:
 		return true
 	default:
 		return false
@@ -182,6 +182,24 @@ func (e StateChangeState) Valid() bool {
 	}
 }
 
+// Defines values for UploadProfileAccess.
+const (
+	UploadProfileAccessPublic     UploadProfileAccess = "public"
+	UploadProfileAccessRestricted UploadProfileAccess = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the UploadProfileAccess enum.
+func (e UploadProfileAccess) Valid() bool {
+	switch e {
+	case UploadProfileAccessPublic:
+		return true
+	case UploadProfileAccessRestricted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VersionState.
 const (
 	VersionStateApproved   VersionState = "approved"
@@ -229,12 +247,13 @@ type Associations struct {
 
 // Capabilities defines model for Capabilities.
 type Capabilities struct {
-	AllowedTypes      []string `json:"allowed_types"`
-	MaxFileSize       int64    `json:"max_file_size"`
-	MaxPackageBytes   int64    `json:"max_package_bytes"`
-	MaxPackageFiles   int64    `json:"max_package_files"`
-	PurchaseAvailable bool     `json:"purchase_available"`
-	Terms             Terms    `json:"terms"`
+	AllowedTypes      []string        `json:"allowed_types"`
+	MaxFileSize       int64           `json:"max_file_size"`
+	MaxPackageBytes   int64           `json:"max_package_bytes"`
+	MaxPackageFiles   int64           `json:"max_package_files"`
+	PurchaseAvailable bool            `json:"purchase_available"`
+	Terms             Terms           `json:"terms"`
+	UploadProfiles    []UploadProfile `json:"upload_profiles"`
 }
 
 // Category defines model for Category.
@@ -438,10 +457,11 @@ type Problem struct {
 
 // Request defines model for Request.
 type Request struct {
-	Contact  *string     `json:"contact,omitempty"`
-	Evidence *[]string   `json:"evidence,omitempty"`
-	Kind     RequestKind `json:"kind"`
-	Reason   string      `json:"reason"`
+	Contact        *string     `json:"contact,omitempty"`
+	Evidence       *[]string   `json:"evidence,omitempty"`
+	Kind           RequestKind `json:"kind"`
+	PreviousTaskId *string     `json:"previous_task_id,omitempty"`
+	Reason         string      `json:"reason"`
 }
 
 // RequestKind defines model for Request.Kind.
@@ -449,9 +469,14 @@ type RequestKind string
 
 // RequestReceipt defines model for RequestReceipt.
 type RequestReceipt struct {
-	CreatedAt time.Time           `json:"created_at"`
-	Id        string              `json:"id"`
-	State     RequestReceiptState `json:"state"`
+	CanAppeal      bool                `json:"can_appeal"`
+	CreatedAt      time.Time           `json:"created_at"`
+	DecisionReason *string             `json:"decision_reason,omitempty"`
+	Id             string              `json:"id"`
+	Kind           *string             `json:"kind,omitempty"`
+	ResourceId     *string             `json:"resource_id,omitempty"`
+	State          RequestReceiptState `json:"state"`
+	TaskId         *string             `json:"task_id,omitempty"`
 }
 
 // RequestReceiptState defines model for RequestReceipt.State.
@@ -494,6 +519,16 @@ type Terms struct {
 	Url     string `json:"url"`
 	Version string `json:"version"`
 }
+
+// UploadProfile defines model for UploadProfile.
+type UploadProfile struct {
+	Access   UploadProfileAccess `json:"access"`
+	Purpose  string              `json:"purpose"`
+	SchoolId string              `json:"school_id"`
+}
+
+// UploadProfileAccess defines model for UploadProfile.Access.
+type UploadProfileAccess string
 
 // Value defines model for Value.
 type Value struct {
@@ -628,6 +663,14 @@ type CreatePackageParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// RetryResourceRequestJSONBody defines parameters for RetryResourceRequest.
+type RetryResourceRequestJSONBody = map[string]interface{}
+
+// RetryResourceRequestParams defines parameters for RetryResourceRequest.
+type RetryResourceRequestParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // CreateDraftJSONRequestBody defines body for CreateDraft for application/json ContentType.
 type CreateDraftJSONRequestBody = DraftWrite
 
@@ -663,6 +706,9 @@ type SubmitResourceJSONRequestBody = Command
 
 // CreatePackageJSONRequestBody defines body for CreatePackage for application/json ContentType.
 type CreatePackageJSONRequestBody = PackageRequest
+
+// RetryResourceRequestJSONRequestBody defines body for RetryResourceRequest for application/json ContentType.
+type RetryResourceRequestJSONRequestBody = RetryResourceRequestJSONBody
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -960,6 +1006,25 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/resources/packages/{id}/parts/{part} (the `DownloadPackagePart` operationId).
 	DownloadPackagePart(ctx context.Context, id string, part string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetResourceRequest GetResource
+	//
+	// Corresponds with GET /api/v1/resources/requests/{id} (the `GetResourceRequest` operationId).
+	GetResourceRequest(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RetryResourceRequestWithBody SubmitResource
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/resources/requests/{id}/retry (the `RetryResourceRequest` operationId).
+	RetryResourceRequestWithBody(ctx context.Context, id string, params *RetryResourceRequestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RetryResourceRequest SubmitResource
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/resources/requests/{id}/retry (the `RetryResourceRequest` operationId).
+	RetryResourceRequest(ctx context.Context, id string, params *RetryResourceRequestParams, body RetryResourceRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // ListResources ListResources
@@ -1525,6 +1590,55 @@ func (c *Client) GetPackage(ctx context.Context, id string, reqEditors ...Reques
 // Corresponds with GET /api/v1/resources/packages/{id}/parts/{part} (the `DownloadPackagePart` operationId).
 func (c *Client) DownloadPackagePart(ctx context.Context, id string, part string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDownloadPackagePartRequest(c.Server, id, part)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetResourceRequest GetResource
+//
+// Corresponds with GET /api/v1/resources/requests/{id} (the `GetResourceRequest` operationId).
+func (c *Client) GetResourceRequest(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetResourceRequestRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RetryResourceRequestWithBody SubmitResource
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/resources/requests/{id}/retry (the `RetryResourceRequest` operationId).
+func (c *Client) RetryResourceRequestWithBody(ctx context.Context, id string, params *RetryResourceRequestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRetryResourceRequestRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RetryResourceRequest SubmitResource
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/resources/requests/{id}/retry (the `RetryResourceRequest` operationId).
+func (c *Client) RetryResourceRequest(ctx context.Context, id string, params *RetryResourceRequestParams, body RetryResourceRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRetryResourceRequestRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3013,6 +3127,100 @@ func NewDownloadPackagePartRequest(server string, id string, part string) (*http
 	return req, nil
 }
 
+// NewGetResourceRequestRequest constructs an http.Request for the GetResourceRequest method
+func NewGetResourceRequestRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/requests/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRetryResourceRequestRequest calls the generic RetryResourceRequest builder with application/json body
+func NewRetryResourceRequestRequest(server string, id string, params *RetryResourceRequestParams, body RetryResourceRequestJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRetryResourceRequestRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewRetryResourceRequestRequestWithBody constructs an http.Request for the RetryResourceRequest method, with any body, and a specified content type
+func NewRetryResourceRequestRequestWithBody(server string, id string, params *RetryResourceRequestParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/requests/%s/retry", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -3301,6 +3509,27 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/resources/packages/{id}/parts/{part} (the `DownloadPackagePart` operationId).
 	DownloadPackagePartWithResponse(ctx context.Context, id string, part string, reqEditors ...RequestEditorFn) (*DownloadPackagePartResponse, error)
+
+	// GetResourceRequestWithResponse GetResource
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/requests/{id} (the `GetResourceRequest` operationId).
+	GetResourceRequestWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetResourceRequestResponse, error)
+
+	// RetryResourceRequestWithBodyWithResponse SubmitResource
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/resources/requests/{id}/retry (the `RetryResourceRequest` operationId).
+	RetryResourceRequestWithBodyWithResponse(ctx context.Context, id string, params *RetryResourceRequestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RetryResourceRequestResponse, error)
+
+	// RetryResourceRequestWithResponse SubmitResource
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/resources/requests/{id}/retry (the `RetryResourceRequest` operationId).
+	RetryResourceRequestWithResponse(ctx context.Context, id string, params *RetryResourceRequestParams, body RetryResourceRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*RetryResourceRequestResponse, error)
 }
 
 type ListResourcesResponse struct {
@@ -5359,6 +5588,186 @@ func (r DownloadPackagePartResponse) ContentType() string {
 	return ""
 }
 
+type GetResourceRequestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RequestReceipt
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetResourceRequestResponse) GetJSON200() *RequestReceipt {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetResourceRequestResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetResourceRequestResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetResourceRequestResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetResourceRequestResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r GetResourceRequestResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r GetResourceRequestResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetResourceRequestResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetResourceRequestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetResourceRequestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetResourceRequestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetResourceRequestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RetryResourceRequestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *RequestReceipt
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RetryResourceRequestResponse) GetJSON202() *RequestReceipt {
+	return r.JSON202
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r RetryResourceRequestResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r RetryResourceRequestResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r RetryResourceRequestResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r RetryResourceRequestResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r RetryResourceRequestResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r RetryResourceRequestResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r RetryResourceRequestResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r RetryResourceRequestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RetryResourceRequestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RetryResourceRequestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RetryResourceRequestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // ListResourcesWithResponse ListResources
 //
 // Returns a wrapper object for the known response body format(s).
@@ -5812,6 +6221,45 @@ func (c *ClientWithResponses) DownloadPackagePartWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseDownloadPackagePartResponse(rsp)
+}
+
+// GetResourceRequestWithResponse GetResource
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/requests/{id} (the `GetResourceRequest` operationId).
+func (c *ClientWithResponses) GetResourceRequestWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetResourceRequestResponse, error) {
+	rsp, err := c.GetResourceRequest(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetResourceRequestResponse(rsp)
+}
+
+// RetryResourceRequestWithBodyWithResponse SubmitResource
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/resources/requests/{id}/retry (the `RetryResourceRequest` operationId).
+func (c *ClientWithResponses) RetryResourceRequestWithBodyWithResponse(ctx context.Context, id string, params *RetryResourceRequestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RetryResourceRequestResponse, error) {
+	rsp, err := c.RetryResourceRequestWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRetryResourceRequestResponse(rsp)
+}
+
+// RetryResourceRequestWithResponse SubmitResource
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/resources/requests/{id}/retry (the `RetryResourceRequest` operationId).
+func (c *ClientWithResponses) RetryResourceRequestWithResponse(ctx context.Context, id string, params *RetryResourceRequestParams, body RetryResourceRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*RetryResourceRequestResponse, error) {
+	rsp, err := c.RetryResourceRequest(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRetryResourceRequestResponse(rsp)
 }
 
 // ParseListResourcesResponse parses an HTTP response from a ListResourcesWithResponse call
@@ -7471,6 +7919,156 @@ func ParseDownloadPackagePartResponse(rsp *http.Response) (*DownloadPackagePartR
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetResourceRequestResponse parses an HTTP response from a GetResourceRequestWithResponse call
+func ParseGetResourceRequestResponse(rsp *http.Response) (*GetResourceRequestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetResourceRequestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RequestReceipt
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRetryResourceRequestResponse parses an HTTP response from a RetryResourceRequestWithResponse call
+func ParseRetryResourceRequestResponse(rsp *http.Response) (*RetryResourceRequestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RetryResourceRequestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest RequestReceipt
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {

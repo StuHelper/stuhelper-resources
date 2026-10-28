@@ -138,7 +138,7 @@ func (s *Service) executeJob(ctx context.Context, job Job) (jobResult, error) {
 		if e != nil {
 			return result, e
 		}
-		result.externalID, e = s.deps.Moderation.Request(ctx, job.ID, request.ResourceID, request.Reporter, request.Request)
+		result.externalID, e = s.deps.Moderation.Request(ctx, job.ID, request.VersionID, request.Reporter, request.Request)
 		if e == nil && !validID(result.externalID) {
 			e = ErrUnavailable
 		}

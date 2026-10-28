@@ -2677,6 +2677,225 @@
           }
         }
       }
+    },
+    "/api/v1/resources/requests/{id}": {
+      "get": {
+        "operationId": "GetResourceRequest",
+        "summary": "GetResource",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revision, policy or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Configured resource limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/resources/requests/{id}/retry": {
+      "post": {
+        "operationId": "RetryResourceRequest",
+        "summary": "SubmitResource",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revision, policy or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Configured resource limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3388,6 +3607,10 @@
               "maxLength": 2000
             },
             "maxItems": 5
+          },
+          "previous_task_id": {
+            "type": "string",
+            "maxLength": 128
           }
         },
         "required": [
@@ -3414,12 +3637,28 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "resource_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "decision_reason": {
+            "type": "string"
+          },
+          "can_appeal": {
+            "type": "boolean"
           }
         },
         "required": [
           "id",
           "state",
-          "created_at"
+          "created_at",
+          "can_appeal"
         ]
       },
       "GrantWrite": {
@@ -3742,6 +3981,12 @@
           },
           "purchase_available": {
             "type": "boolean"
+          },
+          "upload_profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UploadProfile"
+            }
           }
         },
         "required": [
@@ -3750,8 +3995,32 @@
           "max_file_size",
           "max_package_bytes",
           "max_package_files",
-          "purchase_available"
+          "purchase_available",
+          "upload_profiles"
         ]
+      },
+      "UploadProfile": {
+        "type": "object",
+        "required": [
+          "school_id",
+          "access",
+          "purpose"
+        ],
+        "properties": {
+          "school_id": {
+            "type": "string"
+          },
+          "access": {
+            "type": "string",
+            "enum": [
+              "public",
+              "restricted"
+            ]
+          },
+          "purpose": {
+            "type": "string"
+          }
+        }
       }
     },
     "securitySchemes": {

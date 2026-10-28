@@ -192,19 +192,26 @@ type StateChange struct {
 	Reason   string `json:"reason"`
 }
 type Request struct {
-	Kind     string   `json:"kind"`
-	Reason   string   `json:"reason"`
-	Contact  string   `json:"contact,omitempty"`
-	Evidence []string `json:"evidence,omitempty"`
+	PreviousTaskID string   `json:"previous_task_id,omitempty"`
+	Kind           string   `json:"kind"`
+	Reason         string   `json:"reason"`
+	Contact        string   `json:"contact,omitempty"`
+	Evidence       []string `json:"evidence,omitempty"`
 }
 type RequestReceipt struct {
-	ID        string    `json:"id"`
-	State     string    `json:"state"`
-	CreatedAt time.Time `json:"created_at"`
+	TaskID         string    `json:"task_id,omitempty"`
+	ResourceID     string    `json:"resource_id,omitempty"`
+	Kind           string    `json:"kind,omitempty"`
+	DecisionReason string    `json:"decision_reason,omitempty"`
+	CanAppeal      bool      `json:"can_appeal"`
+	ID             string    `json:"id"`
+	State          string    `json:"state"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 type RequestRecord struct {
 	Receipt    RequestReceipt
 	ResourceID string
+	VersionID  string
 	Reporter   Principal
 	Request    Request
 	ExternalID string
@@ -279,12 +286,13 @@ type Terms struct {
 	URL     string `json:"url"`
 }
 type Capabilities struct {
-	Terms             Terms    `json:"terms"`
-	AllowedTypes      []string `json:"allowed_types"`
-	MaxFileSize       int64    `json:"max_file_size"`
-	MaxPackageBytes   int64    `json:"max_package_bytes"`
-	MaxPackageFiles   int      `json:"max_package_files"`
-	PurchaseAvailable bool     `json:"purchase_available"`
+	UploadProfiles    []UploadProfile `json:"upload_profiles"`
+	Terms             Terms           `json:"terms"`
+	AllowedTypes      []string        `json:"allowed_types"`
+	MaxFileSize       int64           `json:"max_file_size"`
+	MaxPackageBytes   int64           `json:"max_package_bytes"`
+	MaxPackageFiles   int             `json:"max_package_files"`
+	PurchaseAvailable bool            `json:"purchase_available"`
 }
 
 // Authority supplies current action eligibility and administration scope. Upload
@@ -297,9 +305,9 @@ type Catalog interface {
 	Validate(context.Context, Associations) error
 }
 type FileEvidence struct {
-	File                  File
-	Owner                 Principal
-	Module, State, Access string
+	File                            File
+	Owner                           Principal
+	Module, State, Access, SchoolID string
 }
 type Publication struct {
 	ResourceID, VersionID, MediaVersionID, OperationID, Access string
@@ -317,9 +325,20 @@ type ReviewSubmission struct {
 	Revision                                            int64
 }
 type Moderation interface {
+	Status(context.Context, Principal, string) (RequestStatus, error)
 	Submit(context.Context, string, ReviewSubmission) (string, error)
 	Request(context.Context, string, string, Principal, Request) (string, error)
 }
+type RequestStatus struct {
+	State, Reason string
+	CanAppeal     bool
+}
+type UploadProfile struct {
+	SchoolID string `json:"school_id"`
+	Access   string `json:"access"`
+	Purpose  string `json:"purpose"`
+}
+
 type Entitlement struct {
 	Purchased bool
 	Member    bool
@@ -335,6 +354,7 @@ type Dependencies struct {
 	Entitlements Entitlements
 }
 type Config struct {
+	UploadProfiles                                                                          []UploadProfile
 	Clock                                                                                   func() time.Time
 	Terms                                                                                   Terms
 	AllowedTypes                                                                            []string

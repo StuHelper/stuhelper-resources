@@ -322,6 +322,9 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 			return out, ErrInput
 		}
 	}
+	if in.Kind == "appeal" && !validID(in.PreviousTaskID) || in.Kind != "appeal" && in.PreviousTaskID != "" {
+		return out, ErrInput
+	}
 	switch in.Kind {
 	case "withdrawal", "appeal":
 		if r.Owner != p {
@@ -335,8 +338,15 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 		return out, ErrInput
 	}
 	e = s.mutation(ctx, p, "request", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
-		out = RequestReceipt{ID: newID(), State: "pending", CreatedAt: s.now()}
-		if e := tx.SaveRequest(RequestRecord{Receipt: out, ResourceID: id, Reporter: p, Request: in}); e != nil {
+		versionID := r.ActiveID
+		if versionID == "" {
+			versionID = r.ProposalID
+		}
+		if versionID == "" {
+			return nil, ErrConflict
+		}
+		out = RequestReceipt{ID: newID(), State: "pending", ResourceID: id, Kind: in.Kind, CreatedAt: s.now()}
+		if e := tx.SaveRequest(RequestRecord{Receipt: out, ResourceID: id, VersionID: versionID, Reporter: p, Request: in}); e != nil {
 			return nil, e
 		}
 		if e := s.queue(tx, "request", id, "", out.ID, ""); e != nil {

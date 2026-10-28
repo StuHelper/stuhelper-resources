@@ -95,6 +95,16 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 	write[resources.StateChange](h, m, "POST /api/v1/resources/items/{id}/state", func(r *http.Request, p resources.Principal, in resources.StateChange) (any, error) {
 		return s.SetState(r.Context(), p, r.PathValue("id"), key(r), in)
 	})
+	h.mount(m, "GET /api/v1/resources/requests/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		return s.RequestStatus(r.Context(), p, r.PathValue("id"))
+	})
+	h.mount(m, "POST /api/v1/resources/requests/{id}/retry", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		var q struct{}
+		if e := decode(r, &q); e != nil {
+			return nil, e
+		}
+		return s.RetryRequest(r.Context(), p, r.PathValue("id"), key(r))
+	})
 	write[resources.Request](h, m, "POST /api/v1/resources/items/{id}/requests", func(r *http.Request, p resources.Principal, in resources.Request) (any, error) {
 		return s.CreateRequest(r.Context(), p, r.PathValue("id"), key(r), in)
 	})
@@ -178,9 +188,19 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 			failure(w, resources.ErrInput)
 			return
 		}
+		// Check absence here, including chunked requests. The validator's
+		// RejectWhenRequestBodyNotSpecified flag also rejects specified bodies
+		// in the pinned version, so only schema validation is delegated below.
+		if route.Operation.RequestBody == nil {
+			body, err := io.ReadAll(io.LimitReader(r.Body, 1))
+			if err != nil || len(body) != 0 {
+				failure(w, resources.ErrInput)
+				return
+			}
+		}
 		// Authentication already succeeded above. This validates the contract's
 		// required fields, nested shapes and limits against the same request body.
-		if err = openapi3filter.ValidateRequest(ctx, &openapi3filter.RequestValidationInput{Request: r, PathParams: params, Route: route, Options: &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc, RejectWhenRequestBodyNotSpecified: true, SkipSettingDefaults: true}}); err != nil {
+		if err = openapi3filter.ValidateRequest(ctx, &openapi3filter.RequestValidationInput{Request: r, PathParams: params, Route: route, Options: &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc, SkipSettingDefaults: true}}); err != nil {
 			failure(w, resources.ErrInput)
 			return
 		}
@@ -190,7 +210,15 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 			return
 		}
 		if out != nil {
-			writeJSON(w, 200, out)
+			status := 200
+			for code := range route.Operation.Responses.Map() {
+				n, e := strconv.Atoi(code)
+				if e == nil && n >= 200 && n < 300 {
+					status = n
+					break
+				}
+			}
+			writeJSON(w, status, out)
 		}
 	})
 }

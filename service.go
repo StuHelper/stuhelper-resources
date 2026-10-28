@@ -30,7 +30,7 @@ func New(repo Repository, deps Dependencies, cfg Config) (*Service, error) {
 	return &Service{repo: repo, deps: deps, cfg: cfg, now: func() time.Time { return clock().UTC() }}, nil
 }
 func (s *Service) Capabilities() Capabilities {
-	return Capabilities{Terms: s.cfg.Terms, AllowedTypes: append([]string{}, s.cfg.AllowedTypes...), MaxFileSize: s.cfg.MaxFileSize, MaxPackageBytes: s.cfg.MaxPackageBytes, MaxPackageFiles: s.cfg.MaxPackageFiles, PurchaseAvailable: s.deps.Entitlements != nil}
+	return Capabilities{UploadProfiles: append([]UploadProfile{}, s.cfg.UploadProfiles...), Terms: s.cfg.Terms, AllowedTypes: append([]string{}, s.cfg.AllowedTypes...), MaxFileSize: s.cfg.MaxFileSize, MaxPackageBytes: s.cfg.MaxPackageBytes, MaxPackageFiles: s.cfg.MaxPackageFiles, PurchaseAvailable: s.deps.Entitlements != nil}
 }
 func (s *Service) auth(ctx context.Context, p Principal, action, scope string) error {
 	if !p.Valid() && action != "discover" {

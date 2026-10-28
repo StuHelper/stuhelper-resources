@@ -5,8 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	resources "github.com/StuHelper/stuhelper-resources"
+	"github.com/StuHelper/stuhelper-resources/contracts"
 	"github.com/StuHelper/stuhelper-resources/httpapi"
 	"github.com/StuHelper/stuhelper-resources/sdk"
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/getkin/kin-openapi/openapi3filter"
+	"github.com/getkin/kin-openapi/routers/legacy"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -80,9 +84,35 @@ func TestHTTPContractSDKAndUnknownInput(t *testing.T) {
 	if response.StatusCode != 200 || len(body) == 0 || !strings.Contains(response.Header.Get("Content-Disposition"), "attachment") {
 		t.Fatal("download failed", response.StatusCode)
 	}
+	pending := h.draft(t, "http-submit", "public")
+	revisionBody, e := json.Marshal(resources.Command{Revision: pending.Revision})
+	must(t, e)
+	response = send("POST", "/api/v1/resources/items/"+pending.ID+"/submit", string(revisionBody), "Bearer owner")
+	response.Body.Close()
+	if response.StatusCode != 202 {
+		t.Fatal("submission status differs from contract", response.StatusCode)
+	}
 	forged := map[string]any{"revision": 0, "metadata": metadata("public")}
 	encoded, e := json.Marshal(forged)
 	must(t, e)
+	doc, e := openapi3.NewLoader().LoadFromData(contracts.Document())
+	must(t, e)
+	router, e := legacy.NewRouter(doc)
+	must(t, e)
+	checked, e := http.NewRequest("POST", server.URL+"/api/v1/resources", bytes.NewReader(encoded))
+	must(t, e)
+	checked.Header.Set("Content-Type", "application/json")
+	checked.Header.Set("Idempotency-Key", "http-command")
+	route, params, e := router.FindRoute(checked)
+	must(t, e)
+	must(t, openapi3filter.ValidateRequest(h.ctx, &openapi3filter.RequestValidationInput{Request: checked, PathParams: params, Route: route, Options: &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc, SkipSettingDefaults: true}}))
+	response = send("POST", "/api/v1/resources", string(encoded), "Bearer owner")
+	successBody, e := io.ReadAll(response.Body)
+	response.Body.Close()
+	must(t, e)
+	if response.StatusCode != 200 {
+		t.Fatal("creation status differs from contract", response.StatusCode, string(successBody))
+	}
 	encoded = bytes.Replace(encoded, []byte(`"year":{"number":2025}`), []byte(`"year":{"number":2025,"hidden":"forged"}`), 1)
 	response = send("POST", "/api/v1/resources", string(encoded), "Bearer owner")
 	response.Body.Close()

@@ -524,6 +524,14 @@ func TestOriginConsentAndRequestsUseOutbox(t *testing.T) {
 		t.Fatal("request bypassed outbox")
 	}
 	h.drain(t)
+	status, e := h.s.RequestStatus(h.ctx, uploader, request.ID)
+	must(t, e)
+	if status.State != "waiting" || status.TaskID == "" {
+		t.Fatal("missing request status", status)
+	}
+	if _, e = h.s.RequestStatus(h.ctx, reader, request.ID); !errors.Is(e, resources.ErrNotFound) {
+		t.Fatal("request leaked", e)
+	}
 	if h.moderation.requests != 1 {
 		t.Fatal("request not delivered")
 	}
@@ -652,4 +660,8 @@ func TestInitialCategoriesMigrationPreservesOperatorChanges(t *testing.T) {
 			t.Fatal("migration overwrote operator configuration")
 		}
 	}
+}
+
+func (m *moderation) Status(context.Context, resources.Principal, string) (resources.RequestStatus, error) {
+	return resources.RequestStatus{State: "waiting"}, nil
 }
