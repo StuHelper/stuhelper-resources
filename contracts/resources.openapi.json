@@ -3606,7 +3606,7 @@
               "type": "string",
               "maxLength": 2000
             },
-            "maxItems": 5
+            "maxItems": 4
           },
           "previous_task_id": {
             "type": "string",

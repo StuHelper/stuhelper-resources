@@ -38,7 +38,8 @@
       "integration_test.go#TestOriginConsentAndRequestsUseOutbox"
     ],
     "RES-08": [
-      "integration_test.go#TestAmbiguousPublicationRecoveryAndRetryBudget"
+      "integration_test.go#TestAmbiguousPublicationRecoveryAndRetryBudget",
+      "integration_test.go#TestModerationDeliveryReplayAfterPublicationAndStateChanges"
     ],
     "RES-09": [
       "integration_test.go#TestDatabaseIsolationAndAtomicAudit"

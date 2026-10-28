@@ -1,6 +1,9 @@
 package resources
 
-import "context"
+import (
+	"context"
+	"slices"
+)
 
 // Inspection is the minimal current content state for the moderation router.
 // The account must have the current school-scoped moderation permission.
@@ -71,4 +74,76 @@ func (s *Service) AuthorizeFile(ctx context.Context, p Principal, versionID, med
 	default:
 		return ErrInput
 	}
+}
+
+// ApplyContentDecision is the moderation delivery boundary. A single durable
+// replay key covers both initial review and later state changes, so a retry after
+// an ambiguous response does not reinterpret a now-published version.
+func (s *Service) ApplyContentDecision(ctx context.Context, p Principal, in Decision) (Resource, error) {
+	var out Resource
+	if !validID(in.ID) || !validID(in.VersionID) || in.Revision < 1 || !text(in.Reason, 2000) || !slices.Contains([]string{"publish", "hide", "restore", "delete"}, in.Action) {
+		return out, ErrInput
+	}
+	v, e := s.version(ctx, in.VersionID)
+	if e != nil {
+		return out, e
+	}
+	r, e := s.record(ctx, v.ResourceID)
+	if e != nil {
+		return out, e
+	}
+	e = s.mutation(ctx, p, "moderation.execute", r.SchoolID, in.ID, r.ID, in, func(tx Transaction) (any, error) {
+		if e := tx.Lock("resource:" + r.ID); e != nil {
+			return nil, e
+		}
+		latest, e := tx.Record(r.ID)
+		if e != nil {
+			return nil, e
+		}
+		current, e := tx.Version(in.VersionID)
+		if e != nil {
+			return nil, e
+		}
+		if latest.Revision != in.Revision {
+			return nil, ErrConflict
+		}
+		if latest.ProposalID == in.VersionID && current.Version.State == "pending" {
+			if in.Action == "restore" || latest.State == "blocked" {
+				return nil, ErrConflict
+			}
+			if _, e = currentCategory(tx, current.Version.Metadata); e != nil {
+				return nil, e
+			}
+			current.DecisionID = in.ID
+			current.DecisionRevision = in.Revision
+			current.Version.State = "rejected"
+			if in.Action == "publish" {
+				current.Version.State = "preparing"
+				if e = s.queue(tx, "publish", r.ID, in.VersionID, "", ""); e != nil {
+					return nil, e
+				}
+			}
+			if e = tx.SaveVersion(current); e != nil {
+				return nil, e
+			}
+		} else {
+			if latest.ActiveID != in.VersionID || current.Version.State != "published" {
+				return nil, ErrConflict
+			}
+			switch in.Action {
+			case "hide":
+				latest.State = "blocked"
+			case "delete":
+				latest.State = "unlisted"
+			case "restore", "publish":
+				latest.State = "published"
+			}
+		}
+		latest.Revision++
+		if e = tx.SaveRecord(latest); e != nil {
+			return nil, e
+		}
+		return ownerView(tx, latest, p)
+	}, &out)
+	return out, e
 }

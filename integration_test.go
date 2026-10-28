@@ -665,3 +665,35 @@ func TestInitialCategoriesMigrationPreservesOperatorChanges(t *testing.T) {
 func (m *moderation) Status(context.Context, resources.Principal, string) (resources.RequestStatus, error) {
 	return resources.RequestStatus{State: "waiting"}, nil
 }
+
+func TestModerationDeliveryReplayAfterPublicationAndStateChanges(t *testing.T) {
+	h := newFixture(t)
+	draft := h.draft(t, "moderation-replay", "public")
+	submitted, e := h.s.Submit(h.ctx, uploader, draft.ID, "submit", resources.Command{Revision: draft.Revision})
+	must(t, e)
+	decision := resources.Decision{ID: "trusted-decision", VersionID: submitted.Proposal.ID, Revision: submitted.Revision, Action: "publish", Reason: "Reviewed"}
+	_, e = h.s.ApplyContentDecision(h.ctx, manager, decision)
+	must(t, e)
+	h.drain(t)
+	result, e := h.s.ApplyContentDecision(h.ctx, manager, decision)
+	must(t, e)
+	if result.Proposal == nil || result.Proposal.State != "preparing" {
+		t.Fatal("lost decision replay", result)
+	}
+	active, e := h.s.Get(h.ctx, manager, draft.ID)
+	must(t, e)
+	hidden := resources.Decision{ID: "trusted-hide", VersionID: active.Current.ID, Revision: active.Revision, Action: "hide", Reason: "Safety issue"}
+	_, e = h.s.ApplyContentDecision(h.ctx, manager, hidden)
+	must(t, e)
+	_, e = h.s.ApplyContentDecision(h.ctx, manager, hidden)
+	must(t, e)
+	active, e = h.s.Get(h.ctx, manager, draft.ID)
+	must(t, e)
+	if active.State != "blocked" || active.DownloadAllowed {
+		t.Fatal("hide did not block", active)
+	}
+	decision.Reason = "forged replay"
+	if _, e = h.s.ApplyContentDecision(h.ctx, manager, decision); !errors.Is(e, resources.ErrConflict) {
+		t.Fatal(e)
+	}
+}

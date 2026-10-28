@@ -314,7 +314,7 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 	if e != nil {
 		return out, e
 	}
-	if !text(in.Reason, 2000) || strings.TrimSpace(in.Reason) == "" || !text(in.Contact, 500) || len(in.Evidence) > 5 {
+	if !text(in.Reason, 2000) || strings.TrimSpace(in.Reason) == "" || !text(in.Contact, 500) || len(in.Evidence) > 4 {
 		return out, ErrInput
 	}
 	for _, evidence := range in.Evidence {
