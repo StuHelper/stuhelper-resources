@@ -95,6 +95,13 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 	write[resources.StateChange](h, m, "POST /api/v1/resources/items/{id}/state", func(r *http.Request, p resources.Principal, in resources.StateChange) (any, error) {
 		return s.SetState(r.Context(), p, r.PathValue("id"), key(r), in)
 	})
+	h.mount(m, "GET /api/v1/resources/requests", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		n, e := limit(r)
+		if e != nil {
+			return nil, e
+		}
+		return s.Requests(r.Context(), p, n, r.URL.Query().Get("after"))
+	})
 	h.mount(m, "GET /api/v1/resources/requests/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.RequestStatus(r.Context(), p, r.PathValue("id"))
 	})

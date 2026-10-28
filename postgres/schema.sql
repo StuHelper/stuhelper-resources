@@ -19,3 +19,5 @@ CREATE TABLE IF NOT EXISTS resources.outbox (id text PRIMARY KEY, data jsonb NOT
 CREATE INDEX IF NOT EXISTS resources_outbox_pending ON resources.outbox(id) WHERE NOT delivered;
 REVOKE ALL ON SCHEMA resources FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA resources FROM PUBLIC;
+
+CREATE INDEX IF NOT EXISTS resources_requests_reporter ON resources.requests((data->'Reporter'),id);

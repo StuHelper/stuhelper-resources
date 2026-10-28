@@ -532,6 +532,21 @@ func TestOriginConsentAndRequestsUseOutbox(t *testing.T) {
 	if _, e = h.s.RequestStatus(h.ctx, reader, request.ID); !errors.Is(e, resources.ErrNotFound) {
 		t.Fatal("request leaked", e)
 	}
+	receipts, e := h.s.Requests(h.ctx, uploader, 1, "")
+	must(t, e)
+	if len(receipts.Items) != 1 || receipts.Items[0].ID != request.ID || receipts.NextCursor != request.ID {
+		t.Fatal("receipt listing", receipts)
+	}
+	other, e := h.s.Requests(h.ctx, reader, 25, "")
+	must(t, e)
+	if len(other.Items) != 0 {
+		t.Fatal("receipt leaked to reader")
+	}
+	rest, e := h.s.Requests(h.ctx, uploader, 1, receipts.NextCursor)
+	must(t, e)
+	if len(rest.Items) != 0 {
+		t.Fatal("receipt cursor duplicated row")
+	}
 	if h.moderation.requests != 1 {
 		t.Fatal("request not delivered")
 	}

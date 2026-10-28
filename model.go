@@ -208,6 +208,10 @@ type RequestReceipt struct {
 	State          string    `json:"state"`
 	CreatedAt      time.Time `json:"created_at"`
 }
+type RequestPage struct {
+	Items      []RequestReceipt `json:"items"`
+	NextCursor string           `json:"next_cursor"`
+}
 type RequestRecord struct {
 	Receipt    RequestReceipt
 	ResourceID string
@@ -409,6 +413,7 @@ type Transaction interface {
 	Package(string) (PackageRecord, error)
 	SavePackage(PackageRecord) error
 	Request(string) (RequestRecord, error)
+	Requests(Principal, int, string) ([]RequestRecord, error)
 	SaveRequest(RequestRecord) error
 	Job(string) (Job, error)
 	SaveJob(Job) error

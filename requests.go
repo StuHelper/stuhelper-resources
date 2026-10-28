@@ -90,3 +90,36 @@ func (s *Service) RetryRequest(ctx context.Context, p Principal, id, key string)
 	}, &out)
 	return out, e
 }
+
+// Requests is a bounded owner-only receipt listing. Detail refresh performs the
+// current moderation lookup without issuing one external call per list row.
+func (s *Service) Requests(ctx context.Context, p Principal, n int, after string) (RequestPage, error) {
+	out := RequestPage{Items: []RequestReceipt{}}
+	if n < 1 || n > 100 || !optionalID(after) {
+		return out, ErrInput
+	}
+	if e := s.auth(ctx, p, "request", ""); e != nil {
+		return out, e
+	}
+	e := s.repo.Transaction(ctx, func(tx Transaction) error {
+		rows, e := tx.Requests(p, n, after)
+		if e != nil {
+			return e
+		}
+		for _, row := range rows {
+			if row.Reporter != p {
+				return ErrUnavailable
+			}
+			receipt := row.Receipt
+			receipt.ResourceID = row.ResourceID
+			receipt.Kind = row.Request.Kind
+			receipt.TaskID = row.ExternalID
+			out.Items = append(out.Items, receipt)
+		}
+		if len(rows) == n {
+			out.NextCursor = rows[len(rows)-1].Receipt.ID
+		}
+		return nil
+	})
+	return out, e
+}

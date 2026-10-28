@@ -255,3 +255,11 @@ func (r *Repository) CheckRuntime(ctx context.Context) error {
 	}
 	return nil
 }
+
+func (t *transaction) Requests(p resources.Principal, n int, after string) ([]resources.RequestRecord, error) {
+	encoded, e := json.Marshal(p)
+	if e != nil {
+		return nil, e
+	}
+	return list[resources.RequestRecord](t, `SELECT data FROM resources.requests WHERE data->'Reporter'=$1::jsonb AND id>$2 ORDER BY id LIMIT $3`, string(encoded), after, n)
+}
