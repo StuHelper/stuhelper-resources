@@ -217,10 +217,11 @@ type RequestRecord struct {
 	ExternalID string
 }
 type Grant struct {
-	ID        string     `json:"id"`
-	Revision  int64      `json:"revision"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"`
-	Revoked   bool       `json:"revoked"`
+	SubjectKey string     `json:"subject_key"`
+	ID         string     `json:"id"`
+	Revision   int64      `json:"revision"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	Revoked    bool       `json:"revoked"`
 }
 type GrantWrite struct {
 	Revision   int64      `json:"revision"`

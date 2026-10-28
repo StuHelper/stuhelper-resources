@@ -273,7 +273,7 @@ func (s *Service) PutGrant(ctx context.Context, p Principal, id, grantID, key st
 		} else if old.ResourceID != id || old.SubjectKey != in.SubjectKey || old.Grant.Revision != in.Revision {
 			return nil, ErrConflict
 		}
-		out = Grant{ID: grantID, Revision: in.Revision + 1, ExpiresAt: in.ExpiresAt, Revoked: in.Revoked}
+		out = Grant{SubjectKey: in.SubjectKey, ID: grantID, Revision: in.Revision + 1, ExpiresAt: in.ExpiresAt, Revoked: in.Revoked}
 		if e = tx.SaveGrant(GrantRecord{Grant: out, ResourceID: id, SubjectKey: in.SubjectKey}); e != nil {
 			return nil, e
 		}
@@ -299,6 +299,7 @@ func (s *Service) Grants(ctx context.Context, p Principal, id string, n int, aft
 			return e
 		}
 		for _, g := range gs {
+			g.Grant.SubjectKey = g.SubjectKey
 			out.Items = append(out.Items, g.Grant)
 		}
 		return nil

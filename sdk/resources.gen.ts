@@ -601,6 +601,8 @@ export interface components {
             /** Format: date-time */
             expires_at?: string;
             revoked: boolean;
+            /** @description Stable issuer/subject key, visible only to grant administrators. */
+            subject_key: string;
         };
         GrantPage: {
             items: components["schemas"]["Grant"][];

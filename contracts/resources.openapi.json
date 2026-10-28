@@ -3709,12 +3709,18 @@
           },
           "revoked": {
             "type": "boolean"
+          },
+          "subject_key": {
+            "type": "string",
+            "maxLength": 1100,
+            "description": "Stable issuer/subject key, visible only to grant administrators."
           }
         },
         "required": [
           "id",
           "revision",
-          "revoked"
+          "revoked",
+          "subject_key"
         ]
       },
       "GrantPage": {

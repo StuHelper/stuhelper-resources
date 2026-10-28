@@ -378,6 +378,9 @@ type Grant struct {
 	Id        string     `json:"id"`
 	Revision  int64      `json:"revision"`
 	Revoked   bool       `json:"revoked"`
+
+	// SubjectKey Stable issuer/subject key, visible only to grant administrators.
+	SubjectKey string `json:"subject_key"`
 }
 
 // GrantPage defines model for GrantPage.
