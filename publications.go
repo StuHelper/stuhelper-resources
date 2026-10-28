@@ -199,7 +199,7 @@ func (s *Service) AttachFile(ctx context.Context, p Principal, id, key string, i
 	if e != nil {
 		return out, e
 	}
-	if file.SchoolID != "" && file.SchoolID != r.SchoolID {
+	if file.SchoolID != r.SchoolID {
 		return out, ErrDenied
 	}
 	if file.Owner != p || file.Module != "resources" || file.File.VersionID != in.MediaVersionID || file.File.Size < 1 || file.File.Size > s.cfg.MaxFileSize || !slices.Contains(s.cfg.AllowedTypes, file.File.ContentType) || !digestPattern.MatchString(file.File.SHA256) || !slices.Contains([]string{"awaiting_approval", "approved", "ready"}, file.State) {

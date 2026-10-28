@@ -262,7 +262,7 @@ func (h *fixture) draft(t *testing.T, key, access string) resources.Resource {
 	must(t, e)
 	file := resources.File{VersionID: "file-" + key, Filename: "原始讲义.pdf", ContentType: "application/pdf", Size: 60, SHA256: strings.Repeat("b", 64)}
 	h.files.mu.Lock()
-	h.files.items[file.VersionID] = resources.FileEvidence{File: file, Owner: uploader, Module: "resources", State: "awaiting_approval", Access: access}
+	h.files.items[file.VersionID] = resources.FileEvidence{File: file, Owner: uploader, Module: "resources", SchoolID: "school", State: "awaiting_approval", Access: access}
 	h.files.mu.Unlock()
 	r, e = h.s.AttachFile(h.ctx, uploader, r.ID, "file", resources.FileLink{Revision: r.Revision, MediaVersionID: file.VersionID})
 	must(t, e)
