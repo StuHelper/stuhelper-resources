@@ -48,7 +48,7 @@ func (a *authority) Check(_ context.Context, p resources.Principal, action, scop
 		}
 		return resources.ErrDenied
 	}
-	if action == "manage" || action == "grants.manage" || action == "directories.manage" || action == "moderation.execute" {
+	if action == "manage" || action == "grants.manage" || action == "directories.manage" || action == "moderation.execute" || action == "moderation.inspect" {
 		if (p == manager || p == global) && scope == "school" {
 			return nil
 		}
@@ -715,4 +715,27 @@ func TestModerationDeliveryReplayAfterPublicationAndStateChanges(t *testing.T) {
 
 func (f *files) ReviewDownload(ctx context.Context, p resources.Principal, version, id string, w io.Writer) error {
 	return f.Download(ctx, p, id, w)
+}
+
+func TestReviewInspectionIsScopedAndGrantListsIdentifySubjects(t *testing.T) {
+	h := newFixture(t)
+	draft := h.draft(t, "review-access", "restricted")
+	if _, e := h.s.ReviewResource(h.ctx, reader, draft.Proposal.ID); !errors.Is(e, resources.ErrDenied) {
+		t.Fatal("ordinary user inspected draft", e)
+	}
+	view, e := h.s.ReviewResource(h.ctx, manager, draft.Proposal.ID)
+	must(t, e)
+	if view.ID != draft.ID || view.Proposal.ID != draft.Proposal.ID || view.DownloadAllowed {
+		t.Fatal("invalid review view", view)
+	}
+	_, e = h.s.PutGrant(h.ctx, manager, draft.ID, "subject-grant", "grant-subject", resources.GrantWrite{SubjectKey: reader.Key()})
+	must(t, e)
+	grants, e := h.s.Grants(h.ctx, manager, draft.ID, 25, "")
+	must(t, e)
+	if len(grants.Items) != 1 || grants.Items[0].SubjectKey != reader.Key() {
+		t.Fatal("missing grant subject", grants)
+	}
+	if _, e = h.s.Grants(h.ctx, reader, draft.ID, 25, ""); !errors.Is(e, resources.ErrDenied) {
+		t.Fatal("grant subjects leaked", e)
+	}
 }

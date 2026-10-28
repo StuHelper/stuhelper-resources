@@ -46,6 +46,9 @@
     ],
     "RES-10": [
       "http_test.go#TestHTTPContractSDKAndUnknownInput"
+    ],
+    "RES-11": [
+      "integration_test.go#TestReviewInspectionIsScopedAndGrantListsIdentifySubjects"
     ]
   }
 }
