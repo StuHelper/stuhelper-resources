@@ -712,3 +712,7 @@ func TestModerationDeliveryReplayAfterPublicationAndStateChanges(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
+func (f *files) ReviewDownload(ctx context.Context, p resources.Principal, version, id string, w io.Writer) error {
+	return f.Download(ctx, p, id, w)
+}

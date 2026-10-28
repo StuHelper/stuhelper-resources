@@ -324,6 +324,7 @@ type Files interface {
 	Release(context.Context, string, string) error
 	Download(context.Context, Principal, string, io.Writer) error
 	Archive(context.Context, Principal, []Selection, io.Writer) error
+	ReviewDownload(context.Context, Principal, string, string, io.Writer) error
 }
 type ReviewSubmission struct {
 	ResourceID, VersionID, SchoolID, Title, Description string

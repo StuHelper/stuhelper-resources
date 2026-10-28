@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"io"
 	"slices"
 )
 
@@ -146,4 +147,34 @@ func (s *Service) ApplyContentDecision(ctx context.Context, p Principal, in Deci
 		return ownerView(tx, latest, p)
 	}, &out)
 	return out, e
+}
+
+func (s *Service) ReviewResource(ctx context.Context, p Principal, versionID string) (Resource, error) {
+	v, e := s.InspectReview(ctx, p, versionID)
+	if e != nil {
+		return Resource{}, e
+	}
+	var out Resource
+	e = s.repo.Transaction(ctx, func(tx Transaction) error {
+		record, e := tx.Record(v.ResourceID)
+		if e != nil {
+			return e
+		}
+		out, e = ownerView(tx, record, p)
+		return e
+	})
+	return out, e
+}
+func (s *Service) DownloadReviewFile(ctx context.Context, p Principal, versionID string, w io.Writer) error {
+	if _, e := s.InspectReview(ctx, p, versionID); e != nil {
+		return e
+	}
+	v, e := s.version(ctx, versionID)
+	if e != nil {
+		return e
+	}
+	if v.Version.File == nil {
+		return ErrNotFound
+	}
+	return s.deps.Files.ReviewDownload(ctx, p, versionID, v.Version.File.VersionID, w)
 }

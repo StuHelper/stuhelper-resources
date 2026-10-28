@@ -74,6 +74,10 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 	write[resources.DraftWrite](h, m, "POST /api/v1/resources", func(r *http.Request, p resources.Principal, in resources.DraftWrite) (any, error) {
 		return s.CreateDraft(r.Context(), p, key(r), in)
 	})
+	h.mount(m, "GET /api/v1/resources/review/{version}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		return s.ReviewResource(r.Context(), p, r.PathValue("version"))
+	})
+	h.mount(m, "GET /api/v1/resources/review/{version}/file", h.reviewDownload)
 	h.mount(m, "GET /api/v1/resources/items/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.Get(r.Context(), p, r.PathValue("id"))
 	})
@@ -334,6 +338,26 @@ func (h *handler) downloadPackage(w http.ResponseWriter, r *http.Request, p reso
 	out := &stream{w: w, kind: "application/zip", name: "resources-part-" + strconv.Itoa(part) + ".zip"}
 	e = h.s.DownloadPackage(r.Context(), p, r.PathValue("id"), part, out)
 	if e != nil && out.written {
+		panic(http.ErrAbortHandler)
+	}
+	return nil, e
+}
+
+func (h *handler) reviewDownload(w http.ResponseWriter, req *http.Request, p resources.Principal) (any, error) {
+	entry, e := h.s.ReviewResource(req.Context(), p, req.PathValue("version"))
+	if e != nil {
+		return nil, e
+	}
+	version := entry.Proposal
+	if version == nil || version.ID != req.PathValue("version") {
+		version = entry.Current
+	}
+	if version == nil || version.File == nil {
+		return nil, resources.ErrNotFound
+	}
+	writer := &stream{w: w, kind: "application/octet-stream", name: version.File.Filename}
+	e = h.s.DownloadReviewFile(req.Context(), p, version.ID, writer)
+	if e != nil && writer.written {
 		panic(http.ErrAbortHandler)
 	}
 	return nil, e
