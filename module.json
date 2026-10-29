@@ -1,0 +1,55 @@
+{
+  "id": "resources",
+  "implementation": "library",
+  "interface_version": 1,
+  "required": [
+    "catalog",
+    "media",
+    "moderation"
+  ],
+  "optional": [
+    "billing"
+  ],
+  "specifications": [
+    "docs/spec/resources.md"
+  ],
+  "scenario_tests": {
+    "RES-01": [
+      "integration_test.go#TestConfigurableTaxonomySnapshotsAndYearFilters",
+      "integration_test.go#TestTaxonomyChangeDuringPreparationCanBeCorrected",
+      "integration_test.go#TestInitialCategoriesMigrationPreservesOperatorChanges"
+    ],
+    "RES-02": [
+      "integration_test.go#TestPublicationContinuityAndStaleReview"
+    ],
+    "RES-03": [
+      "integration_test.go#TestIndependentRightsCampusRevocationAndUnlisting"
+    ],
+    "RES-04": [
+      "integration_test.go#TestConcurrentIdempotencyAndChangedPayload"
+    ],
+    "RES-05": [
+      "integration_test.go#TestDeniedInputsDoNotReachDependencies"
+    ],
+    "RES-06": [
+      "integration_test.go#TestDirectoryPackagesOmitUnauthorizedAndRecheckRights"
+    ],
+    "RES-07": [
+      "integration_test.go#TestOriginConsentAndRequestsUseOutbox",
+      "http_test.go#TestReceiptHTTPStatesMatchGeneratedContract"
+    ],
+    "RES-08": [
+      "integration_test.go#TestAmbiguousPublicationRecoveryAndRetryBudget",
+      "integration_test.go#TestModerationDeliveryReplayAfterPublicationAndStateChanges"
+    ],
+    "RES-09": [
+      "integration_test.go#TestDatabaseIsolationAndAtomicAudit"
+    ],
+    "RES-10": [
+      "http_test.go#TestHTTPContractSDKAndUnknownInput"
+    ],
+    "RES-11": [
+      "integration_test.go#TestReviewInspectionIsScopedAndGrantListsIdentifySubjects"
+    ]
+  }
+}

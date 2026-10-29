@@ -1,0 +1,23 @@
+CREATE SCHEMA IF NOT EXISTS resources;
+CREATE TABLE IF NOT EXISTS resources.categories (id text PRIMARY KEY, revision bigint NOT NULL, enabled boolean NOT NULL, data jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS resources.category_revisions (id text NOT NULL, revision bigint NOT NULL, data jsonb NOT NULL, PRIMARY KEY(id,revision));
+CREATE TABLE IF NOT EXISTS resources.records (id text PRIMARY KEY, owner_key text NOT NULL, school_id text NOT NULL, state text NOT NULL, active_id text NOT NULL, proposal_id text NOT NULL, data jsonb NOT NULL);
+CREATE INDEX IF NOT EXISTS resources_records_owner ON resources.records(owner_key,id);
+CREATE INDEX IF NOT EXISTS resources_records_school ON resources.records(school_id,state,id);
+CREATE TABLE IF NOT EXISTS resources.versions (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), number bigint NOT NULL, data jsonb NOT NULL, UNIQUE(resource_id,number));
+CREATE TABLE IF NOT EXISTS resources.grants (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), subject_key text NOT NULL, data jsonb NOT NULL, UNIQUE(resource_id,subject_key));
+CREATE TABLE IF NOT EXISTS resources.directories (id text PRIMARY KEY, school_id text NOT NULL, course_id text NOT NULL, parent_id text NOT NULL, data jsonb NOT NULL);
+CREATE INDEX IF NOT EXISTS resources_directories_parent ON resources.directories(school_id,parent_id,id);
+CREATE TABLE IF NOT EXISTS resources.packages (id text PRIMARY KEY, expires_at timestamptz NOT NULL, data jsonb NOT NULL);
+CREATE INDEX IF NOT EXISTS resources_packages_expiry ON resources.packages(expires_at);
+CREATE TABLE IF NOT EXISTS resources.requests (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), data jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS resources.jobs (id text PRIMARY KEY, state text NOT NULL, available_at timestamptz NOT NULL, lease_until timestamptz NOT NULL, data jsonb NOT NULL);
+CREATE INDEX IF NOT EXISTS resources_jobs_claim ON resources.jobs(state,available_at,lease_until);
+CREATE TABLE IF NOT EXISTS resources.replays (key text PRIMARY KEY, data jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS resources.audit (id text PRIMARY KEY, data jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS resources.outbox (id text PRIMARY KEY, data jsonb NOT NULL, delivered boolean NOT NULL DEFAULT false);
+CREATE INDEX IF NOT EXISTS resources_outbox_pending ON resources.outbox(id) WHERE NOT delivered;
+REVOKE ALL ON SCHEMA resources FROM PUBLIC;
+REVOKE ALL ON ALL TABLES IN SCHEMA resources FROM PUBLIC;
+
+CREATE INDEX IF NOT EXISTS resources_requests_reporter ON resources.requests((data->'Reporter'),id);

@@ -1,0 +1,94 @@
+[
+  {
+    "id": "courseware",
+    "revision": 1,
+    "names": {
+      "zh-CN": "课件",
+      "en-US": "Courseware",
+      "fr-FR": "Supports de cours",
+      "ru-RU": "Учебные материалы",
+      "ja-JP": "講義資料",
+      "ko-KR": "강의 자료",
+      "es-ES": "Materiales del curso",
+      "ar-EG": "مواد المقرر"
+    },
+    "enabled": true,
+    "order": 10,
+    "fields": [],
+    "group_by": ""
+  },
+  {
+    "id": "past-papers",
+    "revision": 1,
+    "names": {
+      "zh-CN": "往年题",
+      "en-US": "Past papers",
+      "fr-FR": "Annales",
+      "ru-RU": "Задания прошлых лет",
+      "ja-JP": "過去問",
+      "ko-KR": "기출문제",
+      "es-ES": "Exámenes anteriores",
+      "ar-EG": "اختبارات سابقة"
+    },
+    "enabled": true,
+    "order": 20,
+    "fields": [
+      {
+        "key": "year",
+        "names": {
+          "zh-CN": "年份",
+          "en-US": "Year",
+          "fr-FR": "Année",
+          "ru-RU": "Год",
+          "ja-JP": "年度",
+          "ko-KR": "연도",
+          "es-ES": "Año",
+          "ar-EG": "السنة"
+        },
+        "kind": "integer",
+        "required": false,
+        "filterable": true,
+        "groupable": true,
+        "min": 1900,
+        "max": 2200
+      }
+    ],
+    "group_by": "year"
+  },
+  {
+    "id": "textbooks",
+    "revision": 1,
+    "names": {
+      "zh-CN": "教材",
+      "en-US": "Textbooks",
+      "fr-FR": "Manuels",
+      "ru-RU": "Учебники",
+      "ja-JP": "教科書",
+      "ko-KR": "교재",
+      "es-ES": "Libros de texto",
+      "ar-EG": "كتب دراسية"
+    },
+    "enabled": true,
+    "order": 30,
+    "fields": [],
+    "group_by": ""
+  },
+  {
+    "id": "exercises",
+    "revision": 1,
+    "names": {
+      "zh-CN": "习题",
+      "en-US": "Exercises",
+      "fr-FR": "Exercices",
+      "ru-RU": "Упражнения",
+      "ja-JP": "演習問題",
+      "ko-KR": "연습문제",
+      "es-ES": "Ejercicios",
+      "ar-EG": "تمارين"
+    },
+    "enabled": true,
+    "order": 40,
+    "fields": [],
+    "group_by": ""
+  }
+]
