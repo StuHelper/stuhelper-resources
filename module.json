@@ -35,7 +35,8 @@
       "integration_test.go#TestDirectoryPackagesOmitUnauthorizedAndRecheckRights"
     ],
     "RES-07": [
-      "integration_test.go#TestOriginConsentAndRequestsUseOutbox"
+      "integration_test.go#TestOriginConsentAndRequestsUseOutbox",
+      "http_test.go#TestReceiptHTTPStatesMatchGeneratedContract"
     ],
     "RES-08": [
       "integration_test.go#TestAmbiguousPublicationRecoveryAndRetryBudget",
