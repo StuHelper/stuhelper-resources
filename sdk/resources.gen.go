@@ -118,9 +118,12 @@ func (e RequestKind) Valid() bool {
 
 // Defines values for RequestReceiptState.
 const (
-	RequestReceiptStateApplied RequestReceiptState = "applied"
-	RequestReceiptStateFailed  RequestReceiptState = "failed"
-	RequestReceiptStatePending RequestReceiptState = "pending"
+	RequestReceiptStateApplied   RequestReceiptState = "applied"
+	RequestReceiptStateDecided   RequestReceiptState = "decided"
+	RequestReceiptStateFailed    RequestReceiptState = "failed"
+	RequestReceiptStatePending   RequestReceiptState = "pending"
+	RequestReceiptStateSubmitted RequestReceiptState = "submitted"
+	RequestReceiptStateWaiting   RequestReceiptState = "waiting"
 )
 
 // Valid indicates whether the value is a known member of the RequestReceiptState enum.
@@ -128,9 +131,15 @@ func (e RequestReceiptState) Valid() bool {
 	switch e {
 	case RequestReceiptStateApplied:
 		return true
+	case RequestReceiptStateDecided:
+		return true
 	case RequestReceiptStateFailed:
 		return true
 	case RequestReceiptStatePending:
+		return true
+	case RequestReceiptStateSubmitted:
+		return true
+	case RequestReceiptStateWaiting:
 		return true
 	default:
 		return false

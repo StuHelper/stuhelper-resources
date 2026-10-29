@@ -628,7 +628,7 @@ export interface components {
         RequestReceipt: {
             id: string;
             /** @enum {string} */
-            state: "pending" | "applied" | "failed";
+            state: "pending" | "submitted" | "waiting" | "decided" | "applied" | "failed";
             /** Format: date-time */
             created_at: string;
             task_id?: string;

@@ -120,3 +120,26 @@ func TestHTTPContractSDKAndUnknownInput(t *testing.T) {
 		t.Fatal("nested unknown field accepted", response.StatusCode)
 	}
 }
+
+func TestReceiptHTTPStatesMatchGeneratedContract(t *testing.T) {
+	h := newFixture(t)
+	draft := h.draft(t, "receipt-contract", "public")
+	receipt, e := h.s.CreateRequest(h.ctx, uploader, draft.ID, "receipt", resources.Request{Kind: "withdrawal", Reason: "correction"})
+	must(t, e)
+	h.drain(t)
+	doc, e := openapi3.NewLoader().LoadFromData(contracts.Document())
+	must(t, e)
+	status, e := h.s.RequestStatus(h.ctx, uploader, receipt.ID)
+	must(t, e)
+	page, e := h.s.Requests(h.ctx, uploader, 25, "")
+	must(t, e)
+	for name, value := range map[string]any{"RequestReceipt": status, "RequestPage": page} {
+		b, e := json.Marshal(value)
+		must(t, e)
+		var decoded any
+		must(t, json.Unmarshal(b, &decoded))
+		if e = doc.Components.Schemas[name].Value.VisitJSON(decoded); e != nil {
+			t.Fatalf("%s response violates contract: %v", name, e)
+		}
+	}
+}

@@ -3935,6 +3935,9 @@
             "type": "string",
             "enum": [
               "pending",
+              "submitted",
+              "waiting",
+              "decided",
               "applied",
               "failed"
             ]
