@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "StuHelper Resources API",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Configurable resource taxonomy, reviewed publications, access grants and authorized packages. No provider identities or credentials."
   },
   "paths": {
@@ -2313,7 +2313,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Checks current content admission, configured eligibility, entitlements and resource state before returning any file bytes. Missing conditions return 403; unknown dependencies return 503. Same policy as preview."
       }
     },
     "/api/v1/resources/packages/{id}/parts/{part}": {
@@ -3315,6 +3316,107 @@
         ],
         "description": "Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required."
       }
+    },
+    "/api/v1/resources/items/{id}/preview": {
+      "get": {
+        "operationId": "PreviewResource",
+        "summary": "PreviewResource",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized complete file or archive",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revision, policy or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Configured resource limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "Authenticated inline file bytes, with the exact same current content, eligibility, entitlement and resource-state checks as download. No partial preview or conversion bypass. Errors return no file bytes."
+      }
     }
   },
   "components": {
@@ -3330,6 +3432,52 @@
           "request_id": {
             "type": "string",
             "maxLength": 128
+          },
+          "missing_conditions": {
+            "type": "array",
+            "maxItems": 6,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "content_access",
+                "campus_eligibility",
+                "phone_bound",
+                "identity_verified",
+                "course_enrollment",
+                "resource_entitlement"
+              ]
+            }
+          },
+          "unavailable_conditions": {
+            "type": "array",
+            "maxItems": 6,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "content_access",
+                "campus_eligibility",
+                "phone_bound",
+                "identity_verified",
+                "course_enrollment",
+                "resource_entitlement"
+              ]
+            }
+          },
+          "rule_version": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "access_reason": {
+            "type": "string",
+            "enum": [
+              "requirements_missing",
+              "service_unavailable",
+              "purchase_unavailable",
+              "resource_unavailable",
+              "permission_denied"
+            ]
           }
         },
         "required": [
@@ -3875,10 +4023,47 @@
           },
           "access_reason": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "allowed, requirements_missing, purchase_unavailable, resource_unavailable, permission_denied or service_unavailable. Owned metadata remains readable if file eligibility is unavailable. Use missing_conditions and unavailable_conditions rather than assuming that every failure requires a purchase."
           },
           "owned": {
             "type": "boolean"
+          },
+          "missing_conditions": {
+            "type": "array",
+            "maxItems": 6,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "content_access",
+                "campus_eligibility",
+                "phone_bound",
+                "identity_verified",
+                "course_enrollment",
+                "resource_entitlement"
+              ]
+            }
+          },
+          "unavailable_conditions": {
+            "type": "array",
+            "maxItems": 6,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "content_access",
+                "campus_eligibility",
+                "phone_bound",
+                "identity_verified",
+                "course_enrollment",
+                "resource_entitlement"
+              ]
+            }
+          },
+          "rule_version": {
+            "type": "string",
+            "maxLength": 128
           }
         },
         "required": [
@@ -4412,7 +4597,8 @@
             "maximum": 100
           },
           "purchase_available": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Always false in this release. Entitlement lookup does not enable a purchase or an access-application workflow."
           },
           "upload_profiles": {
             "type": "array",

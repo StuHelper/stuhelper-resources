@@ -18,10 +18,10 @@ func denied(e error) bool { return errors.Is(e, ErrDenied) || errors.Is(e, ErrUn
 // Ordinary unlisting retains purchased delivery only; a safety block denies all.
 func (s *Service) access(ctx context.Context, p Principal, r Record, v VersionRecord) error {
 	if r.State == "blocked" || v.Version.State == "blocked" {
-		return ErrDenied
+		return &AccessFailure{Reason: "resource_unavailable"}
 	}
 	if r.ActiveID == "" || r.ActiveID != v.Version.ID || v.Version.State != "published" || v.ReferenceID == "" {
-		return ErrDenied
+		return &AccessFailure{Reason: "resource_unavailable"}
 	}
 	if !p.Valid() {
 		return ErrUnauthenticated
@@ -31,6 +31,9 @@ func (s *Service) access(ctx context.Context, p Principal, r Record, v VersionRe
 		return nil
 	}
 	if !denied(e) {
+		return e
+	}
+	if e = s.auth(ctx, p, "discover", r.SchoolID); e != nil {
 		return e
 	}
 	action := "download.public"
@@ -64,7 +67,7 @@ func (s *Service) access(ctx context.Context, p Principal, r Record, v VersionRe
 			return nil
 		}
 	}
-	return ErrDenied
+	return &AccessFailure{Reason: "purchase_unavailable", Missing: []string{"resource_entitlement"}}
 }
 func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, error) {
 	var out Resource
@@ -107,7 +110,23 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 		out.DownloadAllowed = true
 		out.AccessReason = "allowed"
 	} else if denied(e) {
-		out.AccessReason = "access_required"
+		out.AccessReason = "permission_denied"
+		var failure *AccessFailure
+		if errors.As(e, &failure) {
+			out.AccessReason = failure.Reason
+			out.MissingConditions = failure.Missing
+			out.UnavailableConditions = failure.Unavailable
+			out.RuleVersion = failure.RuleVersion
+		}
+	} else if privileged {
+		// Qualification outages may pause file access but cannot hide an owned record.
+		out.AccessReason = "service_unavailable"
+		var failure *AccessFailure
+		if errors.As(e, &failure) {
+			out.MissingConditions = failure.Missing
+			out.UnavailableConditions = failure.Unavailable
+			out.RuleVersion = failure.RuleVersion
+		}
 	} else {
 		return Resource{}, e
 	}

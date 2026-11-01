@@ -160,14 +160,17 @@ type VersionRecord struct {
 	DecisionRevision int64
 }
 type Resource struct {
-	ID              string   `json:"id"`
-	Revision        int64    `json:"revision"`
-	State           string   `json:"state"`
-	Current         *Version `json:"current,omitempty"`
-	Proposal        *Version `json:"proposal,omitempty"`
-	DownloadAllowed bool     `json:"download_allowed"`
-	AccessReason    string   `json:"access_reason"`
-	Owned           bool     `json:"owned"`
+	MissingConditions     []string `json:"missing_conditions,omitempty"`
+	UnavailableConditions []string `json:"unavailable_conditions,omitempty"`
+	RuleVersion           string   `json:"rule_version,omitempty"`
+	ID                    string   `json:"id"`
+	Revision              int64    `json:"revision"`
+	State                 string   `json:"state"`
+	Current               *Version `json:"current,omitempty"`
+	Proposal              *Version `json:"proposal,omitempty"`
+	DownloadAllowed       bool     `json:"download_allowed"`
+	AccessReason          string   `json:"access_reason"`
+	Owned                 bool     `json:"owned"`
 }
 type Page struct {
 	Items      []Resource `json:"items"`

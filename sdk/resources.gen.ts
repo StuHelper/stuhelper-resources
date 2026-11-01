@@ -314,7 +314,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** DownloadResource */
+        /**
+         * DownloadResource
+         * @description Checks current content admission, configured eligibility, entitlements and resource state before returning any file bytes. Missing conditions return 403; unknown dependencies return 503. Same policy as preview.
+         */
         get: operations["DownloadResource"];
         put?: never;
         post?: never;
@@ -477,6 +480,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/resources/items/{id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PreviewResource
+         * @description Authenticated inline file bytes, with the exact same current content, eligibility, entitlement and resource-state checks as download. No partial preview or conversion bypass. Errors return no file bytes.
+         */
+        get: operations["PreviewResource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -484,6 +507,11 @@ export interface components {
         Problem: {
             code: string;
             request_id?: string;
+            missing_conditions?: ("content_access" | "campus_eligibility" | "phone_bound" | "identity_verified" | "course_enrollment" | "resource_entitlement")[];
+            unavailable_conditions?: ("content_access" | "campus_eligibility" | "phone_bound" | "identity_verified" | "course_enrollment" | "resource_entitlement")[];
+            rule_version?: string;
+            /** @enum {string} */
+            access_reason?: "requirements_missing" | "service_unavailable" | "purchase_unavailable" | "resource_unavailable" | "permission_denied";
         };
         Value: {
             text?: string;
@@ -619,8 +647,12 @@ export interface components {
             current?: components["schemas"]["Version"];
             proposal?: components["schemas"]["Version"];
             download_allowed: boolean;
+            /** @description allowed, requirements_missing, purchase_unavailable, resource_unavailable, permission_denied or service_unavailable. Owned metadata remains readable if file eligibility is unavailable. Use missing_conditions and unavailable_conditions rather than assuming that every failure requires a purchase. */
             access_reason: string;
             owned: boolean;
+            missing_conditions?: ("content_access" | "campus_eligibility" | "phone_bound" | "identity_verified" | "course_enrollment" | "resource_entitlement")[];
+            unavailable_conditions?: ("content_access" | "campus_eligibility" | "phone_bound" | "identity_verified" | "course_enrollment" | "resource_entitlement")[];
+            rule_version?: string;
         };
         ResourcePage: {
             items: components["schemas"]["Resource"][];
@@ -749,6 +781,7 @@ export interface components {
             max_package_bytes: number;
             /** Format: int64 */
             max_package_files: number;
+            /** @description Always false in this release. Entitlement lookup does not enable a purchase or an access-application workflow. */
             purchase_available: boolean;
             upload_profiles: components["schemas"]["UploadProfile"][];
         };
@@ -3319,6 +3352,91 @@ export interface operations {
             };
             /** @description Revision, policy or idempotency conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    PreviewResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized complete file or archive */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Revision, policy or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Configured resource limit exceeded */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };

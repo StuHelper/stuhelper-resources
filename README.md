@@ -18,8 +18,10 @@ bash scripts/check-with-postgres.sh
 
 检查使用独立 PostgreSQL 集群，覆盖事务、权限、并发幂等、审核连续性和恢复。OpenAPI 生成 Go 与 TypeScript 客户端，HTTP 同时按该契约校验请求。
 
-迁移身份执行 postgres.Migrate，运行身份通过 CheckRuntime 检查。服务通过 Dependencies 接入当前身份与资格、目录、文件和审核接口。账务是可选能力，未接入时不提供购买功能，单独授权仍可使用。
+迁移身份执行 postgres.Migrate，运行身份通过 CheckRuntime 检查。服务通过 Dependencies 接入当前身份与资格、目录、文件和审核接口。账务只提供可选的权益查询，购买流程本轮延期，purchase_available 固定为 false。单独授权仍可使用。
 
 当前本仓测试使用可控外部接口。应用装配、页面、真实账号与生产验收在对应仓库分别记录。完整规则见[模块规格](docs/spec/resources.md)，许可证为 AGPL-3.0-only。
 
 本人上传关联的名称由 /resources/me/references 按登录和归属返回，不受当前资格失效影响。投诉回执的 resource_title 只在提交时通过内容准入且目标可见时保存，后续恢复资格不会补入标题。
+
+预览与下载共用当前准入、资格、权益和状态检查。接口返回实际缺失或不可用的条件，不把服务故障解释为缺少权益。资格服务故障不隐藏本人资料元数据，文件仍暂停访问。

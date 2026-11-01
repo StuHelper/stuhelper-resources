@@ -59,6 +59,9 @@
     "RES-13": [
       "references_test.go#TestOwnResourceNamesRequireUploadOwnershipAndKeepContentPrivate",
       "references_test.go#TestComplaintTitleSnapshotRequiresAdmissionAtSubmission"
+    ],
+    "RES-14": [
+      "file_access_test.go#TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions"
     ]
   }
 }
