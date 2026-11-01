@@ -810,6 +810,8 @@ type ClientInterface interface {
 
 	// ListResources ListResources
 	//
+	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+	//
 	// Corresponds with GET /api/v1/resources (the `ListResources` operationId).
 	ListResources(ctx context.Context, params *ListResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -834,6 +836,8 @@ type ClientInterface interface {
 
 	// ListCategories ListCategories
 	//
+	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+	//
 	// Corresponds with GET /api/v1/resources/categories (the `ListCategories` operationId).
 	ListCategories(ctx context.Context, params *ListCategoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -853,6 +857,8 @@ type ClientInterface interface {
 
 	// ListDirectories ListDirectories
 	//
+	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+	//
 	// Corresponds with GET /api/v1/resources/directories (the `ListDirectories` operationId).
 	ListDirectories(ctx context.Context, params *ListDirectoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -871,6 +877,8 @@ type ClientInterface interface {
 	PutDirectory(ctx context.Context, id string, params *PutDirectoryParams, body PutDirectoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetResource GetResource
+	//
+	// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
 	//
 	// Corresponds with GET /api/v1/resources/items/{id} (the `GetResource` operationId).
 	GetResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1068,6 +1076,8 @@ type ClientInterface interface {
 
 // ListResources ListResources
 //
+// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+//
 // Corresponds with GET /api/v1/resources (the `ListResources` operationId).
 func (c *Client) ListResources(ctx context.Context, params *ListResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListResourcesRequest(c.Server, params)
@@ -1132,6 +1142,8 @@ func (c *Client) GetCapabilities(ctx context.Context, reqEditors ...RequestEdito
 
 // ListCategories ListCategories
 //
+// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+//
 // Corresponds with GET /api/v1/resources/categories (the `ListCategories` operationId).
 func (c *Client) ListCategories(ctx context.Context, params *ListCategoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListCategoriesRequest(c.Server, params)
@@ -1181,6 +1193,8 @@ func (c *Client) PutCategory(ctx context.Context, id string, params *PutCategory
 
 // ListDirectories ListDirectories
 //
+// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+//
 // Corresponds with GET /api/v1/resources/directories (the `ListDirectories` operationId).
 func (c *Client) ListDirectories(ctx context.Context, params *ListDirectoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListDirectoriesRequest(c.Server, params)
@@ -1229,6 +1243,8 @@ func (c *Client) PutDirectory(ctx context.Context, id string, params *PutDirecto
 }
 
 // GetResource GetResource
+//
+// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
 //
 // Corresponds with GET /api/v1/resources/items/{id} (the `GetResource` operationId).
 func (c *Client) GetResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -3485,6 +3501,8 @@ type ClientWithResponsesInterface interface {
 
 	// ListResourcesWithResponse ListResources
 	//
+	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/resources (the `ListResources` operationId).
@@ -3513,6 +3531,8 @@ type ClientWithResponsesInterface interface {
 
 	// ListCategoriesWithResponse ListCategories
 	//
+	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/resources/categories (the `ListCategories` operationId).
@@ -3534,6 +3554,8 @@ type ClientWithResponsesInterface interface {
 
 	// ListDirectoriesWithResponse ListDirectories
 	//
+	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/resources/directories (the `ListDirectories` operationId).
@@ -3554,6 +3576,8 @@ type ClientWithResponsesInterface interface {
 	PutDirectoryWithResponse(ctx context.Context, id string, params *PutDirectoryParams, body PutDirectoryJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDirectoryResponse, error)
 
 	// GetResourceWithResponse GetResource
+	//
+	// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -6272,6 +6296,8 @@ func (r DownloadReviewFileResponse) ContentType() string {
 
 // ListResourcesWithResponse ListResources
 //
+// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+//
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /api/v1/resources (the `ListResources` operationId).
@@ -6324,6 +6350,8 @@ func (c *ClientWithResponses) GetCapabilitiesWithResponse(ctx context.Context, r
 
 // ListCategoriesWithResponse ListCategories
 //
+// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+//
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /api/v1/resources/categories (the `ListCategories` operationId).
@@ -6363,6 +6391,8 @@ func (c *ClientWithResponses) PutCategoryWithResponse(ctx context.Context, id st
 
 // ListDirectoriesWithResponse ListDirectories
 //
+// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+//
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /api/v1/resources/directories (the `ListDirectories` operationId).
@@ -6401,6 +6431,8 @@ func (c *ClientWithResponses) PutDirectoryWithResponse(ctx context.Context, id s
 }
 
 // GetResourceWithResponse GetResource
+//
+// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
 //
 // Returns a wrapper object for the known response body format(s).
 //

@@ -739,3 +739,27 @@ func TestReviewInspectionIsScopedAndGrantListsIdentifySubjects(t *testing.T) {
 		t.Fatal("grant subjects leaked", e)
 	}
 }
+
+func TestCategoryReadsRequireContentAdmissionAndKeepScopedAdministration(t *testing.T) {
+	f := newFixture(t)
+	visible, err := f.s.ReadCategories(f.ctx, reader, 20, "", false)
+	must(t, err)
+	if len(visible.Items) == 0 {
+		t.Fatal("qualified taxonomy missing")
+	}
+	f.auth.set("discover", true)
+	denied, err := f.s.ReadCategories(f.ctx, reader, 20, "", false)
+	if !errors.Is(err, resources.ErrDenied) || len(denied.Items) != 0 {
+		t.Fatal("unqualified taxonomy exposed", err)
+	}
+	if _, err = f.s.ReadCategories(f.ctx, global, 20, "", true); err != nil {
+		t.Fatal("scoped taxonomy administrator depends on content admission", err)
+	}
+	if _, err = f.s.List(f.ctx, uploader, resources.Filter{Limit: 20}, true, false); err != nil {
+		t.Fatal("own resources depend on content admission", err)
+	}
+	f.auth.set("discover", false)
+	if _, err = f.s.ReadCategories(f.ctx, reader, 20, "", true); !errors.Is(err, resources.ErrDenied) {
+		t.Fatal("ordinary reader can inspect disabled configuration", err)
+	}
+}

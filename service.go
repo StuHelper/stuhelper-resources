@@ -176,3 +176,23 @@ func currentCategory(tx Transaction, m Metadata) (Category, error) {
 	}
 	return c, ValidateAttributes(c, m.Attributes, false)
 }
+
+// ReadCategories is the user-facing taxonomy read boundary. Scoped configuration
+// access remains independent of campus qualification.
+func (s *Service) ReadCategories(ctx context.Context, p Principal, limit int, after string, disabled bool) (CategoryPage, error) {
+	if !p.Valid() {
+		return CategoryPage{}, ErrUnauthenticated
+	}
+	if e := s.auth(ctx, p, "taxonomy.manage", ""); e != nil {
+		if !denied(e) {
+			return CategoryPage{}, e
+		}
+		if disabled {
+			return CategoryPage{}, ErrDenied
+		}
+		if e = s.auth(ctx, p, "discover", ""); e != nil {
+			return CategoryPage{}, e
+		}
+	}
+	return s.Categories(ctx, limit, after, disabled)
+}

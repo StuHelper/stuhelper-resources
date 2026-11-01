@@ -8,7 +8,9 @@
     "moderation"
   ],
   "optional": [
-    "billing"
+    "billing",
+    "verification",
+    "identity"
   ],
   "specifications": [
     "docs/spec/resources.md"
@@ -50,6 +52,9 @@
     ],
     "RES-11": [
       "integration_test.go#TestReviewInspectionIsScopedAndGrantListsIdentifySubjects"
+    ],
+    "RES-12": [
+      "integration_test.go#TestCategoryReadsRequireContentAdmissionAndKeepScopedAdministration"
     ]
   }
 }

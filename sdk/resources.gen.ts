@@ -28,7 +28,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ListCategories */
+        /**
+         * ListCategories
+         * @description Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+         */
         get: operations["ListCategories"];
         put?: never;
         post?: never;
@@ -62,7 +65,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ListResources */
+        /**
+         * ListResources
+         * @description Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+         */
         get: operations["ListResources"];
         put?: never;
         /** CreateDraft */
@@ -97,7 +103,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GetResource */
+        /**
+         * GetResource
+         * @description Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
+         */
         get: operations["GetResource"];
         /** UpdateDraft */
         put: operations["UpdateDraft"];
@@ -234,7 +243,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ListDirectories */
+        /**
+         * ListDirectories
+         * @description Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+         */
         get: operations["ListDirectories"];
         put?: never;
         post?: never;

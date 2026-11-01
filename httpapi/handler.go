@@ -45,7 +45,7 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 	h.mount(m, "GET /api/v1/resources/capabilities", func(_ http.ResponseWriter, _ *http.Request, _ resources.Principal) (any, error) {
 		return s.Capabilities(), nil
 	})
-	h.mount(m, "GET /api/v1/resources/categories", func(_ http.ResponseWriter, r *http.Request, _ resources.Principal) (any, error) {
+	h.mount(m, "GET /api/v1/resources/categories", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		n, e := limit(r)
 		if e != nil {
 			return nil, e
@@ -54,7 +54,7 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 		if e != nil {
 			return nil, e
 		}
-		return s.Categories(r.Context(), n, r.URL.Query().Get("after"), disabled)
+		return s.ReadCategories(r.Context(), p, n, r.URL.Query().Get("after"), disabled)
 	})
 	write[resources.CategoryWrite](h, m, "PUT /api/v1/resources/categories/{id}", func(r *http.Request, p resources.Principal, in resources.CategoryWrite) (any, error) {
 		return s.PutCategory(r.Context(), p, r.PathValue("id"), key(r), in)
