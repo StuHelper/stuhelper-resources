@@ -21,3 +21,5 @@ bash scripts/check-with-postgres.sh
 迁移身份执行 postgres.Migrate，运行身份通过 CheckRuntime 检查。服务通过 Dependencies 接入当前身份与资格、目录、文件和审核接口。账务是可选能力，未接入时不提供购买功能，单独授权仍可使用。
 
 当前本仓测试使用可控外部接口。应用装配、页面、真实账号与生产验收在对应仓库分别记录。完整规则见[模块规格](docs/spec/resources.md)，许可证为 AGPL-3.0-only。
+
+本人上传关联的名称由 /resources/me/references 按登录和归属返回，不受当前资格失效影响。投诉回执的 resource_title 只在提交时通过内容准入且目标可见时保存，后续恢复资格不会补入标题。

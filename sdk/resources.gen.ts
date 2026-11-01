@@ -460,6 +460,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/resources/me/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required. */
+        get: operations["myResourcesReferences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -648,6 +665,8 @@ export interface components {
             kind?: string;
             decision_reason?: string;
             can_appeal: boolean;
+            /** @description Title snapshot at request submission. Present for an owner request, or when a complaint passed current content admission at submission. Omitted for other complaints and historical requests without an admission snapshot. */
+            resource_title?: string;
         };
         GrantWrite: {
             /** Format: int64 */
@@ -742,6 +761,16 @@ export interface components {
         RequestPage: {
             items: components["schemas"]["RequestReceipt"][];
             next_cursor: string;
+        };
+        Reference: {
+            id: string;
+            kind: string;
+            name: string;
+            canonical_id?: string;
+        };
+        References: {
+            items: components["schemas"]["Reference"][];
+            missing_ids: string[];
         };
     };
     responses: never;
@@ -3213,6 +3242,83 @@ export interface operations {
             };
             /** @description Configured resource limit exceeded */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    myResourcesReferences: {
+        parameters: {
+            query: {
+                /** @description Comma-separated IDs referenced by own records, at most 100. Any unowned ID rejects the whole batch. */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["References"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Revision, policy or idempotency conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

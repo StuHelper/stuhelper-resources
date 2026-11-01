@@ -55,6 +55,10 @@
     ],
     "RES-12": [
       "integration_test.go#TestCategoryReadsRequireContentAdmissionAndKeepScopedAdministration"
+    ],
+    "RES-13": [
+      "references_test.go#TestOwnResourceNamesRequireUploadOwnershipAndKeepContentPrivate",
+      "references_test.go#TestComplaintTitleSnapshotRequiresAdmissionAtSubmission"
     ]
   }
 }

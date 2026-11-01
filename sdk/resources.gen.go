@@ -467,6 +467,20 @@ type Problem struct {
 	RequestId *string `json:"request_id,omitempty"`
 }
 
+// Reference defines model for Reference.
+type Reference struct {
+	CanonicalId *string `json:"canonical_id,omitempty"`
+	Id          string  `json:"id"`
+	Kind        string  `json:"kind"`
+	Name        string  `json:"name"`
+}
+
+// References defines model for References.
+type References struct {
+	Items      []Reference `json:"items"`
+	MissingIds []string    `json:"missing_ids"`
+}
+
 // Request defines model for Request.
 type Request struct {
 	Contact        *string     `json:"contact,omitempty"`
@@ -487,14 +501,17 @@ type RequestPage struct {
 
 // RequestReceipt defines model for RequestReceipt.
 type RequestReceipt struct {
-	CanAppeal      bool                `json:"can_appeal"`
-	CreatedAt      time.Time           `json:"created_at"`
-	DecisionReason *string             `json:"decision_reason,omitempty"`
-	Id             string              `json:"id"`
-	Kind           *string             `json:"kind,omitempty"`
-	ResourceId     *string             `json:"resource_id,omitempty"`
-	State          RequestReceiptState `json:"state"`
-	TaskId         *string             `json:"task_id,omitempty"`
+	CanAppeal      bool      `json:"can_appeal"`
+	CreatedAt      time.Time `json:"created_at"`
+	DecisionReason *string   `json:"decision_reason,omitempty"`
+	Id             string    `json:"id"`
+	Kind           *string   `json:"kind,omitempty"`
+	ResourceId     *string   `json:"resource_id,omitempty"`
+
+	// ResourceTitle Title snapshot at request submission. Present for an owner request, or when a complaint passed current content admission at submission. Omitted for other complaints and historical requests without an admission snapshot.
+	ResourceTitle *string             `json:"resource_title,omitempty"`
+	State         RequestReceiptState `json:"state"`
+	TaskId        *string             `json:"task_id,omitempty"`
 }
 
 // RequestReceiptState defines model for RequestReceipt.State.
@@ -674,6 +691,12 @@ type ListManagedResourcesParams struct {
 type ListOwnResourcesParams struct {
 	After *string `form:"after,omitempty" json:"after,omitempty"`
 	Limit *string `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// MyResourcesReferencesParams defines parameters for MyResourcesReferences.
+type MyResourcesReferencesParams struct {
+	// Ids Comma-separated IDs referenced by own records, at most 100. Any unowned ID rejects the whole batch.
+	Ids string `form:"ids" json:"ids"`
 }
 
 // CreatePackageParams defines parameters for CreatePackage.
@@ -1014,6 +1037,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 	ListOwnResources(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// MyResourcesReferences performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+	//
+	// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+	MyResourcesReferences(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreatePackageWithBody CreatePackage
 	//
@@ -1581,6 +1609,21 @@ func (c *Client) ListManagedResources(ctx context.Context, params *ListManagedRe
 // Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 func (c *Client) ListOwnResources(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListOwnResourcesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// MyResourcesReferences performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+//
+// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+func (c *Client) MyResourcesReferences(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMyResourcesReferencesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3099,6 +3142,56 @@ func NewListOwnResourcesRequest(server string, params *ListOwnResourcesParams) (
 	return req, nil
 }
 
+// NewMyResourcesReferencesRequest constructs an http.Request for the MyResourcesReferences method
+func NewMyResourcesReferencesRequest(server string, params *MyResourcesReferencesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/me/references")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "ids", params.Ids, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewCreatePackageRequest calls the generic CreatePackage builder with application/json body
 func NewCreatePackageRequest(server string, params *CreatePackageParams, body CreatePackageJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -3723,6 +3816,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 	ListOwnResourcesWithResponse(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*ListOwnResourcesResponse, error)
+
+	// MyResourcesReferencesWithResponse performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+	//
+	// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	MyResourcesReferencesWithResponse(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*MyResourcesReferencesResponse, error)
 
 	// CreatePackageWithBodyWithResponse CreatePackage
 	//
@@ -5588,6 +5688,89 @@ func (r ListOwnResourcesResponse) ContentType() string {
 	return ""
 }
 
+type MyResourcesReferencesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *References
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON200() *References {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r MyResourcesReferencesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r MyResourcesReferencesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r MyResourcesReferencesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r MyResourcesReferencesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type CreatePackageResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -6703,6 +6886,19 @@ func (c *ClientWithResponses) ListOwnResourcesWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseListOwnResourcesResponse(rsp)
+}
+
+// MyResourcesReferencesWithResponse performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+//
+// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) MyResourcesReferencesWithResponse(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*MyResourcesReferencesResponse, error) {
+	rsp, err := c.MyResourcesReferences(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMyResourcesReferencesResponse(rsp)
 }
 
 // CreatePackageWithBodyWithResponse CreatePackage
@@ -8315,6 +8511,74 @@ func ParseListOwnResourcesResponse(rsp *http.Response) (*ListOwnResourcesRespons
 			return nil, err
 		}
 		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseMyResourcesReferencesResponse parses an HTTP response from a MyResourcesReferencesWithResponse call
+func ParseMyResourcesReferencesResponse(rsp *http.Response) (*MyResourcesReferencesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &MyResourcesReferencesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest References
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem

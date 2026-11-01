@@ -199,6 +199,7 @@ type Request struct {
 	Evidence       []string `json:"evidence,omitempty"`
 }
 type RequestReceipt struct {
+	ResourceTitle  string    `json:"resource_title,omitempty"`
 	TaskID         string    `json:"task_id,omitempty"`
 	ResourceID     string    `json:"resource_id,omitempty"`
 	Kind           string    `json:"kind,omitempty"`
@@ -392,6 +393,7 @@ type Repository interface {
 	AcknowledgeEvent(context.Context, string) error
 }
 type Transaction interface {
+	OwnedReferences(Principal, []string) ([]string, error)
 	Lock(string) error
 	Category(string, int64) (Category, error)
 	SaveCategory(Category) error

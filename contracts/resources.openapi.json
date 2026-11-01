@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "StuHelper Resources API",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Configurable resource taxonomy, reviewed publications, access grants and authorized packages. No provider identities or credentials."
   },
   "paths": {
@@ -3220,6 +3220,101 @@
           }
         }
       }
+    },
+    "/api/v1/resources/me/references": {
+      "get": {
+        "operationId": "myResourcesReferences",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": true,
+            "description": "Comma-separated IDs referenced by own records, at most 100. Any unowned ID rejects the whole batch.",
+            "schema": {
+              "type": "string",
+              "maxLength": 12899
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/References"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revision, policy or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required."
+      }
     }
   },
   "components": {
@@ -3979,6 +4074,10 @@
           },
           "can_appeal": {
             "type": "boolean"
+          },
+          "resource_title": {
+            "type": "string",
+            "description": "Title snapshot at request submission. Present for an owner request, or when a complaint passed current content admission at submission. Omitted for other complaints and historical requests without an admission snapshot."
           }
         },
         "required": [
@@ -4375,6 +4474,51 @@
           "items",
           "next_cursor"
         ]
+      },
+      "Reference": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "canonical_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "References": {
+        "type": "object",
+        "required": [
+          "items",
+          "missing_ids"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Reference"
+            }
+          },
+          "missing_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
       }
     },
     "securitySchemes": {

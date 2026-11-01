@@ -338,6 +338,15 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 	default:
 		return out, ErrInput
 	}
+	// Title disclosure is fixed at submission. A later qualification change or
+	// idempotent retry cannot add a title to a receipt created without admission.
+	includeTitle := in.Kind != "complaint" && r.Owner == p && p.Valid()
+	if !includeTitle && r.State == "published" && r.ActiveID != "" && p.Valid() {
+		includeTitle = s.auth(ctx, p, "discover", r.SchoolID) == nil
+	}
+	if err := ctx.Err(); err != nil {
+		return out, err
+	}
 	e = s.mutation(ctx, p, "request", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
 		versionID := r.ActiveID
 		if versionID == "" {
@@ -347,6 +356,13 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 			return nil, ErrConflict
 		}
 		out = RequestReceipt{ID: newID(), State: "pending", ResourceID: id, Kind: in.Kind, CreatedAt: s.now()}
+		if includeTitle {
+			version, e := tx.Version(versionID)
+			if e != nil {
+				return nil, e
+			}
+			out.ResourceTitle = version.Version.Metadata.Title
+		}
 		if e := tx.SaveRequest(RequestRecord{Receipt: out, ResourceID: id, VersionID: versionID, Reporter: p, Request: in}); e != nil {
 			return nil, e
 		}
