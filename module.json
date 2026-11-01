@@ -62,6 +62,9 @@
     ],
     "RES-14": [
       "file_access_test.go#TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions"
+    ],
+    "RES-15": [
+      "closure_test.go#TestClosedUploaderKeepsFilesAndCopyrightWithoutPublicAccountLink"
     ]
   }
 }
