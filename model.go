@@ -12,6 +12,7 @@ import (
 )
 
 var (
+	ErrRateLimited     = errors.New("rate_limited")
 	ErrInput           = errors.New("resources_invalid_input")
 	ErrUnauthenticated = errors.New("resources_authentication_required")
 	ErrDenied          = errors.New("resources_permission_denied")
@@ -160,14 +161,17 @@ type VersionRecord struct {
 	DecisionRevision int64
 }
 type Resource struct {
-	ID              string   `json:"id"`
-	Revision        int64    `json:"revision"`
-	State           string   `json:"state"`
-	Current         *Version `json:"current,omitempty"`
-	Proposal        *Version `json:"proposal,omitempty"`
-	DownloadAllowed bool     `json:"download_allowed"`
-	AccessReason    string   `json:"access_reason"`
-	Owned           bool     `json:"owned"`
+	MissingConditions     []string `json:"missing_conditions,omitempty"`
+	UnavailableConditions []string `json:"unavailable_conditions,omitempty"`
+	RuleVersion           string   `json:"rule_version,omitempty"`
+	ID                    string   `json:"id"`
+	Revision              int64    `json:"revision"`
+	State                 string   `json:"state"`
+	Current               *Version `json:"current,omitempty"`
+	Proposal              *Version `json:"proposal,omitempty"`
+	DownloadAllowed       bool     `json:"download_allowed"`
+	AccessReason          string   `json:"access_reason"`
+	Owned                 bool     `json:"owned"`
 }
 type Page struct {
 	Items      []Resource `json:"items"`
@@ -199,6 +203,7 @@ type Request struct {
 	Evidence       []string `json:"evidence,omitempty"`
 }
 type RequestReceipt struct {
+	ResourceTitle  string    `json:"resource_title,omitempty"`
 	TaskID         string    `json:"task_id,omitempty"`
 	ResourceID     string    `json:"resource_id,omitempty"`
 	Kind           string    `json:"kind,omitempty"`
@@ -392,6 +397,8 @@ type Repository interface {
 	AcknowledgeEvent(context.Context, string) error
 }
 type Transaction interface {
+	CloseOwner(Principal, string) error
+	OwnedReferences(Principal, []string) ([]string, error)
 	Lock(string) error
 	Category(string, int64) (Category, error)
 	SaveCategory(Category) error

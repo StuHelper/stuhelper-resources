@@ -28,7 +28,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ListCategories */
+        /**
+         * ListCategories
+         * @description Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+         */
         get: operations["ListCategories"];
         put?: never;
         post?: never;
@@ -62,7 +65,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ListResources */
+        /**
+         * ListResources
+         * @description Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+         */
         get: operations["ListResources"];
         put?: never;
         /** CreateDraft */
@@ -97,7 +103,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GetResource */
+        /**
+         * GetResource
+         * @description Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
+         */
         get: operations["GetResource"];
         /** UpdateDraft */
         put: operations["UpdateDraft"];
@@ -234,7 +243,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ListDirectories */
+        /**
+         * ListDirectories
+         * @description Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+         */
         get: operations["ListDirectories"];
         put?: never;
         post?: never;
@@ -302,7 +314,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** DownloadResource */
+        /**
+         * DownloadResource
+         * @description Checks current content admission, configured eligibility, entitlements and resource state before returning any file bytes. Missing conditions return 403; unknown dependencies return 503. Same policy as preview.
+         */
         get: operations["DownloadResource"];
         put?: never;
         post?: never;
@@ -448,6 +463,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/resources/me/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required. */
+        get: operations["myResourcesReferences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resources/items/{id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PreviewResource
+         * @description Authenticated inline file bytes, with the exact same current content, eligibility, entitlement and resource-state checks as download. No partial preview or conversion bypass. Errors return no file bytes.
+         */
+        get: operations["PreviewResource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -455,6 +507,11 @@ export interface components {
         Problem: {
             code: string;
             request_id?: string;
+            missing_conditions?: ("content_access" | "campus_eligibility" | "phone_bound" | "identity_verified" | "course_enrollment" | "resource_entitlement")[];
+            unavailable_conditions?: ("content_access" | "campus_eligibility" | "phone_bound" | "identity_verified" | "course_enrollment" | "resource_entitlement")[];
+            rule_version?: string;
+            /** @enum {string} */
+            access_reason?: "requirements_missing" | "service_unavailable" | "purchase_unavailable" | "resource_unavailable" | "permission_denied";
         };
         Value: {
             text?: string;
@@ -590,8 +647,12 @@ export interface components {
             current?: components["schemas"]["Version"];
             proposal?: components["schemas"]["Version"];
             download_allowed: boolean;
+            /** @description allowed, requirements_missing, purchase_unavailable, resource_unavailable, permission_denied or service_unavailable. Owned metadata remains readable if file eligibility is unavailable. Use missing_conditions and unavailable_conditions rather than assuming that every failure requires a purchase. */
             access_reason: string;
             owned: boolean;
+            missing_conditions?: ("content_access" | "campus_eligibility" | "phone_bound" | "identity_verified" | "course_enrollment" | "resource_entitlement")[];
+            unavailable_conditions?: ("content_access" | "campus_eligibility" | "phone_bound" | "identity_verified" | "course_enrollment" | "resource_entitlement")[];
+            rule_version?: string;
         };
         ResourcePage: {
             items: components["schemas"]["Resource"][];
@@ -636,6 +697,8 @@ export interface components {
             kind?: string;
             decision_reason?: string;
             can_appeal: boolean;
+            /** @description Title snapshot at request submission. Present for an owner request, or when a complaint passed current content admission at submission. Omitted for other complaints and historical requests without an admission snapshot. */
+            resource_title?: string;
         };
         GrantWrite: {
             /** Format: int64 */
@@ -718,6 +781,7 @@ export interface components {
             max_package_bytes: number;
             /** Format: int64 */
             max_package_files: number;
+            /** @description Always false in this release. Entitlement lookup does not enable a purchase or an access-application workflow. */
             purchase_available: boolean;
             upload_profiles: components["schemas"]["UploadProfile"][];
         };
@@ -730,6 +794,16 @@ export interface components {
         RequestPage: {
             items: components["schemas"]["RequestReceipt"][];
             next_cursor: string;
+        };
+        Reference: {
+            id: string;
+            kind: string;
+            name: string;
+            canonical_id?: string;
+        };
+        References: {
+            items: components["schemas"]["Reference"][];
+            missing_ids: string[];
         };
     };
     responses: never;
@@ -1886,6 +1960,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description 请求过于频繁，稍后重试 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code?: string;
+                    };
                 };
             };
             /** @description Dependency unavailable */
@@ -3140,6 +3225,168 @@ export interface operations {
             header?: never;
             path: {
                 version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized complete file or archive */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Revision, policy or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Configured resource limit exceeded */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    myResourcesReferences: {
+        parameters: {
+            query: {
+                /** @description Comma-separated IDs referenced by own records, at most 100. Any unowned ID rejects the whole batch. */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["References"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Revision, policy or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    PreviewResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
             };
             cookie?: never;
         };

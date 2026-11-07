@@ -178,3 +178,24 @@ func (s *Service) DownloadReviewFile(ctx context.Context, p Principal, versionID
 	}
 	return s.deps.Files.ReviewDownload(ctx, p, versionID, v.Version.File.VersionID, w)
 }
+
+// InspectComplaint returns only target routing metadata. The caller must have
+// login-only request access; no title, description, file or content is returned.
+// A persisted complaint may still refer to a historical version after an update.
+func (s *Service) InspectComplaint(ctx context.Context, p Principal, versionID string) (Inspection, error) {
+	if !validID(versionID) {
+		return Inspection{}, ErrInput
+	}
+	if e := s.auth(ctx, p, "request", ""); e != nil {
+		return Inspection{}, e
+	}
+	v, e := s.version(ctx, versionID)
+	if e != nil {
+		return Inspection{}, e
+	}
+	record, e := s.record(ctx, v.ResourceID)
+	if e != nil {
+		return Inspection{}, e
+	}
+	return Inspection{ResourceID: record.ID, VersionID: versionID, SchoolID: record.SchoolID, Owner: record.Owner.Key(), Revision: record.Revision, Visible: record.State == "published" && record.ActiveID == versionID}, nil
+}

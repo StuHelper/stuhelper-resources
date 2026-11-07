@@ -15,6 +15,7 @@ import (
 	"mime"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -42,10 +43,13 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 	}
 	h := &handler{s: s, auth: auth, contract: router}
 	m := http.NewServeMux()
+	h.mount(m, "GET /api/v1/resources/me/references", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		return s.MyReferences(r.Context(), p, strings.Split(r.URL.Query().Get("ids"), ","))
+	})
 	h.mount(m, "GET /api/v1/resources/capabilities", func(_ http.ResponseWriter, _ *http.Request, _ resources.Principal) (any, error) {
 		return s.Capabilities(), nil
 	})
-	h.mount(m, "GET /api/v1/resources/categories", func(_ http.ResponseWriter, r *http.Request, _ resources.Principal) (any, error) {
+	h.mount(m, "GET /api/v1/resources/categories", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		n, e := limit(r)
 		if e != nil {
 			return nil, e
@@ -54,7 +58,7 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 		if e != nil {
 			return nil, e
 		}
-		return s.Categories(r.Context(), n, r.URL.Query().Get("after"), disabled)
+		return s.ReadCategories(r.Context(), p, n, r.URL.Query().Get("after"), disabled)
 	})
 	write[resources.CategoryWrite](h, m, "PUT /api/v1/resources/categories/{id}", func(r *http.Request, p resources.Principal, in resources.CategoryWrite) (any, error) {
 		return s.PutCategory(r.Context(), p, r.PathValue("id"), key(r), in)
@@ -148,6 +152,7 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 		return out.Package, e
 	})
 	h.mount(m, "GET /api/v1/resources/items/{id}/download", h.download)
+	h.mount(m, "GET /api/v1/resources/items/{id}/preview", h.preview)
 	h.mount(m, "GET /api/v1/resources/packages/{id}/parts/{part}", h.downloadPackage)
 	return m, nil
 }
@@ -292,38 +297,71 @@ func failure(w http.ResponseWriter, e error) {
 	for _, item := range []struct {
 		err    error
 		status int
-	}{{resources.ErrInput, 400}, {resources.ErrUnauthenticated, 401}, {resources.ErrDenied, 403}, {resources.ErrNotFound, 404}, {resources.ErrConflict, 409}, {resources.ErrCapacity, 413}} {
+	}{{resources.ErrRateLimited, 429}, {resources.ErrInput, 400}, {resources.ErrUnauthenticated, 401}, {resources.ErrDenied, 403}, {resources.ErrNotFound, 404}, {resources.ErrConflict, 409}, {resources.ErrCapacity, 413}} {
 		if errors.Is(e, item.err) {
 			status, code = item.status, item.err.Error()
 			break
 		}
 	}
-	writeJSON(w, status, map[string]string{"code": code})
+	payload := map[string]any{"code": code}
+	var detail *resources.AccessFailure
+	if errors.As(e, &detail) {
+		payload["access_reason"] = detail.Reason
+		if len(detail.Missing) > 0 {
+			payload["missing_conditions"] = detail.Missing
+		}
+		if len(detail.Unavailable) > 0 {
+			payload["unavailable_conditions"] = detail.Unavailable
+		}
+		if detail.RuleVersion != "" {
+			payload["rule_version"] = detail.RuleVersion
+		}
+	}
+	writeJSON(w, status, payload)
 }
 
 type stream struct {
 	w          http.ResponseWriter
 	kind, name string
+	inline     bool
 	written    bool
 }
 
 func (s *stream) Write(b []byte) (int, error) {
 	if !s.written {
 		s.w.Header().Set("Content-Type", s.kind)
-		s.w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": s.name}))
+		disposition := "attachment"
+		if s.inline {
+			disposition = "inline"
+			s.w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
+		}
+		s.w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": s.name}))
 		s.written = true
 	}
 	return s.w.Write(b)
 }
 func (h *handler) download(w http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+	return h.file(w, r, p, false)
+}
+func (h *handler) preview(w http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+	return h.file(w, r, p, true)
+}
+func (h *handler) file(w http.ResponseWriter, r *http.Request, p resources.Principal, inline bool) (any, error) {
 	resource, e := h.s.Get(r.Context(), p, r.PathValue("id"))
 	if e != nil {
 		return nil, e
 	}
 	if !resource.DownloadAllowed || resource.Current == nil || resource.Current.File == nil {
-		return nil, resources.ErrDenied
+		if resource.AccessReason == "" {
+			return nil, resources.ErrDenied
+		}
+		return nil, &resources.AccessFailure{Reason: resource.AccessReason, Missing: resource.MissingConditions, Unavailable: resource.UnavailableConditions, RuleVersion: resource.RuleVersion}
 	}
-	out := &stream{w: w, kind: "application/octet-stream", name: resource.Current.File.Filename}
+	kind := "application/octet-stream"
+	if inline {
+		kind = resource.Current.File.ContentType
+	}
+	out := &stream{w: w, kind: kind, name: resource.Current.File.Filename, inline: inline}
 	_, e = h.s.Download(r.Context(), p, resource.ID, out)
 	if e != nil && out.written {
 		panic(http.ErrAbortHandler)

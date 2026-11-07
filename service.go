@@ -30,7 +30,7 @@ func New(repo Repository, deps Dependencies, cfg Config) (*Service, error) {
 	return &Service{repo: repo, deps: deps, cfg: cfg, now: func() time.Time { return clock().UTC() }}, nil
 }
 func (s *Service) Capabilities() Capabilities {
-	return Capabilities{UploadProfiles: append([]UploadProfile{}, s.cfg.UploadProfiles...), Terms: s.cfg.Terms, AllowedTypes: append([]string{}, s.cfg.AllowedTypes...), MaxFileSize: s.cfg.MaxFileSize, MaxPackageBytes: s.cfg.MaxPackageBytes, MaxPackageFiles: s.cfg.MaxPackageFiles, PurchaseAvailable: s.deps.Entitlements != nil}
+	return Capabilities{UploadProfiles: append([]UploadProfile{}, s.cfg.UploadProfiles...), Terms: s.cfg.Terms, AllowedTypes: append([]string{}, s.cfg.AllowedTypes...), MaxFileSize: s.cfg.MaxFileSize, MaxPackageBytes: s.cfg.MaxPackageBytes, MaxPackageFiles: s.cfg.MaxPackageFiles, PurchaseAvailable: false}
 }
 func (s *Service) auth(ctx context.Context, p Principal, action, scope string) error {
 	if !p.Valid() && action != "discover" {
@@ -39,6 +39,13 @@ func (s *Service) auth(ctx context.Context, p Principal, action, scope string) e
 	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
 	defer cancel()
 	err := s.deps.Authority.Check(work, p, action, scope)
+	var detail *AccessFailure
+	if errors.As(err, &detail) {
+		if detail == nil || !detail.valid() {
+			return ErrUnavailable
+		}
+		return &AccessFailure{Reason: detail.Reason, Missing: append([]string{}, detail.Missing...), Unavailable: append([]string{}, detail.Unavailable...), RuleVersion: detail.RuleVersion}
+	}
 	if err == nil || errors.Is(err, ErrDenied) || errors.Is(err, ErrUnauthenticated) {
 		return err
 	}
@@ -175,4 +182,24 @@ func currentCategory(tx Transaction, m Metadata) (Category, error) {
 		return c, ErrConflict
 	}
 	return c, ValidateAttributes(c, m.Attributes, false)
+}
+
+// ReadCategories is the user-facing taxonomy read boundary. Scoped configuration
+// access remains independent of campus qualification.
+func (s *Service) ReadCategories(ctx context.Context, p Principal, limit int, after string, disabled bool) (CategoryPage, error) {
+	if !p.Valid() {
+		return CategoryPage{}, ErrUnauthenticated
+	}
+	if e := s.auth(ctx, p, "taxonomy.manage", ""); e != nil {
+		if !denied(e) {
+			return CategoryPage{}, e
+		}
+		if disabled {
+			return CategoryPage{}, ErrDenied
+		}
+		if e = s.auth(ctx, p, "discover", ""); e != nil {
+			return CategoryPage{}, e
+		}
+	}
+	return s.Categories(ctx, limit, after, disabled)
 }

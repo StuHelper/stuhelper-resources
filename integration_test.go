@@ -32,13 +32,18 @@ func (c *testClock) Now() time.Time      { c.mu.Lock(); defer c.mu.Unlock(); ret
 func (c *testClock) Add(d time.Duration) { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
 
 type authority struct {
-	mu   sync.Mutex
-	deny map[string]bool
+	mu    sync.Mutex
+	deny  map[string]bool
+	calls map[string]int
 }
 
 func (a *authority) Check(_ context.Context, p resources.Principal, action, scope string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.calls == nil {
+		a.calls = map[string]int{}
+	}
+	a.calls[action+":"+scope]++
 	if a.deny[action] || a.deny[p.Key()+":"+action] {
 		return resources.ErrDenied
 	}
@@ -738,4 +743,79 @@ func TestReviewInspectionIsScopedAndGrantListsIdentifySubjects(t *testing.T) {
 	if _, e = h.s.Grants(h.ctx, reader, draft.ID, 25, ""); !errors.Is(e, resources.ErrDenied) {
 		t.Fatal("grant subjects leaked", e)
 	}
+}
+
+func TestCategoryReadsRequireContentAdmissionAndKeepScopedAdministration(t *testing.T) {
+	f := newFixture(t)
+	visible, err := f.s.ReadCategories(f.ctx, reader, 20, "", false)
+	must(t, err)
+	if len(visible.Items) == 0 {
+		t.Fatal("qualified taxonomy missing")
+	}
+	f.auth.set("discover", true)
+	denied, err := f.s.ReadCategories(f.ctx, reader, 20, "", false)
+	if !errors.Is(err, resources.ErrDenied) || len(denied.Items) != 0 {
+		t.Fatal("unqualified taxonomy exposed", err)
+	}
+	if _, err = f.s.ReadCategories(f.ctx, global, 20, "", true); err != nil {
+		t.Fatal("scoped taxonomy administrator depends on content admission", err)
+	}
+	if _, err = f.s.List(f.ctx, uploader, resources.Filter{Limit: 20}, true, false); err != nil {
+		t.Fatal("own resources depend on content admission", err)
+	}
+	f.auth.set("discover", false)
+	if _, err = f.s.ReadCategories(f.ctx, reader, 20, "", true); !errors.Is(err, resources.ErrDenied) {
+		t.Fatal("ordinary reader can inspect disabled configuration", err)
+	}
+}
+
+func TestListReusesRequestAuthorizationButRechecksNextRequest(t *testing.T) {
+	h := newFixture(t)
+	for i := 0; i < 12; i++ {
+		h.publish(t, h.draft(t, fmt.Sprintf("listed-%d", i), "public"))
+	}
+	h.auth.mu.Lock()
+	h.auth.calls = map[string]int{}
+	h.auth.mu.Unlock()
+	page, e := h.s.List(h.ctx, reader, resources.Filter{SchoolID: "school", Limit: 100}, false, false)
+	must(t, e)
+	if len(page.Items) != 12 {
+		t.Fatal(len(page.Items))
+	}
+	h.auth.mu.Lock()
+	for _, action := range []string{"manage", "discover", "download.public"} {
+		if h.auth.calls[action+":school"] != 1 {
+			t.Errorf("%s facts queried %d times", action, h.auth.calls[action+":school"])
+		}
+	}
+	h.auth.mu.Unlock()
+	h.auth.set("discover", true)
+	if _, e = h.s.List(h.ctx, reader, resources.Filter{SchoolID: "school", Limit: 100}, false, false); !errors.Is(e, resources.ErrDenied) {
+		t.Fatal("authorization cached across requests", e)
+	}
+}
+
+func TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting(t *testing.T) {
+	h := newFixture(t)
+	item := h.publish(t, h.draft(t, "quota", "public"))
+	in := resources.Request{Kind: "complaint", Reason: "Synthetic complaint", Contact: "contact@example.invalid", Evidence: []string{"Synthetic evidence"}}
+	for i := 0; i < 10; i++ {
+		_, e := h.s.CreateRequest(h.ctx, reader, item.ID, fmt.Sprintf("complaint-%d", i), in)
+		must(t, e)
+	}
+	_, e := h.s.CreateRequest(h.ctx, reader, item.ID, "complaint-0", in)
+	must(t, e)
+	if _, e = h.s.CreateRequest(h.ctx, reader, item.ID, "over-limit", in); !errors.Is(e, resources.ErrRateLimited) {
+		t.Fatal("quota bypassed", e)
+	}
+	var n int
+	must(t, h.db.QueryRow(`SELECT count(*) FROM resources.requests`).Scan(&n))
+	if n != 10 {
+		t.Fatal("rejected complaint persisted", n)
+	}
+	_, e = h.s.CreateRequest(h.ctx, uploader, item.ID, "other-owner", in)
+	must(t, e)
+	h.clock.Add(time.Minute)
+	_, e = h.s.CreateRequest(h.ctx, reader, item.ID, "recovered", in)
+	must(t, e)
 }

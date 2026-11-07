@@ -21,3 +21,7 @@ REVOKE ALL ON SCHEMA resources FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA resources FROM PUBLIC;
 
 CREATE INDEX IF NOT EXISTS resources_requests_reporter ON resources.requests((data->'Reporter'),id);
+
+CREATE TABLE IF NOT EXISTS resources.closed_owners(owner_key text PRIMARY KEY,closure_id text NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
+
+CREATE TABLE IF NOT EXISTS resources.submission_limits(owner_key text PRIMARY KEY, started_at timestamptz NOT NULL, used integer NOT NULL CHECK(used>0));

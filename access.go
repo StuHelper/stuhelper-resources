@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"time"
 )
 
 func (s *Service) version(ctx context.Context, id string) (VersionRecord, error) {
@@ -18,10 +19,10 @@ func denied(e error) bool { return errors.Is(e, ErrDenied) || errors.Is(e, ErrUn
 // Ordinary unlisting retains purchased delivery only; a safety block denies all.
 func (s *Service) access(ctx context.Context, p Principal, r Record, v VersionRecord) error {
 	if r.State == "blocked" || v.Version.State == "blocked" {
-		return ErrDenied
+		return &AccessFailure{Reason: "resource_unavailable"}
 	}
 	if r.ActiveID == "" || r.ActiveID != v.Version.ID || v.Version.State != "published" || v.ReferenceID == "" {
-		return ErrDenied
+		return &AccessFailure{Reason: "resource_unavailable"}
 	}
 	if !p.Valid() {
 		return ErrUnauthenticated
@@ -31,6 +32,9 @@ func (s *Service) access(ctx context.Context, p Principal, r Record, v VersionRe
 		return nil
 	}
 	if !denied(e) {
+		return e
+	}
+	if e = s.auth(ctx, p, "discover", r.SchoolID); e != nil {
 		return e
 	}
 	action := "download.public"
@@ -64,7 +68,7 @@ func (s *Service) access(ctx context.Context, p Principal, r Record, v VersionRe
 			return nil
 		}
 	}
-	return ErrDenied
+	return &AccessFailure{Reason: "purchase_unavailable", Missing: []string{"resource_entitlement"}}
 }
 func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, error) {
 	var out Resource
@@ -72,6 +76,11 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 	if e != nil {
 		return out, e
 	}
+	return s.getRecord(ctx, p, r)
+}
+func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resource, error) {
+	var out Resource
+	var e error
 	privileged := r.Owner == p && p.Valid()
 	if !privileged {
 		e = s.auth(ctx, p, "manage", r.SchoolID)
@@ -107,7 +116,23 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 		out.DownloadAllowed = true
 		out.AccessReason = "allowed"
 	} else if denied(e) {
-		out.AccessReason = "access_required"
+		out.AccessReason = "permission_denied"
+		var failure *AccessFailure
+		if errors.As(e, &failure) {
+			out.AccessReason = failure.Reason
+			out.MissingConditions = failure.Missing
+			out.UnavailableConditions = failure.Unavailable
+			out.RuleVersion = failure.RuleVersion
+		}
+	} else if privileged {
+		// Qualification outages may pause file access but cannot hide an owned record.
+		out.AccessReason = "service_unavailable"
+		var failure *AccessFailure
+		if errors.As(e, &failure) {
+			out.MissingConditions = failure.Missing
+			out.UnavailableConditions = failure.Unavailable
+			out.RuleVersion = failure.RuleVersion
+		}
 	} else {
 		return Resource{}, e
 	}
@@ -118,6 +143,11 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 	return out, nil
 }
 func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin bool) (Page, error) {
+	// Reuse only this request's school/action decisions. Every subsequent request
+	// starts with current facts; per-resource grants and state remain independent.
+	copy := *s
+	copy.deps.Authority = &requestAuthority{source: s.deps.Authority, results: map[authorizationKey]error{}}
+	s = &copy
 	out := Page{Items: []Resource{}}
 	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.After) || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) {
 		return out, ErrInput
@@ -173,7 +203,7 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 		return out, e
 	}
 	for _, record := range records {
-		v, e := s.Get(ctx, p, record.ID)
+		v, e := s.getRecord(ctx, p, record)
 		if errors.Is(e, ErrNotFound) || denied(e) {
 			continue
 		}
@@ -338,7 +368,25 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 	default:
 		return out, ErrInput
 	}
+	// Title disclosure is fixed at submission. A later qualification change or
+	// idempotent retry cannot add a title to a receipt created without admission.
+	includeTitle := in.Kind != "complaint" && r.Owner == p && p.Valid()
+	if !includeTitle && r.State == "published" && r.ActiveID != "" && p.Valid() {
+		includeTitle = s.auth(ctx, p, "discover", r.SchoolID) == nil
+	}
+	if err := ctx.Err(); err != nil {
+		return out, err
+	}
 	e = s.mutation(ctx, p, "request", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+		if in.Kind == "complaint" {
+			limiter, ok := tx.(interface{ LimitSubmission(string, time.Time) error })
+			if !ok {
+				return nil, ErrUnavailable
+			}
+			if err := limiter.LimitSubmission(p.Key(), s.now()); err != nil {
+				return nil, err
+			}
+		}
 		versionID := r.ActiveID
 		if versionID == "" {
 			versionID = r.ProposalID
@@ -347,6 +395,13 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 			return nil, ErrConflict
 		}
 		out = RequestReceipt{ID: newID(), State: "pending", ResourceID: id, Kind: in.Kind, CreatedAt: s.now()}
+		if includeTitle {
+			version, e := tx.Version(versionID)
+			if e != nil {
+				return nil, e
+			}
+			out.ResourceTitle = version.Version.Metadata.Title
+		}
 		if e := tx.SaveRequest(RequestRecord{Receipt: out, ResourceID: id, VersionID: versionID, Reporter: p, Request: in}); e != nil {
 			return nil, e
 		}
@@ -356,4 +411,26 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 		return out, nil
 	}, &out)
 	return out, e
+}
+
+type authorizationKey struct {
+	Principal     Principal
+	Action, Scope string
+}
+type requestAuthority struct {
+	source  Authority
+	results map[authorizationKey]error
+}
+
+func (a *requestAuthority) Check(ctx context.Context, p Principal, action, scope string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	key := authorizationKey{p, action, scope}
+	if err, ok := a.results[key]; ok {
+		return err
+	}
+	err := a.source.Check(ctx, p, action, scope)
+	a.results[key] = err
+	return err
 }

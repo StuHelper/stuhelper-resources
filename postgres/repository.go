@@ -110,6 +110,9 @@ func (t *transaction) Record(id string) (resources.Record, error) {
 	return read[resources.Record](t, `SELECT data FROM resources.records WHERE id=$1`, id)
 }
 func (t *transaction) SaveRecord(v resources.Record) error {
+	if e := t.closedRecord(v); e != nil {
+		return e
+	}
 	return t.save(`INSERT INTO resources.records(id,owner_key,school_id,state,active_id,proposal_id,data) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO UPDATE SET state=excluded.state,active_id=excluded.active_id,proposal_id=excluded.proposal_id,data=excluded.data`, v, v.ID, v.Owner.Key(), v.SchoolID, v.State, v.ActiveID, v.ProposalID)
 }
 func (t *transaction) Version(id string) (resources.VersionRecord, error) {
