@@ -794,3 +794,28 @@ func TestListReusesRequestAuthorizationButRechecksNextRequest(t *testing.T) {
 		t.Fatal("authorization cached across requests", e)
 	}
 }
+
+func TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting(t *testing.T) {
+	h := newFixture(t)
+	item := h.publish(t, h.draft(t, "quota", "public"))
+	in := resources.Request{Kind: "complaint", Reason: "Synthetic complaint", Contact: "contact@example.invalid", Evidence: []string{"Synthetic evidence"}}
+	for i := 0; i < 10; i++ {
+		_, e := h.s.CreateRequest(h.ctx, reader, item.ID, fmt.Sprintf("complaint-%d", i), in)
+		must(t, e)
+	}
+	_, e := h.s.CreateRequest(h.ctx, reader, item.ID, "complaint-0", in)
+	must(t, e)
+	if _, e = h.s.CreateRequest(h.ctx, reader, item.ID, "over-limit", in); !errors.Is(e, resources.ErrRateLimited) {
+		t.Fatal("quota bypassed", e)
+	}
+	var n int
+	must(t, h.db.QueryRow(`SELECT count(*) FROM resources.requests`).Scan(&n))
+	if n != 10 {
+		t.Fatal("rejected complaint persisted", n)
+	}
+	_, e = h.s.CreateRequest(h.ctx, uploader, item.ID, "other-owner", in)
+	must(t, e)
+	h.clock.Add(time.Minute)
+	_, e = h.s.CreateRequest(h.ctx, reader, item.ID, "recovered", in)
+	must(t, e)
+}

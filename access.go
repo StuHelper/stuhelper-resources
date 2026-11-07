@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"time"
 )
 
 func (s *Service) version(ctx context.Context, id string) (VersionRecord, error) {
@@ -377,6 +378,15 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 		return out, err
 	}
 	e = s.mutation(ctx, p, "request", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+		if in.Kind == "complaint" {
+			limiter, ok := tx.(interface{ LimitSubmission(string, time.Time) error })
+			if !ok {
+				return nil, ErrUnavailable
+			}
+			if err := limiter.LimitSubmission(p.Key(), s.now()); err != nil {
+				return nil, err
+			}
+		}
 		versionID := r.ActiveID
 		if versionID == "" {
 			versionID = r.ProposalID

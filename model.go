@@ -12,6 +12,7 @@ import (
 )
 
 var (
+	ErrRateLimited     = errors.New("rate_limited")
 	ErrInput           = errors.New("resources_invalid_input")
 	ErrUnauthenticated = errors.New("resources_authentication_required")
 	ErrDenied          = errors.New("resources_permission_denied")

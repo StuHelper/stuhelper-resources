@@ -297,7 +297,7 @@ func failure(w http.ResponseWriter, e error) {
 	for _, item := range []struct {
 		err    error
 		status int
-	}{{resources.ErrInput, 400}, {resources.ErrUnauthenticated, 401}, {resources.ErrDenied, 403}, {resources.ErrNotFound, 404}, {resources.ErrConflict, 409}, {resources.ErrCapacity, 413}} {
+	}{{resources.ErrRateLimited, 429}, {resources.ErrInput, 400}, {resources.ErrUnauthenticated, 401}, {resources.ErrDenied, 403}, {resources.ErrNotFound, 404}, {resources.ErrConflict, 409}, {resources.ErrCapacity, 413}} {
 		if errors.Is(e, item.err) {
 			status, code = item.status, item.err.Error()
 			break

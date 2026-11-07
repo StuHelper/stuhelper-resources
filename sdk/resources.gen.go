@@ -5493,6 +5493,10 @@ type CreateRequestResponse struct {
 	JSON409 *Problem
 	// JSON413 the response for an HTTP 413 `application/json` response
 	JSON413 *Problem
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *struct {
+		Code *string `json:"code,omitempty"`
+	}
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *Problem
 }
@@ -5530,6 +5534,13 @@ func (r CreateRequestResponse) GetJSON409() *Problem {
 // GetJSON413 returns the response for an HTTP 413 `application/json` response
 func (r CreateRequestResponse) GetJSON413() *Problem {
 	return r.JSON413
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r CreateRequestResponse) GetJSON429() *struct {
+	Code *string `json:"code,omitempty"`
+} {
+	return r.JSON429
 }
 
 // GetJSON503 returns the response for an HTTP 503 `application/json` response
@@ -8549,6 +8560,15 @@ func ParseCreateRequestResponse(rsp *http.Response) (*CreateRequestResponse, err
 			return nil, err
 		}
 		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest struct {
+			Code *string `json:"code,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
