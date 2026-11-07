@@ -65,6 +65,9 @@
     ],
     "RES-15": [
       "closure_test.go#TestClosedUploaderKeepsFilesAndCopyrightWithoutPublicAccountLink"
+    ],
+    "RES-16": [
+      "integration_test.go#TestListReusesRequestAuthorizationButRechecksNextRequest"
     ]
   }
 }

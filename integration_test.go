@@ -32,13 +32,18 @@ func (c *testClock) Now() time.Time      { c.mu.Lock(); defer c.mu.Unlock(); ret
 func (c *testClock) Add(d time.Duration) { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
 
 type authority struct {
-	mu   sync.Mutex
-	deny map[string]bool
+	mu    sync.Mutex
+	deny  map[string]bool
+	calls map[string]int
 }
 
 func (a *authority) Check(_ context.Context, p resources.Principal, action, scope string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.calls == nil {
+		a.calls = map[string]int{}
+	}
+	a.calls[action+":"+scope]++
 	if a.deny[action] || a.deny[p.Key()+":"+action] {
 		return resources.ErrDenied
 	}
@@ -761,5 +766,31 @@ func TestCategoryReadsRequireContentAdmissionAndKeepScopedAdministration(t *test
 	f.auth.set("discover", false)
 	if _, err = f.s.ReadCategories(f.ctx, reader, 20, "", true); !errors.Is(err, resources.ErrDenied) {
 		t.Fatal("ordinary reader can inspect disabled configuration", err)
+	}
+}
+
+func TestListReusesRequestAuthorizationButRechecksNextRequest(t *testing.T) {
+	h := newFixture(t)
+	for i := 0; i < 12; i++ {
+		h.publish(t, h.draft(t, fmt.Sprintf("listed-%d", i), "public"))
+	}
+	h.auth.mu.Lock()
+	h.auth.calls = map[string]int{}
+	h.auth.mu.Unlock()
+	page, e := h.s.List(h.ctx, reader, resources.Filter{SchoolID: "school", Limit: 100}, false, false)
+	must(t, e)
+	if len(page.Items) != 12 {
+		t.Fatal(len(page.Items))
+	}
+	h.auth.mu.Lock()
+	for _, action := range []string{"manage", "discover", "download.public"} {
+		if h.auth.calls[action+":school"] != 1 {
+			t.Errorf("%s facts queried %d times", action, h.auth.calls[action+":school"])
+		}
+	}
+	h.auth.mu.Unlock()
+	h.auth.set("discover", true)
+	if _, e = h.s.List(h.ctx, reader, resources.Filter{SchoolID: "school", Limit: 100}, false, false); !errors.Is(e, resources.ErrDenied) {
+		t.Fatal("authorization cached across requests", e)
 	}
 }

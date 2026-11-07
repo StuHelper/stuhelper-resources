@@ -75,6 +75,11 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 	if e != nil {
 		return out, e
 	}
+	return s.getRecord(ctx, p, r)
+}
+func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resource, error) {
+	var out Resource
+	var e error
 	privileged := r.Owner == p && p.Valid()
 	if !privileged {
 		e = s.auth(ctx, p, "manage", r.SchoolID)
@@ -137,6 +142,11 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 	return out, nil
 }
 func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin bool) (Page, error) {
+	// Reuse only this request's school/action decisions. Every subsequent request
+	// starts with current facts; per-resource grants and state remain independent.
+	copy := *s
+	copy.deps.Authority = &requestAuthority{source: s.deps.Authority, results: map[authorizationKey]error{}}
+	s = &copy
 	out := Page{Items: []Resource{}}
 	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.After) || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) {
 		return out, ErrInput
@@ -192,7 +202,7 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 		return out, e
 	}
 	for _, record := range records {
-		v, e := s.Get(ctx, p, record.ID)
+		v, e := s.getRecord(ctx, p, record)
 		if errors.Is(e, ErrNotFound) || denied(e) {
 			continue
 		}
@@ -391,4 +401,26 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 		return out, nil
 	}, &out)
 	return out, e
+}
+
+type authorizationKey struct {
+	Principal     Principal
+	Action, Scope string
+}
+type requestAuthority struct {
+	source  Authority
+	results map[authorizationKey]error
+}
+
+func (a *requestAuthority) Check(ctx context.Context, p Principal, action, scope string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	key := authorizationKey{p, action, scope}
+	if err, ok := a.results[key]; ok {
+		return err
+	}
+	err := a.source.Check(ctx, p, action, scope)
+	a.results[key] = err
+	return err
 }
