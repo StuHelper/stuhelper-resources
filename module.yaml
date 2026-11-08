@@ -36,6 +36,8 @@ capability_requires:
 specifications:
   - docs/spec/resources.md
 scenario_tests:
+  AUDIT-01:
+    - postgres/audit_query_test.go#TestPublicAuditQuery
   RES-01:
     - integration_test.go#TestConfigurableTaxonomySnapshotsAndYearFilters
     - integration_test.go#TestTaxonomyChangeDuringPreparationCanBeCorrected

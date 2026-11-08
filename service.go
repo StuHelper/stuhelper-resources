@@ -106,7 +106,7 @@ func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key,
 		if e != nil {
 			return ErrUnavailable
 		}
-		if e = tx.Event(Event{ID: operation, Type: "resources." + action + ".v1", ResourceID: id, SchoolID: scope, Actor: p.Key(), Time: s.now()}); e != nil {
+		if e = tx.Event(Event{Reason: auditReason(input), ID: operation, Type: "resources." + action + ".v1", ResourceID: id, SchoolID: scope, Actor: p.Key(), Time: s.now()}); e != nil {
 			return e
 		}
 		if e = tx.SaveReplay(Replay{Key: operation, Digest: digest, Result: data}); e != nil {
@@ -202,4 +202,17 @@ func (s *Service) ReadCategories(ctx context.Context, p Principal, limit int, af
 		}
 	}
 	return s.Categories(ctx, limit, after, disabled)
+}
+
+// Only explicit operation reasons enter audit; never serialize arbitrary input.
+func auditReason(input any) string {
+	switch v := input.(type) {
+	case StateChange:
+		return v.Reason
+	case Decision:
+		return v.Reason
+	case Request:
+		return ""
+	}
+	return ""
 }

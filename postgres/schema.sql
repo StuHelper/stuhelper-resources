@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS resources.requests (id text PRIMARY KEY, resource_id 
 CREATE TABLE IF NOT EXISTS resources.jobs (id text PRIMARY KEY, state text NOT NULL, available_at timestamptz NOT NULL, lease_until timestamptz NOT NULL, data jsonb NOT NULL);
 CREATE INDEX IF NOT EXISTS resources_jobs_claim ON resources.jobs(state,available_at,lease_until);
 CREATE TABLE IF NOT EXISTS resources.replays (key text PRIMARY KEY, data jsonb NOT NULL);
-CREATE TABLE IF NOT EXISTS resources.audit (id text PRIMARY KEY, data jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS resources.audit (id text PRIMARY KEY, data jsonb NOT NULL, reason text NOT NULL DEFAULT '', result text NOT NULL DEFAULT 'unknown' CHECK(result IN ('success','denied','failed','unknown')), recorded_xid xid8 NOT NULL DEFAULT pg_current_xact_id(), audit_actor text NOT NULL DEFAULT 'unknown', audit_target text NOT NULL DEFAULT 'unknown', audit_action text NOT NULL DEFAULT 'unknown', audit_school text NOT NULL DEFAULT '*', audit_group text NOT NULL DEFAULT '*', audit_time timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS resources.outbox (id text PRIMARY KEY, data jsonb NOT NULL, delivered boolean NOT NULL DEFAULT false);
 CREATE INDEX IF NOT EXISTS resources_outbox_pending ON resources.outbox(id) WHERE NOT delivered;
 REVOKE ALL ON SCHEMA resources FROM PUBLIC;
@@ -25,3 +25,13 @@ CREATE INDEX IF NOT EXISTS resources_requests_reporter ON resources.requests((da
 CREATE TABLE IF NOT EXISTS resources.closed_owners(owner_key text PRIMARY KEY,closure_id text NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
 
 CREATE TABLE IF NOT EXISTS resources.submission_limits(owner_key text PRIMARY KEY, started_at timestamptz NOT NULL, used integer NOT NULL CHECK(used>0));
+
+
+CREATE TABLE IF NOT EXISTS resources.audit_retention(singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton), revision bigint NOT NULL DEFAULT 0);
+INSERT INTO resources.audit_retention(singleton) VALUES(true) ON CONFLICT DO NOTHING;
+CREATE OR REPLACE FUNCTION resources.audit_project() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.audit_actor=COALESCE(NULLIF(NEW.data->>'Actor',''),'unknown'); NEW.audit_target=COALESCE(NULLIF(NEW.data->>'ResourceID',''),'unknown'); NEW.audit_action=NEW.data->>'Type'; NEW.audit_school=COALESCE(NULLIF(NEW.data->>'SchoolID',''),'*'); NEW.audit_time=(NEW.data->>'Time')::timestamptz; RETURN NEW; END $$;
+CREATE OR REPLACE TRIGGER audit_project BEFORE INSERT OR UPDATE ON resources.audit FOR EACH ROW EXECUTE FUNCTION resources.audit_project();
+CREATE OR REPLACE FUNCTION resources.audit_invalidate() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN UPDATE resources.audit_retention SET revision=revision+1 WHERE singleton; RETURN NULL; END $$;
+REVOKE ALL ON FUNCTION resources.audit_invalidate() FROM PUBLIC;
+CREATE OR REPLACE TRIGGER audit_invalidate AFTER UPDATE OR DELETE OR TRUNCATE ON resources.audit FOR EACH STATEMENT EXECUTE FUNCTION resources.audit_invalidate();
+CREATE INDEX IF NOT EXISTS audit_query_order ON resources.audit(audit_time DESC,(id::text) COLLATE "C" DESC);

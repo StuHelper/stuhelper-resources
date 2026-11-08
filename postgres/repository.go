@@ -188,7 +188,7 @@ func (t *transaction) SaveJob(v resources.Job) error {
 	return t.save(`INSERT INTO resources.jobs(id,state,available_at,lease_until,data) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET state=excluded.state,available_at=excluded.available_at,lease_until=excluded.lease_until,data=excluded.data`, v, v.ID, v.State, v.AvailableAt, v.LeaseUntil)
 }
 func (t *transaction) Event(v resources.Event) error {
-	if e := t.save(`INSERT INTO resources.audit(id,data) VALUES($1,$2)`, v, v.ID); e != nil {
+	if e := t.save(`INSERT INTO resources.audit(id,reason,result,data) VALUES($1,$2,'success',$3)`, v, v.ID, v.Reason); e != nil {
 		return e
 	}
 	return t.save(`INSERT INTO resources.outbox(id,data) VALUES($1,$2)`, v, v.ID)

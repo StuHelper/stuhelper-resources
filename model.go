@@ -379,6 +379,7 @@ type Replay struct {
 	Result      json.RawMessage
 }
 type Event struct {
+	Reason                                string `json:"-"`
 	ID, Type, ResourceID, SchoolID, Actor string
 	Revision                              int64
 	Time                                  time.Time
