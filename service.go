@@ -106,7 +106,11 @@ func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key,
 		if e != nil {
 			return ErrUnavailable
 		}
-		if e = tx.Event(Event{Reason: auditReason(input), ID: operation, Type: "resources." + action + ".v1", ResourceID: id, SchoolID: scope, Actor: p.Key(), Time: s.now()}); e != nil {
+		auditTarget := id
+		if created, ok := value.(Resource); ok && auditTarget == "" {
+			auditTarget = created.ID
+		}
+		if e = tx.Event(Event{Reason: auditReason(input), ID: operation, Type: "resources." + action + ".v1", ResourceID: auditTarget, SchoolID: scope, Actor: p.Key(), Time: s.now()}); e != nil {
 			return e
 		}
 		if e = tx.SaveReplay(Replay{Key: operation, Digest: digest, Result: data}); e != nil {
