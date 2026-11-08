@@ -112,9 +112,9 @@ func TestComplaintTitleSnapshotRequiresAdmissionAtSubmission(t *testing.T) {
 	_, e = h.admin.Exec(`UPDATE resources.requests SET data=jsonb_set(data,'{Receipt}',(data->'Receipt')-'resource_title') WHERE id=$1`, with.ID)
 	must(t, e)
 	h.auth.set("discover", false)
-	legacy, e := h.s.RequestStatus(h.ctx, reader, with.ID)
+	withoutSnapshot, e := h.s.RequestStatus(h.ctx, reader, with.ID)
 	must(t, e)
-	if legacy.ResourceTitle != "" {
-		t.Fatal("historical title fabricated", legacy)
+	if withoutSnapshot.ResourceTitle != "" {
+		t.Fatal("missing title fabricated", withoutSnapshot)
 	}
 }
