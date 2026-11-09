@@ -142,7 +142,7 @@ func (s *Service) unlockEligibilityFor(ctx context.Context, p Principal, r Recor
 	}
 	var e error
 
-	for _, action := range []string{"discover", "download.restricted"} {
+	for _, action := range []string{"discover", "purchase"} {
 		if e = s.auth(ctx, p, action, r.SchoolID); e != nil {
 			if denied(e) {
 				return no("requirements_missing")

@@ -1,7 +1,7 @@
 ---
 type: spec
 status: Accepted
-updated: 2026-11-09
+updated: 2026-11-10
 ---
 
 # 资料分类、发布与交付
@@ -149,7 +149,11 @@ GET /api/v1/resources/coverage/{id} 读取 billing 套餐 ID 对应的实际资�
 
 会员投影按 owner、plan_id 保存，访问时检查 valid_from <= 当前时间 < valid_until。到期无需清理任务。单独授权、会员与各 order_id 的购买来源分别撤销。普通下架仅保留已购交付，停用拒绝全部交付。
 
-Service.UnlockEligibility(ctx, principal, resourceID) 返回 (UnlockDecision, error)。
+Service.UnlockEligibility(ctx, principal, resourceID) 返回 (UnlockDecision, error)。购买资格使用 resources.purchase，下载资格继续使用 resources.download.restricted。
+
+Authority 接口分别接收模块内动作 purchase 与 download.restricted，由宿主映射到 platform 动作。
+
+购买与下载条件可分别配置。购买资格不满足仍返回 requirements_missing；依赖故障仍返回错误。内容准入、可售状态与已有访问权检查保持独立，购买条件不会撤销既有权益。
 
 Reason 包括 eligible、already_accessible、unauthenticated、not_found、resource_unavailable、requirements_missing 与 not_purchasable。依赖故障返回错误，不能扣费。
 

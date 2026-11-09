@@ -53,9 +53,9 @@ func TestEntitlementSourcesCoverageExpiryRefundAndEligibility(t *testing.T) {
 	decision(manager, item.ID, "already_accessible")
 	decision(r.Principal{}, item.ID, "unauthenticated")
 	decision(reader, "absent", "not_found")
-	h.auth.set(reader.Key()+":download.restricted", true)
+	h.auth.set(reader.Key()+":purchase", true)
 	decision(reader, item.ID, "requirements_missing")
-	h.auth.set(reader.Key()+":download.restricted", false)
+	h.auth.set(reader.Key()+":purchase", false)
 	public := h.publish(t, h.draft(t, "free", "public"))
 	decision(reader, public.ID, "already_accessible")
 	h.auth.set(reader.Key()+":download.public", true)
@@ -252,5 +252,48 @@ func TestConcurrentBillingDeliveryAndEventSchemas(t *testing.T) {
 		var value any
 		must(t, json.Unmarshal(raw, &value))
 		must(t, schema.Validate(value))
+	}
+}
+
+func TestPurchaseAndDownloadConditionsAreIndependent(t *testing.T) {
+	h := newFixture(t)
+	item := h.publish(t, h.draft(t, "purchase-rules", "restricted"))
+	for _, purchaseDenied := range []bool{false, true} {
+		for _, downloadDenied := range []bool{false, true} {
+			h.auth.set(reader.Key()+":purchase", purchaseDenied)
+			h.auth.set(reader.Key()+":download.restricted", downloadDenied)
+			d, err := h.s.UnlockEligibility(h.ctx, reader, item.ID)
+			must(t, err)
+			want := "eligible"
+			if purchaseDenied {
+				want = "requirements_missing"
+			}
+			if d.Reason != want || d.Eligible == purchaseDenied {
+				t.Fatalf("purchase denied=%v download denied=%v: %+v", purchaseDenied, downloadDenied, d)
+			}
+			view, err := h.s.Get(h.ctx, reader, item.ID)
+			must(t, err)
+			if view.UnlockReason != want {
+				t.Fatal(view)
+			}
+		}
+	}
+	h.purchase(t, item.ID, "independent", 1, false)
+	// Purchase restrictions do not revoke existing rights; download restrictions pause delivery.
+	for _, downloadDenied := range []bool{false, true} {
+		h.auth.set(reader.Key()+":download.restricted", downloadDenied)
+		_, err := h.s.Download(h.ctx, reader, item.ID, &bytes.Buffer{})
+		if downloadDenied {
+			if !errors.Is(err, r.ErrDenied) {
+				t.Fatal(err)
+			}
+		} else {
+			must(t, err)
+		}
+	}
+	var n int
+	must(t, h.db.QueryRow("SELECT count(*) FROM resources.purchases WHERE id='independent' AND data->>'revoked'='false'").Scan(&n))
+	if n != 1 {
+		t.Fatal("qualification change removed purchase", n)
 	}
 }
