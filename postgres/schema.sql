@@ -45,3 +45,10 @@ CREATE OR REPLACE FUNCTION resources.invalidate_discovery() RETURNS trigger LANG
 REVOKE ALL ON FUNCTION resources.invalidate_discovery() FROM PUBLIC;
 CREATE OR REPLACE TRIGGER invalidate_discovery AFTER UPDATE OR DELETE OR TRUNCATE ON resources.discovery_history FOR EACH STATEMENT EXECUTE FUNCTION resources.invalidate_discovery();
 REVOKE ALL ON TABLE resources.discovery_history,resources.discovery_retention FROM PUBLIC;
+
+-- Track source changes for account queries; existing rows start at migration time.
+CREATE OR REPLACE FUNCTION resources.account_query_changed() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.query_changed_at=clock_timestamp(); RETURN NEW; END $$;
+ALTER TABLE resources.records ADD COLUMN IF NOT EXISTS query_changed_at timestamptz NOT NULL DEFAULT now();
+CREATE OR REPLACE TRIGGER account_query_changed BEFORE UPDATE ON resources.records FOR EACH ROW EXECUTE FUNCTION resources.account_query_changed();
+ALTER TABLE resources.grants ADD COLUMN IF NOT EXISTS query_changed_at timestamptz NOT NULL DEFAULT now();
+CREATE OR REPLACE TRIGGER account_query_changed BEFORE UPDATE ON resources.grants FOR EACH ROW EXECUTE FUNCTION resources.account_query_changed();

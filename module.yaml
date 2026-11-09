@@ -20,6 +20,7 @@ optional:
   - id: identity
     api: 1
 capabilities:
+  - resources.account-query
   - resources.read
   - resources.write
   - resources.manage
@@ -34,8 +35,12 @@ capability_requires:
     - id: identity
       api: 1
 specifications:
+  - docs/spec/account-query.md
   - docs/spec/resources.md
 scenario_tests:
+  IQ-02:
+    - accountquery/query_test.go#TestAccountQueryAuthorizationAndFailures
+    - postgres/account_query_test.go#TestAccountQueryScopePaginationAndRuntime
   RES-DISCOVERY-01:
     - discovery_delivery_test.go#TestDiscoverySnapshotStableVersionsTombstonesAndSchema
     - discovery_service_test.go#TestDiscoveryPublicationProposalUnlistingDeletionAndPermissions
