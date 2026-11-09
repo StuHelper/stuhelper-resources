@@ -36,6 +36,14 @@ capability_requires:
 specifications:
   - docs/spec/resources.md
 scenario_tests:
+  RES-DISCOVERY-01:
+    - discovery_delivery_test.go#TestDiscoverySnapshotStableVersionsTombstonesAndSchema
+    - discovery_service_test.go#TestDiscoveryPublicationProposalUnlistingDeletionAndPermissions
+  RES-OUTBOX-01:
+    - discovery_delivery_test.go#TestDiscoveryOutboxNotificationRollbackExclusionAndConfirmation
+  RES-DISCOVERY-02:
+    - discovery_service_test.go#TestDiscoveryRejectsOtherSchoolAndDoesNotElevateOwners
+    - discovery_service_test.go#TestDiscoveryRechecksPublicationAfterExternalAuthorization
   AUDIT-01:
     - audit_integration_test.go#TestAuditWritesPreserveObjectAndOperationReason
     - postgres/audit_query_test.go#TestPublicAuditQuery

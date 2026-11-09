@@ -106,3 +106,35 @@ postgres/audit_query_test.go 的 TestPublicAuditQuery 使用独立 PostgreSQL �
 | 场景 | 验证条件 |
 | --- | --- |
 | AUDIT-01 | 公开审计按授权过滤、稳定分页、脱敏及快照失效；运行身份不能删除审计 |
+
+## 搜索来源与事件投递
+
+contracts/discovery-event.schema.json 固定 search 9e791c6 的 discovery.v1 约定，来源提交和校验值记录在相邻 source.json。投影只有公开标题、学校、课程与教师归属、修订、可见状态和时间，不包含正文、作者、认证材料或评分。
+
+搜索文档使用当前已发布版本，kind 为 resource。未发布替代版本不会覆盖公开标题或关联。发布、版本替换、下架、安全停用、恢复和删除决定均逐对象写入；现有删除决定执行下架，并保留不可见墓碑。
+
+每次来源对象保存都在业务事务内追加 discovery_history，并写入 resources.discovery.v1 outbox 与 pg_notify('resources_outbox', '')。不可见文档是墓碑，标题为空且不携带课程和教师关联。原始对象删除后，墓碑仍保留。
+
+事件采用 CloudEvents 1.0。source 为 resources，subject 等于 data.target.id，事件 ID 由对象 ID 与修订确定。相同请求重放沿用业务幂等回执，不重复写入投影事件。普通业务事件也使用该封套，只携带业务修订。
+
+模块导出 OutboxChannel。postgres.Repository.PendingOutbox(ctx, limit, excludeSubjects) 返回待发送 Envelope，每批 1 至 100 条，最多排除 1000 个主题。nil 与空集合等价，排除在 LIMIT 前执行，同主题按写入顺序读取。
+
+outbox 只用 sent_at 表示确认状态，未发送部分索引支持空闲与积压查询。读取不认领、不确认事件。ConfirmOutbox(ctx, id) 在所有订阅消费者持久提交后调用，重复确认保留首次时间，不存在的 ID 返回 not_found。
+
+backend relay 负责 LISTEN、启动和重连补读，以及每 60 秒的未发送索引兜底。失败按 5 秒起的指数退避重试，最长一小时，累计 24 小时转待处理。excludeSubjects 接收退避和待处理主题，消费者按事件 ID 去重。
+
+Service.DiscoveryCurrent(ctx, principal, ids) 接收可信请求人与 1 至 100 个 ID。按当前 discover 权限逐学校过滤，外部授权完成后重新读取发布状态，避免返回授权等待期间已下架的资料。拒绝返回空集合，依赖故障返回错误。
+
+旧 PendingEvents 和 AcknowledgeEvent 已移除。Envelope.Data 为 json.RawMessage，relay 按 Type 解码。来源表直接定义 sent_at 最终结构，不保留旧 delivered 字段或接口签名。
+
+postgres.Repository.DiscoverySnapshot(ctx, cursor, limit) 供受信重建任务调用，返回 Items 和 Next，单页 1 至 100 条。空 cursor 开始，空 Next 结束。不可变历史与 PostgreSQL 可见性快照固定首轮成员，分页按 ID 字节序递增。
+
+分页期间的修改、删除和延迟提交不会替换首轮版本。游标五分钟有效，历史修改或清理会使旧游标失效，必须中止重建。历史与墓碑不自动清理，保留策略须结合消费者重放期限单独确认。
+
+本次只新增公开 Go 来源接口，不新增或修改 OpenAPI 路径。运行身份需要读取 discovery_history、discovery_retention，追加 discovery_history，并读取、写入和确认 outbox。历史的修改与删除保留给迁移或维护身份。
+
+| 场景 | 验证条件 |
+| --- | --- |
+| RES-DISCOVERY-01 | 发布与下架、替代版本、墓碑、Schema 校验、回滚和固定快照 |
+| RES-DISCOVERY-02 | 授权期间下架后不返回旧发布状态 |
+| RES-OUTBOX-01 | 提交通知、回滚无通知、主题排除、积压与幂等确认 |

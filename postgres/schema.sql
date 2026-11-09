@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS resources.jobs (id text PRIMARY KEY, state text NOT N
 CREATE INDEX IF NOT EXISTS resources_jobs_claim ON resources.jobs(state,available_at,lease_until);
 CREATE TABLE IF NOT EXISTS resources.replays (key text PRIMARY KEY, data jsonb NOT NULL);
 CREATE TABLE IF NOT EXISTS resources.audit (id text PRIMARY KEY, data jsonb NOT NULL, reason text NOT NULL DEFAULT '', result text NOT NULL DEFAULT 'unknown' CHECK(result IN ('success','denied','failed','unknown')), recorded_xid xid8 NOT NULL DEFAULT pg_current_xact_id(), audit_actor text NOT NULL DEFAULT 'unknown', audit_target text NOT NULL DEFAULT 'unknown', audit_action text NOT NULL DEFAULT 'unknown', audit_school text NOT NULL DEFAULT '*', audit_group text NOT NULL DEFAULT '*', audit_time timestamptz NOT NULL DEFAULT now());
-CREATE TABLE IF NOT EXISTS resources.outbox (id text PRIMARY KEY, data jsonb NOT NULL, delivered boolean NOT NULL DEFAULT false);
-CREATE INDEX IF NOT EXISTS resources_outbox_pending ON resources.outbox(id) WHERE NOT delivered;
+CREATE TABLE IF NOT EXISTS resources.outbox(id text PRIMARY KEY, data jsonb NOT NULL, seq bigint GENERATED ALWAYS AS IDENTITY UNIQUE, sent_at timestamptz);
+CREATE INDEX IF NOT EXISTS resources_outbox_pending ON resources.outbox((data->>'source') COLLATE "C",(data->>'subject') COLLATE "C",seq) WHERE sent_at IS NULL;
 REVOKE ALL ON SCHEMA resources FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA resources FROM PUBLIC;
 
@@ -35,3 +35,13 @@ CREATE OR REPLACE FUNCTION resources.audit_invalidate() RETURNS trigger LANGUAGE
 REVOKE ALL ON FUNCTION resources.audit_invalidate() FROM PUBLIC;
 CREATE OR REPLACE TRIGGER audit_invalidate AFTER UPDATE OR DELETE OR TRUNCATE ON resources.audit FOR EACH STATEMENT EXECUTE FUNCTION resources.audit_invalidate();
 CREATE INDEX IF NOT EXISTS audit_query_order ON resources.audit(audit_time DESC,(id::text) COLLATE "C" DESC);
+
+-- Immutable source versions outlive business deletion, so rebuilds include tombstones.
+CREATE TABLE IF NOT EXISTS resources.discovery_history(id text NOT NULL, revision bigint NOT NULL CHECK(revision>0), data jsonb NOT NULL, recorded_xid xid8 NOT NULL DEFAULT pg_current_xact_id(), PRIMARY KEY(id,revision));
+CREATE INDEX IF NOT EXISTS resources_discovery_page ON resources.discovery_history(id COLLATE "C",revision DESC);
+CREATE TABLE IF NOT EXISTS resources.discovery_retention(singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton), revision bigint NOT NULL DEFAULT 0);
+INSERT INTO resources.discovery_retention(singleton) VALUES(true) ON CONFLICT DO NOTHING;
+CREATE OR REPLACE FUNCTION resources.invalidate_discovery() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN UPDATE resources.discovery_retention SET revision=revision+1 WHERE singleton; RETURN NULL; END $$;
+REVOKE ALL ON FUNCTION resources.invalidate_discovery() FROM PUBLIC;
+CREATE OR REPLACE TRIGGER invalidate_discovery AFTER UPDATE OR DELETE OR TRUNCATE ON resources.discovery_history FOR EACH STATEMENT EXECUTE FUNCTION resources.invalidate_discovery();
+REVOKE ALL ON TABLE resources.discovery_history,resources.discovery_retention FROM PUBLIC;

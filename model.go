@@ -394,10 +394,10 @@ type Job struct {
 type Repository interface {
 	Transaction(context.Context, func(Transaction) error) error
 	Claim(context.Context, string, time.Time, time.Duration) (Job, error)
-	PendingEvents(context.Context, int) ([]Event, error)
-	AcknowledgeEvent(context.Context, string) error
+	OutboxReader
 }
 type Transaction interface {
+	DiscoveryCurrent([]string) ([]DiscoveryDocument, error)
 	CloseOwner(Principal, string) error
 	OwnedReferences(Principal, []string) ([]string, error)
 	Lock(string) error
