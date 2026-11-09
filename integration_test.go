@@ -47,7 +47,7 @@ func (a *authority) Check(_ context.Context, p resources.Principal, action, scop
 	if a.deny[action] || a.deny[p.Key()+":"+action] {
 		return resources.ErrDenied
 	}
-	if action == "taxonomy.manage" {
+	if action == "taxonomy.manage" || action == "coverage.manage" {
 		if p == global {
 			return nil
 		}
@@ -162,28 +162,6 @@ func (m *moderation) Request(_ context.Context, key, id string, _ resources.Prin
 	return "request-" + key[:12], nil
 }
 
-type entitlements struct {
-	mu     sync.Mutex
-	rights map[string]resources.Entitlement
-	fail   bool
-	calls  int
-}
-
-func (e *entitlements) Lookup(_ context.Context, p resources.Principal, id string) (resources.Entitlement, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.calls++
-	if e.fail {
-		return resources.Entitlement{}, resources.ErrUnavailable
-	}
-	return e.rights[p.Key()+":"+id], nil
-}
-func (e *entitlements) set(p resources.Principal, id string, r resources.Entitlement) {
-	e.mu.Lock()
-	e.rights[p.Key()+":"+id] = r
-	e.mu.Unlock()
-}
-
 type fixture struct {
 	s          *resources.Service
 	repo       *rp.Repository
@@ -193,7 +171,6 @@ type fixture struct {
 	catalog    *catalog
 	files      *files
 	moderation *moderation
-	rights     *entitlements
 	cfg        resources.Config
 	ctx        context.Context
 }
@@ -225,7 +202,7 @@ func newFixture(t *testing.T) *fixture {
 	must(t, e)
 	_, e = admin.Exec(fmt.Sprintf(`CREATE ROLE %s LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
  GRANT USAGE ON SCHEMA resources TO %s; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA resources TO %s;
- REVOKE UPDATE,DELETE ON resources.audit,resources.replays,resources.category_revisions FROM %s;
+ REVOKE UPDATE,DELETE ON resources.audit,resources.replays,resources.category_revisions,resources.inbox FROM %s;
  REVOKE ALL ON SCHEMA public FROM PUBLIC; CREATE SCHEMA foreign_module; CREATE TABLE foreign_module.private (id text); REVOKE ALL ON SCHEMA foreign_module FROM PUBLIC;`, role, role, role, role))
 	must(t, e)
 	db, e := sql.Open("pgx", dsn+" dbname="+name+" user="+role)
@@ -244,13 +221,13 @@ func newFixture(t *testing.T) *fixture {
 		}
 		control.Close()
 	})
-	h := &fixture{repo: &rp.Repository{DB: db}, db: db, admin: admin, clock: &testClock{t: time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC)}, auth: &authority{deny: map[string]bool{}}, catalog: &catalog{}, files: &files{items: map[string]resources.FileEvidence{}, refs: map[string]string{}, released: map[string]bool{}}, moderation: &moderation{items: map[string]resources.ReviewSubmission{}}, rights: &entitlements{rights: map[string]resources.Entitlement{}}, ctx: context.Background()}
+	h := &fixture{repo: &rp.Repository{DB: db}, db: db, admin: admin, clock: &testClock{t: time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC)}, auth: &authority{deny: map[string]bool{}}, catalog: &catalog{}, files: &files{items: map[string]resources.FileEvidence{}, refs: map[string]string{}, released: map[string]bool{}}, moderation: &moderation{items: map[string]resources.ReviewSubmission{}}, ctx: context.Background()}
 	must(t, h.repo.CheckRuntime(h.ctx))
 	if e := (&rp.Repository{DB: admin}).CheckRuntime(h.ctx); !errors.Is(e, resources.ErrDenied) {
 		t.Fatal("migration identity accepted", e)
 	}
 	h.cfg = resources.Config{Clock: h.clock.Now, Terms: resources.Terms{Version: "fixture-v1", Digest: strings.Repeat("a", 64), URL: "https://example.invalid/terms"}, AllowedTypes: []string{"application/pdf"}, MaxFileSize: 100, MaxPackageBytes: 100, MaxPackageFiles: 2, MaxPackageParts: 3, MaxDirectoryDepth: 3, MaxRecords: 1000, MaxOperations: 10000, MaxJobs: 1000, OperationTimeout: time.Second, PackageTTL: time.Hour, Lease: time.Minute, MaxAttempts: 3}
-	h.s, e = resources.New(h.repo, resources.Dependencies{Authority: h.auth, Catalog: h.catalog, Files: h.files, Moderation: h.moderation, Entitlements: h.rights}, h.cfg)
+	h.s, e = resources.New(h.repo, resources.Dependencies{Authority: h.auth, Catalog: h.catalog, Files: h.files, Moderation: h.moderation}, h.cfg)
 	must(t, e)
 	min, max := int64(1900), int64(2100)
 	_, e = h.s.PutCategory(h.ctx, global, "exam", "seed", resources.CategoryWrite{Names: resources.Names{"zh-CN": "往年题"}, Enabled: true, Fields: []resources.Field{{Key: "year", Names: resources.Names{"zh-CN": "年份"}, Kind: "integer", Min: &min, Max: &max, Filterable: true, Groupable: true}}, GroupBy: "year"})
@@ -385,16 +362,14 @@ func TestIndependentRightsCampusRevocationAndUnlisting(t *testing.T) {
 	expires := h.clock.Now().Add(time.Minute)
 	grant, e := h.s.PutGrant(h.ctx, manager, r.ID, "manual", "grant", resources.GrantWrite{SubjectKey: reader.Key(), ExpiresAt: &expires})
 	must(t, e)
-	h.rights.fail = true
 	_, e = h.s.Download(h.ctx, reader, r.ID, &output)
 	must(t, e)
-	h.rights.fail = false
 	h.auth.set(reader.Key()+":download.restricted", true)
 	if _, e = h.s.Download(h.ctx, reader, r.ID, &output); !errors.Is(e, resources.ErrDenied) {
 		t.Fatal(e)
 	}
 	h.auth.set(reader.Key()+":download.restricted", false)
-	h.rights.set(reader, r.ID, resources.Entitlement{Purchased: true})
+	h.purchase(t, r.ID, "order", 1, false)
 	h.clock.Add(2 * time.Minute)
 	_, e = h.s.Download(h.ctx, reader, r.ID, &output)
 	must(t, e)
@@ -404,11 +379,11 @@ func TestIndependentRightsCampusRevocationAndUnlisting(t *testing.T) {
 	must(t, e)
 	_, e = h.s.Download(h.ctx, reader, r.ID, &output)
 	must(t, e)
-	h.rights.set(reader, r.ID, resources.Entitlement{Member: true})
+	h.purchase(t, r.ID, "order", 2, true)
 	if _, e = h.s.Download(h.ctx, reader, r.ID, &output); !errors.Is(e, resources.ErrDenied) {
 		t.Fatal(e)
 	}
-	h.rights.set(reader, r.ID, resources.Entitlement{Purchased: true})
+
 	_, e = h.s.SetState(h.ctx, manager, r.ID, "block", resources.StateChange{Revision: r.Revision, State: "blocked", Reason: "安全问题"})
 	must(t, e)
 	if _, e = h.s.Download(h.ctx, reader, r.ID, &output); !errors.Is(e, resources.ErrDenied) {

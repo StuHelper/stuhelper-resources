@@ -48,7 +48,7 @@ func TestDiscoveryPublicationProposalUnlistingDeletionAndPermissions(t *testing.
 	if _, e = h.s.DiscoveryCurrent(h.ctx, r.Principal{}, []string{item.ID}); !errors.Is(e, r.ErrUnauthenticated) {
 		t.Fatal(e)
 	}
-	deps := r.Dependencies{Authority: discoveryAuthority{func(context.Context, r.Principal, string, string) error { return r.ErrUnavailable }}, Catalog: h.catalog, Files: h.files, Moderation: h.moderation, Entitlements: h.rights}
+	deps := r.Dependencies{Authority: discoveryAuthority{func(context.Context, r.Principal, string, string) error { return r.ErrUnavailable }}, Catalog: h.catalog, Files: h.files, Moderation: h.moderation}
 	unavailable, e := r.New(h.repo, deps, h.cfg)
 	must(t, e)
 	if _, e = unavailable.DiscoveryCurrent(h.ctx, reader, []string{item.ID}); !errors.Is(e, r.ErrUnavailable) {
@@ -153,7 +153,7 @@ func TestDiscoveryRejectsOtherSchoolAndDoesNotElevateOwners(t *testing.T) {
 func TestDiscoveryRechecksPublicationAfterExternalAuthorization(t *testing.T) {
 	h := newFixture(t)
 	item := h.publish(t, h.draft(t, "current-race", "public"))
-	deps := r.Dependencies{Catalog: h.catalog, Files: h.files, Moderation: h.moderation, Entitlements: h.rights}
+	deps := r.Dependencies{Catalog: h.catalog, Files: h.files, Moderation: h.moderation}
 	deps.Authority = discoveryAuthority{func(ctx context.Context, p r.Principal, action, school string) error {
 		_, e := h.s.SetState(ctx, manager, item.ID, "unlist-during-auth", r.StateChange{Revision: item.Revision, State: "unlisted", Reason: "reviewed"})
 		return e

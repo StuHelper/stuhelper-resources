@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "StuHelper Resources API",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "Configurable resource taxonomy, reviewed publications, access grants and authorized packages. No provider identities or credentials."
   },
   "paths": {
@@ -3432,6 +3432,221 @@
         },
         "description": "Authenticated inline file bytes, with the exact same current content, eligibility, entitlement and resource-state checks as download. No partial preview or conversion bypass. Errors return no file bytes."
       }
+    },
+    "/api/v1/resources/coverage/{id}": {
+      "get": {
+        "operationId": "GetCoverage",
+        "summary": "Read actual coverage for a billing plan ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Coverage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revision, policy or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Configured resource limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "PutCoverage",
+        "summary": "Replace plan coverage with revision control; coverage.manage permission required",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Coverage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revision, policy or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Configured resource limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Coverage"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4079,6 +4294,21 @@
           "rule_version": {
             "type": "string",
             "maxLength": 128
+          },
+          "available_methods": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "download",
+                "purchase"
+              ]
+            },
+            "maxItems": 2
+          },
+          "unlock_reason": {
+            "type": "string",
+            "maxLength": 128
           }
         },
         "required": [
@@ -4613,7 +4843,7 @@
           },
           "purchase_available": {
             "type": "boolean",
-            "description": "Always false in this release. Entitlement lookup does not enable a purchase or an access-application workflow."
+            "description": "Resources supports purchase delivery. Backend must also check billing availability and merge prices."
           },
           "upload_profiles": {
             "type": "array",
@@ -4720,6 +4950,58 @@
           }
         },
         "additionalProperties": false
+      },
+      "Coverage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "plan_id",
+          "revision",
+          "rules"
+        ],
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "rules": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/CoverageRule"
+            }
+          }
+        }
+      },
+      "CoverageRule": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "school_id"
+        ],
+        "properties": {
+          "school_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "directory_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "category_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
       }
     },
     "securitySchemes": {

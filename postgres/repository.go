@@ -244,7 +244,7 @@ func (r *Repository) CheckRuntime(ctx context.Context) error {
 	if e != nil || elevated || ownSchema || foreignAccess {
 		return resources.ErrDenied
 	}
-	for _, table := range []string{"audit", "replays", "category_revisions"} {
+	for _, table := range []string{"audit", "replays", "category_revisions", "inbox"} {
 		var read, insert, change bool
 		e = r.DB.QueryRowContext(ctx, `SELECT has_table_privilege($1,'SELECT'),has_table_privilege($1,'INSERT'),has_table_privilege($1,'UPDATE,DELETE')`, "resources."+table).Scan(&read, &insert, &change)
 		if e != nil || !read || !insert || change {

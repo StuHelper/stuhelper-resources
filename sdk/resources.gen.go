@@ -233,6 +233,24 @@ func (e RequestReceiptState) Valid() bool {
 	}
 }
 
+// Defines values for ResourceAvailableMethods.
+const (
+	Download ResourceAvailableMethods = "download"
+	Purchase ResourceAvailableMethods = "purchase"
+)
+
+// Valid indicates whether the value is a known member of the ResourceAvailableMethods enum.
+func (e ResourceAvailableMethods) Valid() bool {
+	switch e {
+	case Download:
+		return true
+	case Purchase:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ResourceMissingConditions.
 const (
 	ResourceMissingConditionsCampusEligibility   ResourceMissingConditions = "campus_eligibility"
@@ -408,7 +426,7 @@ type Capabilities struct {
 	MaxPackageBytes int64    `json:"max_package_bytes"`
 	MaxPackageFiles int64    `json:"max_package_files"`
 
-	// PurchaseAvailable Always false in this release. Entitlement lookup does not enable a purchase or an access-application workflow.
+	// PurchaseAvailable Resources supports purchase delivery. Backend must also check billing availability and merge prices.
 	PurchaseAvailable bool            `json:"purchase_available"`
 	Terms             Terms           `json:"terms"`
 	UploadProfiles    []UploadProfile `json:"upload_profiles"`
@@ -451,6 +469,20 @@ type Consent struct {
 	Accepted bool   `json:"accepted"`
 	Digest   string `json:"digest"`
 	Version  string `json:"version"`
+}
+
+// Coverage defines model for Coverage.
+type Coverage struct {
+	PlanId   string         `json:"plan_id"`
+	Revision int64          `json:"revision"`
+	Rules    []CoverageRule `json:"rules"`
+}
+
+// CoverageRule defines model for CoverageRule.
+type CoverageRule struct {
+	CategoryId  *string `json:"category_id,omitempty"`
+	DirectoryId *string `json:"directory_id,omitempty"`
+	SchoolId    string  `json:"school_id"`
 }
 
 // Decision defines model for Decision.
@@ -683,6 +715,7 @@ type RequestReceiptState string
 type Resource struct {
 	// AccessReason allowed, requirements_missing, purchase_unavailable, resource_unavailable, permission_denied or service_unavailable. Owned metadata remains readable if file eligibility is unavailable. Use missing_conditions and unavailable_conditions rather than assuming that every failure requires a purchase.
 	AccessReason          string                           `json:"access_reason"`
+	AvailableMethods      *[]ResourceAvailableMethods      `json:"available_methods,omitempty"`
 	Current               *Version                         `json:"current,omitempty"`
 	DownloadAllowed       bool                             `json:"download_allowed"`
 	Id                    string                           `json:"id"`
@@ -693,7 +726,11 @@ type Resource struct {
 	RuleVersion           *string                          `json:"rule_version,omitempty"`
 	State                 ResourceState                    `json:"state"`
 	UnavailableConditions *[]ResourceUnavailableConditions `json:"unavailable_conditions,omitempty"`
+	UnlockReason          *string                          `json:"unlock_reason,omitempty"`
 }
+
+// ResourceAvailableMethods defines model for Resource.AvailableMethods.
+type ResourceAvailableMethods string
 
 // ResourceMissingConditions defines model for Resource.MissingConditions.
 type ResourceMissingConditions string
@@ -784,6 +821,11 @@ type ListCategoriesParams struct {
 
 // PutCategoryParams defines parameters for PutCategory.
 type PutCategoryParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// PutCoverageParams defines parameters for PutCoverage.
+type PutCoverageParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -895,6 +937,9 @@ type CreateDraftJSONRequestBody = DraftWrite
 
 // PutCategoryJSONRequestBody defines body for PutCategory for application/json ContentType.
 type PutCategoryJSONRequestBody = CategoryWrite
+
+// PutCoverageJSONRequestBody defines body for PutCoverage for application/json ContentType.
+type PutCoverageJSONRequestBody = Coverage
 
 // PutDirectoryJSONRequestBody defines body for PutDirectory for application/json ContentType.
 type PutDirectoryJSONRequestBody = DirectoryWrite
@@ -1049,6 +1094,25 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /api/v1/resources/categories/{id} (the `PutCategory` operationId).
 	PutCategory(ctx context.Context, id string, params *PutCategoryParams, body PutCategoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCoverage Read actual coverage for a billing plan ID
+	//
+	// Corresponds with GET /api/v1/resources/coverage/{id} (the `GetCoverage` operationId).
+	GetCoverage(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutCoverageWithBody Replace plan coverage with revision control; coverage.manage permission required
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+	PutCoverageWithBody(ctx context.Context, id string, params *PutCoverageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutCoverage Replace plan coverage with revision control; coverage.manage permission required
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+	PutCoverage(ctx context.Context, id string, params *PutCoverageParams, body PutCoverageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListDirectories ListDirectories
 	//
@@ -1390,6 +1454,55 @@ func (c *Client) PutCategoryWithBody(ctx context.Context, id string, params *Put
 // Corresponds with PUT /api/v1/resources/categories/{id} (the `PutCategory` operationId).
 func (c *Client) PutCategory(ctx context.Context, id string, params *PutCategoryParams, body PutCategoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutCategoryRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetCoverage Read actual coverage for a billing plan ID
+//
+// Corresponds with GET /api/v1/resources/coverage/{id} (the `GetCoverage` operationId).
+func (c *Client) GetCoverage(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCoverageRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutCoverageWithBody Replace plan coverage with revision control; coverage.manage permission required
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+func (c *Client) PutCoverageWithBody(ctx context.Context, id string, params *PutCoverageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutCoverageRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutCoverage Replace plan coverage with revision control; coverage.manage permission required
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+func (c *Client) PutCoverage(ctx context.Context, id string, params *PutCoverageParams, body PutCoverageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutCoverageRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2316,6 +2429,100 @@ func NewPutCategoryRequestWithBody(server string, id string, params *PutCategory
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/resources/categories/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetCoverageRequest constructs an http.Request for the GetCoverage method
+func NewGetCoverageRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/coverage/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutCoverageRequest calls the generic PutCoverage builder with application/json body
+func NewPutCoverageRequest(server string, id string, params *PutCoverageParams, body PutCoverageJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutCoverageRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPutCoverageRequestWithBody constructs an http.Request for the PutCoverage method, with any body, and a specified content type
+func NewPutCoverageRequestWithBody(server string, id string, params *PutCoverageParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/coverage/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3879,6 +4086,27 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /api/v1/resources/categories/{id} (the `PutCategory` operationId).
 	PutCategoryWithResponse(ctx context.Context, id string, params *PutCategoryParams, body PutCategoryJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCategoryResponse, error)
 
+	// GetCoverageWithResponse Read actual coverage for a billing plan ID
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/coverage/{id} (the `GetCoverage` operationId).
+	GetCoverageWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetCoverageResponse, error)
+
+	// PutCoverageWithBodyWithResponse Replace plan coverage with revision control; coverage.manage permission required
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+	PutCoverageWithBodyWithResponse(ctx context.Context, id string, params *PutCoverageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutCoverageResponse, error)
+
+	// PutCoverageWithResponse Replace plan coverage with revision control; coverage.manage permission required
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+	PutCoverageWithResponse(ctx context.Context, id string, params *PutCoverageParams, body PutCoverageJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCoverageResponse, error)
+
 	// ListDirectoriesWithResponse ListDirectories
 	//
 	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
@@ -4584,6 +4812,186 @@ func (r PutCategoryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PutCategoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetCoverageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Coverage
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetCoverageResponse) GetJSON200() *Coverage {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetCoverageResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetCoverageResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetCoverageResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetCoverageResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r GetCoverageResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r GetCoverageResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetCoverageResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetCoverageResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCoverageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCoverageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetCoverageResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PutCoverageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Coverage
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PutCoverageResponse) GetJSON200() *Coverage {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PutCoverageResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PutCoverageResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PutCoverageResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PutCoverageResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r PutCoverageResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r PutCoverageResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PutCoverageResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PutCoverageResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PutCoverageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutCoverageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PutCoverageResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -6911,6 +7319,45 @@ func (c *ClientWithResponses) PutCategoryWithResponse(ctx context.Context, id st
 	return ParsePutCategoryResponse(rsp)
 }
 
+// GetCoverageWithResponse Read actual coverage for a billing plan ID
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/coverage/{id} (the `GetCoverage` operationId).
+func (c *ClientWithResponses) GetCoverageWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetCoverageResponse, error) {
+	rsp, err := c.GetCoverage(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCoverageResponse(rsp)
+}
+
+// PutCoverageWithBodyWithResponse Replace plan coverage with revision control; coverage.manage permission required
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+func (c *ClientWithResponses) PutCoverageWithBodyWithResponse(ctx context.Context, id string, params *PutCoverageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutCoverageResponse, error) {
+	rsp, err := c.PutCoverageWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutCoverageResponse(rsp)
+}
+
+// PutCoverageWithResponse Replace plan coverage with revision control; coverage.manage permission required
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+func (c *ClientWithResponses) PutCoverageWithResponse(ctx context.Context, id string, params *PutCoverageParams, body PutCoverageJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCoverageResponse, error) {
+	rsp, err := c.PutCoverage(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutCoverageResponse(rsp)
+}
+
 // ListDirectoriesWithResponse ListDirectories
 //
 // Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
@@ -7703,6 +8150,156 @@ func ParsePutCategoryResponse(rsp *http.Response) (*PutCategoryResponse, error) 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Category
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCoverageResponse parses an HTTP response from a GetCoverageWithResponse call
+func ParseGetCoverageResponse(rsp *http.Response) (*GetCoverageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCoverageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Coverage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutCoverageResponse parses an HTTP response from a PutCoverageWithResponse call
+func ParsePutCoverageResponse(rsp *http.Response) (*PutCoverageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutCoverageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Coverage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

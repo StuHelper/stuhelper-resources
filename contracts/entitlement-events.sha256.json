@@ -1,0 +1,7 @@
+{
+  "resources.entitlement.granted.v1.schema.json": "0caccf02c62a7e27479f0fcd2fc26c53c4c0474f020b7011d224bdbfcdc82167",
+  "resources.entitlement.rejected.v1.schema.json": "6f8f7506a40494aeee9365d9fd54e9a48a7c70add8e6f6c7b7e3cd8c69410151",
+  "billing.resource-unlock.refunded.v1.schema.json": "908e13bebe02dc5efa1c73d7827bc0688a5b1afc82965b7a16481faabc50baab",
+  "billing.resource-unlock.paid.v1.schema.json": "7f148fc5bdbe60e83e086a3cf0ce7979288ad3066358a96a691f9e4c82315ec9",
+  "billing.membership.changed.v1.schema.json": "1d42bf48fafc6e825a5c497b4ca241bd10bbc1b68668be37bec5ad53155157e7"
+}

@@ -57,18 +57,15 @@ func (s *Service) access(ctx context.Context, p Principal, r Record, v VersionRe
 			return err
 		}
 	}
-	if s.deps.Entitlements != nil {
-		work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
-		defer cancel()
-		rights, e := s.deps.Entitlements.Lookup(work, p, r.ID)
-		if e != nil {
-			return ErrUnavailable
-		}
-		if rights.Purchased || r.State == "published" && rights.Member {
-			return nil
-		}
+	rights, err := s.localRights(ctx, p, r, v)
+	if err != nil {
+		return err
 	}
-	return &AccessFailure{Reason: "purchase_unavailable", Missing: []string{"resource_entitlement"}}
+	if rights.Purchased || r.State == "published" && rights.Member {
+		return nil
+	}
+
+	return &AccessFailure{Reason: "requirements_missing", Missing: []string{"resource_entitlement"}}
 }
 func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, error) {
 	var out Resource
@@ -135,6 +132,20 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 		}
 	} else {
 		return Resource{}, e
+	}
+	if out.DownloadAllowed {
+		out.AvailableMethods = []string{"download"}
+		out.UnlockReason = "already_accessible"
+	} else {
+		decision, err := s.unlockEligibilityFor(ctx, p, r, v, e)
+		if err == nil {
+			out.UnlockReason = decision.Reason
+			if decision.Eligible {
+				out.AvailableMethods = []string{"purchase"}
+			}
+		} else {
+			out.UnlockReason = "service_unavailable"
+		}
 	}
 	// Unlisted content is visible only to its owner, administrators or current purchasers.
 	if r.State == "unlisted" && !privileged && !out.DownloadAllowed {

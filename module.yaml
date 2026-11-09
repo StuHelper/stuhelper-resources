@@ -1,5 +1,5 @@
 id: resources
-version: 0.4.0
+version: 0.5.0
 kind: module
 api: 1
 critical: false
@@ -20,6 +20,10 @@ optional:
   - id: identity
     api: 1
 capabilities:
+  - resources.unlock-eligibility
+  - resources.entitlements.consume
+  - resources.coverage.read
+  - resources.coverage.manage
   - resources.account-query
   - resources.read
   - resources.write
@@ -92,3 +96,14 @@ scenario_tests:
     - integration_test.go#TestListReusesRequestAuthorizationButRechecksNextRequest
   RES-17:
     - integration_test.go#TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting
+  RS-05:
+    - entitlements_test.go#TestFourAccessSourceCombinations
+    - entitlements_test.go#TestEntitlementSourcesCoverageExpiryRefundAndEligibility
+  RS-06:
+    - http_test.go#TestCoverageHTTPAndAccessMethods
+    - entitlements_test.go#TestEntitlementSourcesCoverageExpiryRefundAndEligibility
+  RS-15:
+    - entitlements_test.go#TestEntitlementSourcesCoverageExpiryRefundAndEligibility
+  RS-28:
+    - entitlements_test.go#TestConcurrentBillingDeliveryAndEventSchemas
+    - entitlements_test.go#TestEntitlementRejectedAtomicInboxAndValidation

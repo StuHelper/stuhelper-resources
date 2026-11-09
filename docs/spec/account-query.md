@@ -27,9 +27,9 @@ Fields 使用 business、identity、document、material、refund_payee 类别。
 
 Query 的 String 和 GoString 隐去所有查询参数。错误不包含查询值或数据库原始错误。宿主不能将 Query 序列化后写入日志。敏感审计只保存内部记录 ID、字段类别、用途与授权依据。
 
-返回上传资料的内部 ID、状态，以及单独授权记录的资料 ID、撤销和到期状态。学校来自资料记录。当前资料没有群归属，Group 保持 *，群授权不能获得这些学校范围的记录。
+返回上传资料的内部 ID、状态，以及单独授权和购买来源的资料 ID、撤销和到期状态。学校来自资料记录。当前资料没有群归属，Group 保持 *，群授权不能获得这些学校范围的记录。
 
-资料购买尚未实现，本端口中的 unlock 指现有单独授权记录，不生成购买记录。查询不会调用文件下载，也不返回文件凭据。
+unlock 返回真实购买来源，包含 order_id、resource_id 与 revoked。单独授权使用 grant，包含到期和撤销状态。退款只更新对应订单来源。查询不调用文件下载，不返回文件凭据。
 
 装配使用 accountquery.Service{Repo: repository, Auth: authorizer, Audit: auditor}。postgres.Repository 实现 ReadAccount；这是可信内部存储端口，外部入口必须调用 Service.Query。
 

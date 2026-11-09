@@ -75,7 +75,7 @@ updated: 2026-11-09
 | --- | --- |
 | RES-13 | 资格失效后本人上传关联名称仍可读，其他账号被拒绝；投诉标题仅按提交时准入保存，重试和后续资格变化不补发 |
 
-预览端点只交付已获下载权限的原文件，内联响应设置沙箱策略。预览、下载和媒体引用都重新检查当前准入、资格、权益与资料状态。购买能力关闭，没有访问权申请入口。
+预览端点只交付已获下载权限的原文件，内联响应设置沙箱策略。预览、下载和媒体引用都重新检查当前准入、资格、权益与资料状态。资料详情返回 available_methods 和 unlock_reason，获准购买时提供 purchase 方式。没有访问权申请入口。
 
 | 场景 | 预期结果 |
 | --- | --- |
@@ -138,3 +138,48 @@ postgres.Repository.DiscoverySnapshot(ctx, cursor, limit) 供受信重建任务�
 | RES-DISCOVERY-01 | 发布与下架、替代版本、墓碑、Schema 校验、回滚和固定快照 |
 | RES-DISCOVERY-02 | 授权期间下架后不返回旧发布状态 |
 | RES-OUTBOX-01 | 提交通知、回滚无通知、主题排除、积压与幂等确认 |
+
+## 购买来源与会员覆盖
+
+访问权来源包括管理员范围、单独授权、购买来源和会员投影。管理员在管理范围内例外，普通用户仍须通过当前准入和下载动作资格。购买与会员不会绕过资格；资格恢复后原权益继续参与判断。
+
+GET /api/v1/resources/coverage/{id} 读取 billing 套餐 ID 对应的实际资料范围。PUT 同路径使用 Idempotency-Key、revision 和 coverage.manage 全站权限替换配置。空 rules 表示无覆盖，未配置返回 not_found。
+
+每套覆盖最多 100 条规则。规则之间取并集，每条规则内 school_id 必填，directory_id 与 category_id 可选且同时匹配。目录精确匹配，不包含子目录；目录必须属于指定学校。配置更新后下一次访问立即生效。
+
+会员投影按 owner、plan_id 保存，访问时检查 valid_from <= 当前时间 < valid_until。到期无需清理任务。单独授权、会员与各 order_id 的购买来源分别撤销。普通下架仅保留已购交付，停用拒绝全部交付。
+
+Service.UnlockEligibility(ctx, principal, resourceID) 返回 (UnlockDecision, error)。
+
+Reason 包括 eligible、already_accessible、unauthenticated、not_found、resource_unavailable、requirements_missing 与 not_purchasable。依赖故障返回错误，不能扣费。
+
+资料详情在有访问权时返回 download，在满足购买条件时返回 purchase。purchase_available 表示资源模块已支持购买协作；backend 仍须确认 billing 可用并合并价格。本模块不保存商业条款或支付资料。
+
+Service.Consume(ctx, Envelope) 是可信 relay 入口。只接受 billing 的三类事件，严格拒绝未知字段。backend 验证生产方并转换本地 DTO，不导入 billing 私有实现。消费方 Schema 与生产方 Schema 须在装配时核对。旧 Dependencies.Entitlements 查询已移除。
+
+| 事件 | data 字段 |
+| --- | --- |
+| billing.resource-unlock.paid.v1 | order_id、owner、resource_id、revision |
+| billing.resource-unlock.refunded.v1 | order_id、owner、resource_id、revision |
+| billing.membership.changed.v1 | owner、plan_id、valid_from、valid_until、revision |
+| resources.entitlement.granted.v1 | order_id、owner、resource_id、revision |
+| resources.entitlement.rejected.v1 | order_id、owner、resource_id、revision、reason |
+
+封套使用 specversion、id、source、type、subject、time、datacontenttype、data。owner 包含 issuer 与 subject，时间使用 RFC 3339。revision 为正整数。
+
+消费按来源对象忽略旧修订，inbox 按 billing 事件 ID 去重，退款先到时保存撤销记录以阻止旧 paid 恢复权益。
+
+paid 在事务内检查当前资料与版本可交付性。资料不存在、下架或停用时返回 rejected，reason 为 resource_unavailable。正常情况保存购买来源并发 granted。权益、inbox、outbox 和提交通知同事务，失败后可重投原事件。
+
+每个事件 Schema 保存于 contracts 对应事件名文件，SHA-256 记录在 entitlement-events.sha256.json。
+
+billing 文件是本仓消费方约束，已按 P7a 当前 Schema 核对 owner 对象与 application/json 内容类型。发送沿用 PendingOutbox、ConfirmOutbox 与 resources_outbox 通道。
+
+运行身份需要 coverage、purchases、memberships 的 SELECT/INSERT/UPDATE，以及 inbox 的 SELECT/INSERT。权益消费不读取其他模块的表。购买来源不自动清理，保留供退款、重投与账号查询使用。
+
+| 场景 | 验证条件 |
+| --- | --- |
+| RS-05 | 多来源不重复购买，资格撤销暂停访问，退款仅撤销对应购买来源 |
+| RS-06 | 会员仅按当前配置范围生效，覆盖修改立即生效 |
+| RS-15 | 会员到期即时失效，旧修订不恢复已退款权益 |
+| RS-28 | 下架与停用拒绝 paid，outbox 失败回滚权益与 inbox，重试恢复 |

@@ -500,6 +500,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/resources/coverage/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read actual coverage for a billing plan ID */
+        get: operations["GetCoverage"];
+        /** Replace plan coverage with revision control; coverage.manage permission required */
+        put: operations["PutCoverage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -653,6 +671,8 @@ export interface components {
             missing_conditions?: ("content_access" | "campus_eligibility" | "phone_bound" | "identity_verified" | "course_enrollment" | "resource_entitlement")[];
             unavailable_conditions?: ("content_access" | "campus_eligibility" | "phone_bound" | "identity_verified" | "course_enrollment" | "resource_entitlement")[];
             rule_version?: string;
+            available_methods?: ("download" | "purchase")[];
+            unlock_reason?: string;
         };
         ResourcePage: {
             items: components["schemas"]["Resource"][];
@@ -781,7 +801,7 @@ export interface components {
             max_package_bytes: number;
             /** Format: int64 */
             max_package_files: number;
-            /** @description Always false in this release. Entitlement lookup does not enable a purchase or an access-application workflow. */
+            /** @description Resources supports purchase delivery. Backend must also check billing availability and merge prices. */
             purchase_available: boolean;
             upload_profiles: components["schemas"]["UploadProfile"][];
         };
@@ -804,6 +824,17 @@ export interface components {
         References: {
             items: components["schemas"]["Reference"][];
             missing_ids: string[];
+        };
+        Coverage: {
+            plan_id: string;
+            /** Format: int64 */
+            revision: number;
+            rules: components["schemas"]["CoverageRule"][];
+        };
+        CoverageRule: {
+            school_id: string;
+            directory_id?: string;
+            category_id?: string;
         };
     };
     responses: never;
@@ -3399,6 +3430,182 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": string;
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Revision, policy or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Configured resource limit exceeded */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    GetCoverage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Coverage"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Revision, policy or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Configured resource limit exceeded */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    PutCoverage: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Coverage"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Coverage"];
                 };
             };
             /** @description Invalid request */

@@ -19,11 +19,12 @@ type OutboxReader interface {
 // Envelope carries either a discovery document or the minimal business revision.
 // Consumers select a payload type using Type; no private persistence model is sent.
 type Envelope struct {
-	SpecVersion string          `json:"specversion"`
-	ID          string          `json:"id"`
-	Source      string          `json:"source"`
-	Type        string          `json:"type"`
-	Subject     string          `json:"subject"`
-	Time        time.Time       `json:"time"`
-	Data        json.RawMessage `json:"data"`
+	DataContentType string          `json:"datacontenttype,omitempty"`
+	SpecVersion     string          `json:"specversion"`
+	ID              string          `json:"id"`
+	Source          string          `json:"source"`
+	Type            string          `json:"type"`
+	Subject         string          `json:"subject"`
+	Time            time.Time       `json:"time"`
+	Data            json.RawMessage `json:"data"`
 }

@@ -1,5 +1,5 @@
 // Package resources owns learning-resource publications and configurable taxonomy.
-// Files, academic references, moderation and entitlements are supplied through ports.
+// Files, academic references and moderation are supplied through ports.
 package resources
 
 import (
@@ -161,6 +161,8 @@ type VersionRecord struct {
 	DecisionRevision int64
 }
 type Resource struct {
+	AvailableMethods      []string `json:"available_methods,omitempty"`
+	UnlockReason          string   `json:"unlock_reason,omitempty"`
 	MissingConditions     []string `json:"missing_conditions,omitempty"`
 	UnavailableConditions []string `json:"unavailable_conditions,omitempty"`
 	RuleVersion           string   `json:"rule_version,omitempty"`
@@ -354,15 +356,11 @@ type Entitlement struct {
 	Purchased bool
 	Member    bool
 }
-type Entitlements interface {
-	Lookup(context.Context, Principal, string) (Entitlement, error)
-}
 type Dependencies struct {
-	Authority    Authority
-	Catalog      Catalog
-	Files        Files
-	Moderation   Moderation
-	Entitlements Entitlements
+	Authority  Authority
+	Catalog    Catalog
+	Files      Files
+	Moderation Moderation
 }
 type Config struct {
 	UploadProfiles                                                                          []UploadProfile
@@ -397,6 +395,16 @@ type Repository interface {
 	OutboxReader
 }
 type Transaction interface {
+	Coverage(string) (Coverage, error)
+	SaveCoverage(Coverage) error
+	Purchase(string) (PurchaseSource, error)
+	SavePurchase(PurchaseSource) error
+	Membership(string, string) (Membership, error)
+	SaveMembership(Membership) error
+	Inbox(string) (bool, error)
+	SaveInbox(string) error
+	Envelope(Envelope) error
+	Rights(string, string, string, string, string, time.Time) (Entitlement, error)
 	DiscoveryCurrent([]string) ([]DiscoveryDocument, error)
 	CloseOwner(Principal, string) error
 	OwnedReferences(Principal, []string) ([]string, error)

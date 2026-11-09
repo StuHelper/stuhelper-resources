@@ -45,3 +45,10 @@ CREATE OR REPLACE FUNCTION resources.invalidate_discovery() RETURNS trigger LANG
 REVOKE ALL ON FUNCTION resources.invalidate_discovery() FROM PUBLIC;
 CREATE OR REPLACE TRIGGER invalidate_discovery AFTER UPDATE OR DELETE OR TRUNCATE ON resources.discovery_history FOR EACH STATEMENT EXECUTE FUNCTION resources.invalidate_discovery();
 REVOKE ALL ON TABLE resources.discovery_history,resources.discovery_retention FROM PUBLIC;
+
+CREATE TABLE IF NOT EXISTS resources.coverage(id text PRIMARY KEY,data jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS resources.purchases(id text PRIMARY KEY,owner_key text NOT NULL,resource_id text NOT NULL,data jsonb NOT NULL,query_changed_at timestamptz NOT NULL DEFAULT clock_timestamp());
+CREATE INDEX IF NOT EXISTS resources_purchase_owner ON resources.purchases(owner_key,resource_id);
+CREATE TABLE IF NOT EXISTS resources.memberships(owner_key text NOT NULL,plan_id text NOT NULL,data jsonb NOT NULL,PRIMARY KEY(owner_key,plan_id));
+CREATE TABLE IF NOT EXISTS resources.inbox(id text PRIMARY KEY,received_at timestamptz NOT NULL DEFAULT now());
+REVOKE ALL ON TABLE resources.coverage,resources.purchases,resources.memberships,resources.inbox FROM PUBLIC;

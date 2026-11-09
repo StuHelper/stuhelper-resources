@@ -43,6 +43,12 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 	}
 	h := &handler{s: s, auth: auth, contract: router}
 	m := http.NewServeMux()
+	h.mount(m, "GET /api/v1/resources/coverage/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		return s.GetCoverage(r.Context(), p, r.PathValue("id"))
+	})
+	write[resources.Coverage](h, m, "PUT /api/v1/resources/coverage/{id}", func(r *http.Request, p resources.Principal, in resources.Coverage) (any, error) {
+		return s.PutCoverage(r.Context(), p, r.PathValue("id"), key(r), in)
+	})
 	h.mount(m, "GET /api/v1/resources/me/references", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.MyReferences(r.Context(), p, strings.Split(r.URL.Query().Get("ids"), ","))
 	})

@@ -27,7 +27,7 @@ func TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions(t *testin
 	item := h.publish(t, h.draft(t, "files", "restricted"))
 	policy := &detailedAuthority{base: h.auth}
 	var e error
-	h.s, e = r.New(h.repo, r.Dependencies{Authority: policy, Catalog: h.catalog, Files: h.files, Moderation: h.moderation, Entitlements: h.rights}, h.cfg)
+	h.s, e = r.New(h.repo, r.Dependencies{Authority: policy, Catalog: h.catalog, Files: h.files, Moderation: h.moderation}, h.cfg)
 	must(t, e)
 	handler, e := httpapi.New(h.s, authenticator{})
 	must(t, e)
@@ -63,8 +63,8 @@ func TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions(t *testin
 	call("preview", "", 401)
 	call("download", "", 401)
 	check(403, []string{"resource_entitlement"}, nil)
-	if h.s.Capabilities().PurchaseAvailable {
-		t.Fatal("entitlement reader enabled deferred purchase")
+	if !h.s.Capabilities().PurchaseAvailable {
+		t.Fatal("purchase support missing")
 	}
 	policy.failure = &r.AccessFailure{Reason: "requirements_missing", Missing: []string{"identity_verified", "phone_bound"}, RuleVersion: "custom-2"}
 	check(403, []string{"identity_verified", "phone_bound"}, nil)
@@ -79,9 +79,7 @@ func TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions(t *testin
 	policy.failure = &r.AccessFailure{Reason: "requirements_missing", Missing: []string{"forged_condition"}}
 	check(503, nil, nil)
 	policy.failure = nil
-	h.rights.fail = true
-	check(503, nil, nil)
-	h.rights.fail = false
+
 	grant, e := h.s.PutGrant(h.ctx, manager, item.ID, "reader-grant", "grant", r.GrantWrite{SubjectKey: reader.Key()})
 	must(t, e)
 	download := call("download", "Bearer reader", 200)

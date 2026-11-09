@@ -55,10 +55,13 @@ const accountQuerySQL = `WITH records AS (SELECT 'resources:upload:'||r.id AS id
  jsonb_build_object('kind','upload','resource_id',r.id,'state',r.state) AS fields,''::text AS sensitive
  FROM resources.records r WHERE r.owner_key=$1
  UNION ALL
- SELECT 'resources:unlock:'||g.id,r.school_id,'*',g.query_changed_at,
+ SELECT 'resources:grant:'||g.id,r.school_id,'*',g.query_changed_at,
  COALESCE(g.data->'Grant'->>'revoked','false')<>'true' AND (g.data->'Grant'->>'expires_at' IS NULL OR (g.data->'Grant'->>'expires_at')::timestamptz>now()),
- jsonb_build_object('kind','unlock','resource_id',r.id,'revoked',g.data->'Grant'->>'revoked','expires_at',g.data->'Grant'->>'expires_at'),''
- FROM resources.grants g JOIN resources.records r ON r.id=g.resource_id WHERE g.subject_key=$1) SELECT id,school,grp,changed,current,fields,sensitive FROM records
+ jsonb_build_object('kind','grant','resource_id',r.id,'revoked',g.data->'Grant'->>'revoked','expires_at',g.data->'Grant'->>'expires_at'),''
+ FROM resources.grants g JOIN resources.records r ON r.id=g.resource_id WHERE g.subject_key=$1
+ UNION ALL SELECT 'resources:unlock:'||p.id,r.school_id,'*',p.query_changed_at,p.data->>'revoked'='false',
+ jsonb_build_object('kind','unlock','resource_id',r.id,'order_id',p.id,'revoked',p.data->>'revoked'),''
+ FROM resources.purchases p JOIN resources.records r ON r.id=p.resource_id WHERE p.owner_key=$1) SELECT id,school,grp,changed,current,fields,sensitive FROM records
  WHERE id COLLATE "C">$2 COLLATE "C"
  AND EXISTS (SELECT 1 FROM jsonb_array_elements($3::jsonb) s WHERE (s->>'school'='*' OR s->>'school'=school) AND (s->>'group'='*' OR s->>'group'=grp))
  AND $4::text='resources' AND $1::text<>'' AND $6::jsonb IS NOT NULL
