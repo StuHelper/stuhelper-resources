@@ -113,7 +113,7 @@ func (t *transaction) SaveRecord(v resources.Record) error {
 	if e := t.closedRecord(v); e != nil {
 		return e
 	}
-	if e := t.save(`INSERT INTO resources.records(id,owner_key,school_id,state,active_id,proposal_id,data) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO UPDATE SET state=excluded.state,active_id=excluded.active_id,proposal_id=excluded.proposal_id,data=excluded.data`, v, v.ID, v.Owner.Key(), v.SchoolID, v.State, v.ActiveID, v.ProposalID); e != nil {
+	if e := t.save(`INSERT INTO resources.records(id,owner_key,school_id,state,active_id,proposal_id,data,query_changed_at) VALUES($1,$2,$3,$4,$5,$6,$7,clock_timestamp()) ON CONFLICT(id) DO UPDATE SET state=excluded.state,active_id=excluded.active_id,proposal_id=excluded.proposal_id,data=excluded.data,query_changed_at=clock_timestamp()`, v, v.ID, v.Owner.Key(), v.SchoolID, v.State, v.ActiveID, v.ProposalID); e != nil {
 		return e
 	}
 	return t.saveDiscovery(v)
@@ -161,7 +161,7 @@ func (t *transaction) Grants(resource string, n int, after string) ([]resources.
 	return list[resources.GrantRecord](t, `SELECT data FROM resources.grants WHERE resource_id=$1 AND id>$2 ORDER BY id LIMIT $3`, resource, after, n)
 }
 func (t *transaction) SaveGrant(v resources.GrantRecord) error {
-	return t.save(`INSERT INTO resources.grants(id,resource_id,subject_key,data) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET data=excluded.data`, v, v.Grant.ID, v.ResourceID, v.SubjectKey)
+	return t.save(`INSERT INTO resources.grants(id,resource_id,subject_key,data,query_changed_at) VALUES($1,$2,$3,$4,clock_timestamp()) ON CONFLICT(id) DO UPDATE SET data=excluded.data,query_changed_at=clock_timestamp()`, v, v.Grant.ID, v.ResourceID, v.SubjectKey)
 }
 func (t *transaction) Directory(id string) (resources.Directory, error) {
 	return read[resources.Directory](t, `SELECT data FROM resources.directories WHERE id=$1`, id)

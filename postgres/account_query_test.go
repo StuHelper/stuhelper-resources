@@ -49,7 +49,7 @@ func TestAccountQueryScopePaginationAndRuntime(t *testing.T) {
 		exec(`INSERT INTO resources.records(id,owner_key,school_id,state,active_id,proposal_id,data) VALUES($1,$2,$3,'published','','','{}')`, v.id, target.Key(), v.school)
 	}
 	exec(`INSERT INTO resources.grants(id,resource_id,subject_key,data) VALUES('grant','c',$1,'{"Grant":{"revoked":false}}')`, target.Key())
-	// Repeat the migration against existing data, including the timestamp column.
+	// Repeating final-schema initialization must preserve stored records.
 	if _, e = db.Exec(Schema); e != nil {
 		t.Fatal(e)
 	}

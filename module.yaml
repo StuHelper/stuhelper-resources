@@ -39,6 +39,7 @@ specifications:
   - docs/spec/resources.md
 scenario_tests:
   IQ-02:
+    - postgres/query_write_test.go#TestAccountQueryRepositoryWritesRefreshTime
     - accountquery/query_test.go#TestAccountQueryAuthorizationAndFailures
     - postgres/account_query_test.go#TestAccountQueryScopePaginationAndRuntime
   RES-DISCOVERY-01:
