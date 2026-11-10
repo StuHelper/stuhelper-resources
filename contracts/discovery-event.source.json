@@ -1,0 +1,8 @@
+{
+  "provider": "search",
+  "interface": "discovery.v1",
+  "repository": "https://github.com/StuHelper/stuhelper-search",
+  "source_commit": "9e791c6d078e10abdcf5ee3652bc980997b0560d",
+  "path": "contracts/discovery-event.schema.json",
+  "sha256": "d85787b74b4b660b008cc21793928e4b4c84ee59022a2ed0b0999477501f5ece"
+}

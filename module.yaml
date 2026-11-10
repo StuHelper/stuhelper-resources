@@ -1,0 +1,110 @@
+id: resources
+version: 0.5.0
+kind: module
+api: 1
+critical: false
+requires:
+  - id: platform
+    api: 1
+  - id: catalog
+    api: 1
+  - id: media
+    api: 1
+  - id: moderation
+    api: 1
+optional:
+  - id: verification
+    api: 1
+  - id: billing
+    api: 1
+  - id: identity
+    api: 1
+capabilities:
+  - resources.unlock-eligibility
+  - resources.entitlements.consume
+  - resources.coverage.read
+  - resources.coverage.manage
+  - resources.account-query
+  - resources.read
+  - resources.write
+  - resources.manage
+capability_requires:
+  resources.read:
+    - id: identity
+      api: 1
+  resources.write:
+    - id: identity
+      api: 1
+  resources.manage:
+    - id: identity
+      api: 1
+specifications:
+  - docs/spec/account-query.md
+  - docs/spec/resources.md
+scenario_tests:
+  IQ-02:
+    - postgres/query_write_test.go#TestAccountQueryRepositoryWritesRefreshTime
+    - accountquery/query_test.go#TestAccountQueryAuthorizationAndFailures
+    - postgres/account_query_test.go#TestAccountQueryScopePaginationAndRuntime
+  RES-DISCOVERY-01:
+    - discovery_delivery_test.go#TestDiscoverySnapshotStableVersionsTombstonesAndSchema
+    - discovery_service_test.go#TestDiscoveryPublicationProposalUnlistingDeletionAndPermissions
+  RES-OUTBOX-01:
+    - discovery_delivery_test.go#TestDiscoveryOutboxNotificationRollbackExclusionAndConfirmation
+  RES-DISCOVERY-02:
+    - discovery_service_test.go#TestDiscoveryRejectsOtherSchoolAndDoesNotElevateOwners
+    - discovery_service_test.go#TestDiscoveryRechecksPublicationAfterExternalAuthorization
+  AUDIT-01:
+    - audit_integration_test.go#TestAuditWritesPreserveObjectAndOperationReason
+    - postgres/audit_query_test.go#TestPublicAuditQuery
+  RES-01:
+    - integration_test.go#TestConfigurableTaxonomySnapshotsAndYearFilters
+    - integration_test.go#TestTaxonomyChangeDuringPreparationCanBeCorrected
+    - integration_test.go#TestInitialCategoriesMigrationPreservesOperatorChanges
+  RES-02:
+    - integration_test.go#TestPublicationContinuityAndStaleReview
+  RES-03:
+    - integration_test.go#TestIndependentRightsCampusRevocationAndUnlisting
+  RES-04:
+    - integration_test.go#TestConcurrentIdempotencyAndChangedPayload
+  RES-05:
+    - integration_test.go#TestDeniedInputsDoNotReachDependencies
+  RES-06:
+    - integration_test.go#TestDirectoryPackagesOmitUnauthorizedAndRecheckRights
+  RES-07:
+    - integration_test.go#TestOriginConsentAndRequestsUseOutbox
+    - http_test.go#TestReceiptHTTPStatesMatchGeneratedContract
+  RES-08:
+    - integration_test.go#TestAmbiguousPublicationRecoveryAndRetryBudget
+    - integration_test.go#TestModerationDeliveryReplayAfterPublicationAndStateChanges
+  RES-09:
+    - integration_test.go#TestDatabaseIsolationAndAtomicAudit
+  RES-10:
+    - http_test.go#TestHTTPContractSDKAndUnknownInput
+  RES-11:
+    - integration_test.go#TestReviewInspectionIsScopedAndGrantListsIdentifySubjects
+  RES-12:
+    - integration_test.go#TestCategoryReadsRequireContentAdmissionAndKeepScopedAdministration
+  RES-13:
+    - references_test.go#TestOwnResourceNamesRequireUploadOwnershipAndKeepContentPrivate
+    - references_test.go#TestComplaintTitleSnapshotRequiresAdmissionAtSubmission
+  RES-14:
+    - file_access_test.go#TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions
+  RES-15:
+    - closure_test.go#TestClosedUploaderKeepsFilesAndCopyrightWithoutPublicAccountLink
+  RES-16:
+    - integration_test.go#TestListReusesRequestAuthorizationButRechecksNextRequest
+  RES-17:
+    - integration_test.go#TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting
+  RS-05:
+    - entitlements_test.go#TestFourAccessSourceCombinations
+    - entitlements_test.go#TestEntitlementSourcesCoverageExpiryRefundAndEligibility
+  RS-06:
+    - entitlements_test.go#TestPurchaseAndDownloadConditionsAreIndependent
+    - http_test.go#TestCoverageHTTPAndAccessMethods
+    - entitlements_test.go#TestEntitlementSourcesCoverageExpiryRefundAndEligibility
+  RS-15:
+    - entitlements_test.go#TestEntitlementSourcesCoverageExpiryRefundAndEligibility
+  RS-28:
+    - entitlements_test.go#TestConcurrentBillingDeliveryAndEventSchemas
+    - entitlements_test.go#TestEntitlementRejectedAtomicInboxAndValidation
