@@ -95,6 +95,93 @@ func (e OriginKind) Valid() bool {
 	}
 }
 
+// Defines values for ProblemAccessReason.
+const (
+	PermissionDenied    ProblemAccessReason = "permission_denied"
+	PurchaseUnavailable ProblemAccessReason = "purchase_unavailable"
+	RequirementsMissing ProblemAccessReason = "requirements_missing"
+	ResourceUnavailable ProblemAccessReason = "resource_unavailable"
+	ServiceUnavailable  ProblemAccessReason = "service_unavailable"
+)
+
+// Valid indicates whether the value is a known member of the ProblemAccessReason enum.
+func (e ProblemAccessReason) Valid() bool {
+	switch e {
+	case PermissionDenied:
+		return true
+	case PurchaseUnavailable:
+		return true
+	case RequirementsMissing:
+		return true
+	case ResourceUnavailable:
+		return true
+	case ServiceUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProblemMissingConditions.
+const (
+	ProblemMissingConditionsCampusEligibility   ProblemMissingConditions = "campus_eligibility"
+	ProblemMissingConditionsContentAccess       ProblemMissingConditions = "content_access"
+	ProblemMissingConditionsCourseEnrollment    ProblemMissingConditions = "course_enrollment"
+	ProblemMissingConditionsIdentityVerified    ProblemMissingConditions = "identity_verified"
+	ProblemMissingConditionsPhoneBound          ProblemMissingConditions = "phone_bound"
+	ProblemMissingConditionsResourceEntitlement ProblemMissingConditions = "resource_entitlement"
+)
+
+// Valid indicates whether the value is a known member of the ProblemMissingConditions enum.
+func (e ProblemMissingConditions) Valid() bool {
+	switch e {
+	case ProblemMissingConditionsCampusEligibility:
+		return true
+	case ProblemMissingConditionsContentAccess:
+		return true
+	case ProblemMissingConditionsCourseEnrollment:
+		return true
+	case ProblemMissingConditionsIdentityVerified:
+		return true
+	case ProblemMissingConditionsPhoneBound:
+		return true
+	case ProblemMissingConditionsResourceEntitlement:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProblemUnavailableConditions.
+const (
+	ProblemUnavailableConditionsCampusEligibility   ProblemUnavailableConditions = "campus_eligibility"
+	ProblemUnavailableConditionsContentAccess       ProblemUnavailableConditions = "content_access"
+	ProblemUnavailableConditionsCourseEnrollment    ProblemUnavailableConditions = "course_enrollment"
+	ProblemUnavailableConditionsIdentityVerified    ProblemUnavailableConditions = "identity_verified"
+	ProblemUnavailableConditionsPhoneBound          ProblemUnavailableConditions = "phone_bound"
+	ProblemUnavailableConditionsResourceEntitlement ProblemUnavailableConditions = "resource_entitlement"
+)
+
+// Valid indicates whether the value is a known member of the ProblemUnavailableConditions enum.
+func (e ProblemUnavailableConditions) Valid() bool {
+	switch e {
+	case ProblemUnavailableConditionsCampusEligibility:
+		return true
+	case ProblemUnavailableConditionsContentAccess:
+		return true
+	case ProblemUnavailableConditionsCourseEnrollment:
+		return true
+	case ProblemUnavailableConditionsIdentityVerified:
+		return true
+	case ProblemUnavailableConditionsPhoneBound:
+		return true
+	case ProblemUnavailableConditionsResourceEntitlement:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RequestKind.
 const (
 	Appeal     RequestKind = "appeal"
@@ -146,6 +233,54 @@ func (e RequestReceiptState) Valid() bool {
 	}
 }
 
+// Defines values for ResourceAvailableMethods.
+const (
+	Download ResourceAvailableMethods = "download"
+	Purchase ResourceAvailableMethods = "purchase"
+)
+
+// Valid indicates whether the value is a known member of the ResourceAvailableMethods enum.
+func (e ResourceAvailableMethods) Valid() bool {
+	switch e {
+	case Download:
+		return true
+	case Purchase:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResourceMissingConditions.
+const (
+	ResourceMissingConditionsCampusEligibility   ResourceMissingConditions = "campus_eligibility"
+	ResourceMissingConditionsContentAccess       ResourceMissingConditions = "content_access"
+	ResourceMissingConditionsCourseEnrollment    ResourceMissingConditions = "course_enrollment"
+	ResourceMissingConditionsIdentityVerified    ResourceMissingConditions = "identity_verified"
+	ResourceMissingConditionsPhoneBound          ResourceMissingConditions = "phone_bound"
+	ResourceMissingConditionsResourceEntitlement ResourceMissingConditions = "resource_entitlement"
+)
+
+// Valid indicates whether the value is a known member of the ResourceMissingConditions enum.
+func (e ResourceMissingConditions) Valid() bool {
+	switch e {
+	case ResourceMissingConditionsCampusEligibility:
+		return true
+	case ResourceMissingConditionsContentAccess:
+		return true
+	case ResourceMissingConditionsCourseEnrollment:
+		return true
+	case ResourceMissingConditionsIdentityVerified:
+		return true
+	case ResourceMissingConditionsPhoneBound:
+		return true
+	case ResourceMissingConditionsResourceEntitlement:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ResourceState.
 const (
 	ResourceStateBlocked   ResourceState = "blocked"
@@ -164,6 +299,36 @@ func (e ResourceState) Valid() bool {
 	case ResourceStatePublished:
 		return true
 	case ResourceStateUnlisted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResourceUnavailableConditions.
+const (
+	ResourceUnavailableConditionsCampusEligibility   ResourceUnavailableConditions = "campus_eligibility"
+	ResourceUnavailableConditionsContentAccess       ResourceUnavailableConditions = "content_access"
+	ResourceUnavailableConditionsCourseEnrollment    ResourceUnavailableConditions = "course_enrollment"
+	ResourceUnavailableConditionsIdentityVerified    ResourceUnavailableConditions = "identity_verified"
+	ResourceUnavailableConditionsPhoneBound          ResourceUnavailableConditions = "phone_bound"
+	ResourceUnavailableConditionsResourceEntitlement ResourceUnavailableConditions = "resource_entitlement"
+)
+
+// Valid indicates whether the value is a known member of the ResourceUnavailableConditions enum.
+func (e ResourceUnavailableConditions) Valid() bool {
+	switch e {
+	case ResourceUnavailableConditionsCampusEligibility:
+		return true
+	case ResourceUnavailableConditionsContentAccess:
+		return true
+	case ResourceUnavailableConditionsCourseEnrollment:
+		return true
+	case ResourceUnavailableConditionsIdentityVerified:
+		return true
+	case ResourceUnavailableConditionsPhoneBound:
+		return true
+	case ResourceUnavailableConditionsResourceEntitlement:
 		return true
 	default:
 		return false
@@ -256,10 +421,12 @@ type Associations struct {
 
 // Capabilities defines model for Capabilities.
 type Capabilities struct {
-	AllowedTypes      []string        `json:"allowed_types"`
-	MaxFileSize       int64           `json:"max_file_size"`
-	MaxPackageBytes   int64           `json:"max_package_bytes"`
-	MaxPackageFiles   int64           `json:"max_package_files"`
+	AllowedTypes    []string `json:"allowed_types"`
+	MaxFileSize     int64    `json:"max_file_size"`
+	MaxPackageBytes int64    `json:"max_package_bytes"`
+	MaxPackageFiles int64    `json:"max_package_files"`
+
+	// PurchaseAvailable Resources supports purchase delivery. Backend must also check billing availability and merge prices.
 	PurchaseAvailable bool            `json:"purchase_available"`
 	Terms             Terms           `json:"terms"`
 	UploadProfiles    []UploadProfile `json:"upload_profiles"`
@@ -302,6 +469,20 @@ type Consent struct {
 	Accepted bool   `json:"accepted"`
 	Digest   string `json:"digest"`
 	Version  string `json:"version"`
+}
+
+// Coverage defines model for Coverage.
+type Coverage struct {
+	PlanId   string         `json:"plan_id"`
+	Revision int64          `json:"revision"`
+	Rules    []CoverageRule `json:"rules"`
+}
+
+// CoverageRule defines model for CoverageRule.
+type CoverageRule struct {
+	CategoryId  *string `json:"category_id,omitempty"`
+	DirectoryId *string `json:"directory_id,omitempty"`
+	SchoolId    string  `json:"school_id"`
 }
 
 // Decision defines model for Decision.
@@ -463,8 +644,35 @@ type PackageRequest struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	Code      string  `json:"code"`
-	RequestId *string `json:"request_id,omitempty"`
+	AccessReason          *ProblemAccessReason            `json:"access_reason,omitempty"`
+	Code                  string                          `json:"code"`
+	MissingConditions     *[]ProblemMissingConditions     `json:"missing_conditions,omitempty"`
+	RequestId             *string                         `json:"request_id,omitempty"`
+	RuleVersion           *string                         `json:"rule_version,omitempty"`
+	UnavailableConditions *[]ProblemUnavailableConditions `json:"unavailable_conditions,omitempty"`
+}
+
+// ProblemAccessReason defines model for Problem.AccessReason.
+type ProblemAccessReason string
+
+// ProblemMissingConditions defines model for Problem.MissingConditions.
+type ProblemMissingConditions string
+
+// ProblemUnavailableConditions defines model for Problem.UnavailableConditions.
+type ProblemUnavailableConditions string
+
+// Reference defines model for Reference.
+type Reference struct {
+	CanonicalId *string `json:"canonical_id,omitempty"`
+	Id          string  `json:"id"`
+	Kind        string  `json:"kind"`
+	Name        string  `json:"name"`
+}
+
+// References defines model for References.
+type References struct {
+	Items      []Reference `json:"items"`
+	MissingIds []string    `json:"missing_ids"`
 }
 
 // Request defines model for Request.
@@ -487,14 +695,17 @@ type RequestPage struct {
 
 // RequestReceipt defines model for RequestReceipt.
 type RequestReceipt struct {
-	CanAppeal      bool                `json:"can_appeal"`
-	CreatedAt      time.Time           `json:"created_at"`
-	DecisionReason *string             `json:"decision_reason,omitempty"`
-	Id             string              `json:"id"`
-	Kind           *string             `json:"kind,omitempty"`
-	ResourceId     *string             `json:"resource_id,omitempty"`
-	State          RequestReceiptState `json:"state"`
-	TaskId         *string             `json:"task_id,omitempty"`
+	CanAppeal      bool      `json:"can_appeal"`
+	CreatedAt      time.Time `json:"created_at"`
+	DecisionReason *string   `json:"decision_reason,omitempty"`
+	Id             string    `json:"id"`
+	Kind           *string   `json:"kind,omitempty"`
+	ResourceId     *string   `json:"resource_id,omitempty"`
+
+	// ResourceTitle Title snapshot at request submission. Present for an owner request, or when a complaint passed current content admission at submission. Omitted for other complaints and historical requests without an admission snapshot.
+	ResourceTitle *string             `json:"resource_title,omitempty"`
+	State         RequestReceiptState `json:"state"`
+	TaskId        *string             `json:"task_id,omitempty"`
 }
 
 // RequestReceiptState defines model for RequestReceipt.State.
@@ -502,18 +713,33 @@ type RequestReceiptState string
 
 // Resource defines model for Resource.
 type Resource struct {
-	AccessReason    string        `json:"access_reason"`
-	Current         *Version      `json:"current,omitempty"`
-	DownloadAllowed bool          `json:"download_allowed"`
-	Id              string        `json:"id"`
-	Owned           bool          `json:"owned"`
-	Proposal        *Version      `json:"proposal,omitempty"`
-	Revision        int64         `json:"revision"`
-	State           ResourceState `json:"state"`
+	// AccessReason allowed, requirements_missing, purchase_unavailable, resource_unavailable, permission_denied or service_unavailable. Owned metadata remains readable if file eligibility is unavailable. Use missing_conditions and unavailable_conditions rather than assuming that every failure requires a purchase.
+	AccessReason          string                           `json:"access_reason"`
+	AvailableMethods      *[]ResourceAvailableMethods      `json:"available_methods,omitempty"`
+	Current               *Version                         `json:"current,omitempty"`
+	DownloadAllowed       bool                             `json:"download_allowed"`
+	Id                    string                           `json:"id"`
+	MissingConditions     *[]ResourceMissingConditions     `json:"missing_conditions,omitempty"`
+	Owned                 bool                             `json:"owned"`
+	Proposal              *Version                         `json:"proposal,omitempty"`
+	Revision              int64                            `json:"revision"`
+	RuleVersion           *string                          `json:"rule_version,omitempty"`
+	State                 ResourceState                    `json:"state"`
+	UnavailableConditions *[]ResourceUnavailableConditions `json:"unavailable_conditions,omitempty"`
+	UnlockReason          *string                          `json:"unlock_reason,omitempty"`
 }
+
+// ResourceAvailableMethods defines model for Resource.AvailableMethods.
+type ResourceAvailableMethods string
+
+// ResourceMissingConditions defines model for Resource.MissingConditions.
+type ResourceMissingConditions string
 
 // ResourceState defines model for Resource.State.
 type ResourceState string
+
+// ResourceUnavailableConditions defines model for Resource.UnavailableConditions.
+type ResourceUnavailableConditions string
 
 // ResourcePage defines model for ResourcePage.
 type ResourcePage struct {
@@ -598,6 +824,11 @@ type PutCategoryParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// PutCoverageParams defines parameters for PutCoverage.
+type PutCoverageParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ListDirectoriesParams defines parameters for ListDirectories.
 type ListDirectoriesParams struct {
 	SchoolId *string `form:"school_id,omitempty" json:"school_id,omitempty"`
@@ -676,6 +907,12 @@ type ListOwnResourcesParams struct {
 	Limit *string `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// MyResourcesReferencesParams defines parameters for MyResourcesReferences.
+type MyResourcesReferencesParams struct {
+	// Ids Comma-separated IDs referenced by own records, at most 100. Any unowned ID rejects the whole batch.
+	Ids string `form:"ids" json:"ids"`
+}
+
 // CreatePackageParams defines parameters for CreatePackage.
 type CreatePackageParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -700,6 +937,9 @@ type CreateDraftJSONRequestBody = DraftWrite
 
 // PutCategoryJSONRequestBody defines body for PutCategory for application/json ContentType.
 type PutCategoryJSONRequestBody = CategoryWrite
+
+// PutCoverageJSONRequestBody defines body for PutCoverage for application/json ContentType.
+type PutCoverageJSONRequestBody = Coverage
 
 // PutDirectoryJSONRequestBody defines body for PutDirectory for application/json ContentType.
 type PutDirectoryJSONRequestBody = DirectoryWrite
@@ -810,6 +1050,8 @@ type ClientInterface interface {
 
 	// ListResources ListResources
 	//
+	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+	//
 	// Corresponds with GET /api/v1/resources (the `ListResources` operationId).
 	ListResources(ctx context.Context, params *ListResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -834,6 +1076,8 @@ type ClientInterface interface {
 
 	// ListCategories ListCategories
 	//
+	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+	//
 	// Corresponds with GET /api/v1/resources/categories (the `ListCategories` operationId).
 	ListCategories(ctx context.Context, params *ListCategoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -851,7 +1095,28 @@ type ClientInterface interface {
 	// Corresponds with PUT /api/v1/resources/categories/{id} (the `PutCategory` operationId).
 	PutCategory(ctx context.Context, id string, params *PutCategoryParams, body PutCategoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCoverage Read actual coverage for a billing plan ID
+	//
+	// Corresponds with GET /api/v1/resources/coverage/{id} (the `GetCoverage` operationId).
+	GetCoverage(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutCoverageWithBody Replace plan coverage with revision control; coverage.manage permission required
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+	PutCoverageWithBody(ctx context.Context, id string, params *PutCoverageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutCoverage Replace plan coverage with revision control; coverage.manage permission required
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+	PutCoverage(ctx context.Context, id string, params *PutCoverageParams, body PutCoverageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListDirectories ListDirectories
+	//
+	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
 	//
 	// Corresponds with GET /api/v1/resources/directories (the `ListDirectories` operationId).
 	ListDirectories(ctx context.Context, params *ListDirectoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -871,6 +1136,8 @@ type ClientInterface interface {
 	PutDirectory(ctx context.Context, id string, params *PutDirectoryParams, body PutDirectoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetResource GetResource
+	//
+	// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
 	//
 	// Corresponds with GET /api/v1/resources/items/{id} (the `GetResource` operationId).
 	GetResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -904,6 +1171,8 @@ type ClientInterface interface {
 	ApplyDecision(ctx context.Context, id string, params *ApplyDecisionParams, body ApplyDecisionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DownloadResource DownloadResource
+	//
+	// Checks current content admission, configured eligibility, entitlements and resource state before returning any file bytes. Missing conditions return 403; unknown dependencies return 503. Same policy as preview.
 	//
 	// Corresponds with GET /api/v1/resources/items/{id}/download (the `DownloadResource` operationId).
 	DownloadResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -940,6 +1209,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /api/v1/resources/items/{id}/grants/{grant} (the `PutGrant` operationId).
 	PutGrant(ctx context.Context, id string, grant string, params *PutGrantParams, body PutGrantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PreviewResource PreviewResource
+	//
+	// Authenticated inline file bytes, with the exact same current content, eligibility, entitlement and resource-state checks as download. No partial preview or conversion bypass. Errors return no file bytes.
+	//
+	// Corresponds with GET /api/v1/resources/items/{id}/preview (the `PreviewResource` operationId).
+	PreviewResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateRequestWithBody CreateRequest
 	//
@@ -1007,6 +1283,11 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 	ListOwnResources(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// MyResourcesReferences performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+	//
+	// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+	MyResourcesReferences(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// CreatePackageWithBody CreatePackage
 	//
 	// Takes any type of body and a specified content type.
@@ -1067,6 +1348,8 @@ type ClientInterface interface {
 }
 
 // ListResources ListResources
+//
+// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
 //
 // Corresponds with GET /api/v1/resources (the `ListResources` operationId).
 func (c *Client) ListResources(ctx context.Context, params *ListResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1132,6 +1415,8 @@ func (c *Client) GetCapabilities(ctx context.Context, reqEditors ...RequestEdito
 
 // ListCategories ListCategories
 //
+// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+//
 // Corresponds with GET /api/v1/resources/categories (the `ListCategories` operationId).
 func (c *Client) ListCategories(ctx context.Context, params *ListCategoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListCategoriesRequest(c.Server, params)
@@ -1179,7 +1464,58 @@ func (c *Client) PutCategory(ctx context.Context, id string, params *PutCategory
 	return c.Client.Do(req)
 }
 
+// GetCoverage Read actual coverage for a billing plan ID
+//
+// Corresponds with GET /api/v1/resources/coverage/{id} (the `GetCoverage` operationId).
+func (c *Client) GetCoverage(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCoverageRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutCoverageWithBody Replace plan coverage with revision control; coverage.manage permission required
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+func (c *Client) PutCoverageWithBody(ctx context.Context, id string, params *PutCoverageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutCoverageRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutCoverage Replace plan coverage with revision control; coverage.manage permission required
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+func (c *Client) PutCoverage(ctx context.Context, id string, params *PutCoverageParams, body PutCoverageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutCoverageRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ListDirectories ListDirectories
+//
+// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
 //
 // Corresponds with GET /api/v1/resources/directories (the `ListDirectories` operationId).
 func (c *Client) ListDirectories(ctx context.Context, params *ListDirectoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1229,6 +1565,8 @@ func (c *Client) PutDirectory(ctx context.Context, id string, params *PutDirecto
 }
 
 // GetResource GetResource
+//
+// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
 //
 // Corresponds with GET /api/v1/resources/items/{id} (the `GetResource` operationId).
 func (c *Client) GetResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1312,6 +1650,8 @@ func (c *Client) ApplyDecision(ctx context.Context, id string, params *ApplyDeci
 }
 
 // DownloadResource DownloadResource
+//
+// Checks current content admission, configured eligibility, entitlements and resource state before returning any file bytes. Missing conditions return 403; unknown dependencies return 503. Same policy as preview.
 //
 // Corresponds with GET /api/v1/resources/items/{id}/download (the `DownloadResource` operationId).
 func (c *Client) DownloadResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1399,6 +1739,23 @@ func (c *Client) PutGrantWithBody(ctx context.Context, id string, grant string, 
 // Corresponds with PUT /api/v1/resources/items/{id}/grants/{grant} (the `PutGrant` operationId).
 func (c *Client) PutGrant(ctx context.Context, id string, grant string, params *PutGrantParams, body PutGrantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutGrantRequest(c.Server, id, grant, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PreviewResource PreviewResource
+//
+// Authenticated inline file bytes, with the exact same current content, eligibility, entitlement and resource-state checks as download. No partial preview or conversion bypass. Errors return no file bytes.
+//
+// Corresponds with GET /api/v1/resources/items/{id}/preview (the `PreviewResource` operationId).
+func (c *Client) PreviewResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPreviewResourceRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1565,6 +1922,21 @@ func (c *Client) ListManagedResources(ctx context.Context, params *ListManagedRe
 // Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 func (c *Client) ListOwnResources(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListOwnResourcesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// MyResourcesReferences performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+//
+// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+func (c *Client) MyResourcesReferences(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMyResourcesReferencesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2057,6 +2429,100 @@ func NewPutCategoryRequestWithBody(server string, id string, params *PutCategory
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/resources/categories/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetCoverageRequest constructs an http.Request for the GetCoverage method
+func NewGetCoverageRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/coverage/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutCoverageRequest calls the generic PutCoverage builder with application/json body
+func NewPutCoverageRequest(server string, id string, params *PutCoverageParams, body PutCoverageJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutCoverageRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPutCoverageRequestWithBody constructs an http.Request for the PutCoverage method, with any body, and a specified content type
+func NewPutCoverageRequestWithBody(server string, id string, params *PutCoverageParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/coverage/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2639,6 +3105,40 @@ func NewPutGrantRequestWithBody(server string, id string, grant string, params *
 	return req, nil
 }
 
+// NewPreviewResourceRequest constructs an http.Request for the PreviewResource method
+func NewPreviewResourceRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/items/%s/preview", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewCreateRequestRequest calls the generic CreateRequest builder with application/json body
 func NewCreateRequestRequest(server string, id string, params *CreateRequestParams, body CreateRequestJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -3083,6 +3583,56 @@ func NewListOwnResourcesRequest(server string, params *ListOwnResourcesParams) (
 	return req, nil
 }
 
+// NewMyResourcesReferencesRequest constructs an http.Request for the MyResourcesReferences method
+func NewMyResourcesReferencesRequest(server string, params *MyResourcesReferencesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/me/references")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "ids", params.Ids, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewCreatePackageRequest calls the generic CreatePackage builder with application/json body
 func NewCreatePackageRequest(server string, params *CreatePackageParams, body CreatePackageJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -3485,6 +4035,8 @@ type ClientWithResponsesInterface interface {
 
 	// ListResourcesWithResponse ListResources
 	//
+	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/resources (the `ListResources` operationId).
@@ -3513,6 +4065,8 @@ type ClientWithResponsesInterface interface {
 
 	// ListCategoriesWithResponse ListCategories
 	//
+	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/resources/categories (the `ListCategories` operationId).
@@ -3532,7 +4086,30 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /api/v1/resources/categories/{id} (the `PutCategory` operationId).
 	PutCategoryWithResponse(ctx context.Context, id string, params *PutCategoryParams, body PutCategoryJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCategoryResponse, error)
 
+	// GetCoverageWithResponse Read actual coverage for a billing plan ID
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/coverage/{id} (the `GetCoverage` operationId).
+	GetCoverageWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetCoverageResponse, error)
+
+	// PutCoverageWithBodyWithResponse Replace plan coverage with revision control; coverage.manage permission required
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+	PutCoverageWithBodyWithResponse(ctx context.Context, id string, params *PutCoverageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutCoverageResponse, error)
+
+	// PutCoverageWithResponse Replace plan coverage with revision control; coverage.manage permission required
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+	PutCoverageWithResponse(ctx context.Context, id string, params *PutCoverageParams, body PutCoverageJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCoverageResponse, error)
+
 	// ListDirectoriesWithResponse ListDirectories
+	//
+	// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -3554,6 +4131,8 @@ type ClientWithResponsesInterface interface {
 	PutDirectoryWithResponse(ctx context.Context, id string, params *PutDirectoryParams, body PutDirectoryJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDirectoryResponse, error)
 
 	// GetResourceWithResponse GetResource
+	//
+	// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -3589,6 +4168,8 @@ type ClientWithResponsesInterface interface {
 	ApplyDecisionWithResponse(ctx context.Context, id string, params *ApplyDecisionParams, body ApplyDecisionJSONRequestBody, reqEditors ...RequestEditorFn) (*ApplyDecisionResponse, error)
 
 	// DownloadResourceWithResponse DownloadResource
+	//
+	// Checks current content admission, configured eligibility, entitlements and resource state before returning any file bytes. Missing conditions return 403; unknown dependencies return 503. Same policy as preview.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -3629,6 +4210,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PUT /api/v1/resources/items/{id}/grants/{grant} (the `PutGrant` operationId).
 	PutGrantWithResponse(ctx context.Context, id string, grant string, params *PutGrantParams, body PutGrantJSONRequestBody, reqEditors ...RequestEditorFn) (*PutGrantResponse, error)
+
+	// PreviewResourceWithResponse PreviewResource
+	//
+	// Authenticated inline file bytes, with the exact same current content, eligibility, entitlement and resource-state checks as download. No partial preview or conversion bypass. Errors return no file bytes.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/items/{id}/preview (the `PreviewResource` operationId).
+	PreviewResourceWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PreviewResourceResponse, error)
 
 	// CreateRequestWithBodyWithResponse CreateRequest
 	//
@@ -3699,6 +4289,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 	ListOwnResourcesWithResponse(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*ListOwnResourcesResponse, error)
+
+	// MyResourcesReferencesWithResponse performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+	//
+	// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	MyResourcesReferencesWithResponse(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*MyResourcesReferencesResponse, error)
 
 	// CreatePackageWithBodyWithResponse CreatePackage
 	//
@@ -4215,6 +4812,186 @@ func (r PutCategoryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PutCategoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetCoverageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Coverage
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetCoverageResponse) GetJSON200() *Coverage {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetCoverageResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetCoverageResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetCoverageResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetCoverageResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r GetCoverageResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r GetCoverageResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetCoverageResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetCoverageResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCoverageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCoverageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetCoverageResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PutCoverageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Coverage
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PutCoverageResponse) GetJSON200() *Coverage {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PutCoverageResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PutCoverageResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PutCoverageResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PutCoverageResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r PutCoverageResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r PutCoverageResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PutCoverageResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PutCoverageResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PutCoverageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutCoverageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PutCoverageResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -5024,6 +5801,89 @@ func (r PutGrantResponse) ContentType() string {
 	return ""
 }
 
+type PreviewResourceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PreviewResourceResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PreviewResourceResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PreviewResourceResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r PreviewResourceResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r PreviewResourceResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r PreviewResourceResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PreviewResourceResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PreviewResourceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PreviewResourceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PreviewResourceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PreviewResourceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type CreateRequestResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5041,6 +5901,10 @@ type CreateRequestResponse struct {
 	JSON409 *Problem
 	// JSON413 the response for an HTTP 413 `application/json` response
 	JSON413 *Problem
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *struct {
+		Code *string `json:"code,omitempty"`
+	}
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *Problem
 }
@@ -5078,6 +5942,13 @@ func (r CreateRequestResponse) GetJSON409() *Problem {
 // GetJSON413 returns the response for an HTTP 413 `application/json` response
 func (r CreateRequestResponse) GetJSON413() *Problem {
 	return r.JSON413
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r CreateRequestResponse) GetJSON429() *struct {
+	Code *string `json:"code,omitempty"`
+} {
+	return r.JSON429
 }
 
 // GetJSON503 returns the response for an HTTP 503 `application/json` response
@@ -5558,6 +6429,89 @@ func (r ListOwnResourcesResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ListOwnResourcesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type MyResourcesReferencesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *References
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON200() *References {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r MyResourcesReferencesResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r MyResourcesReferencesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r MyResourcesReferencesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r MyResourcesReferencesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r MyResourcesReferencesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -6272,6 +7226,8 @@ func (r DownloadReviewFileResponse) ContentType() string {
 
 // ListResourcesWithResponse ListResources
 //
+// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+//
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /api/v1/resources (the `ListResources` operationId).
@@ -6324,6 +7280,8 @@ func (c *ClientWithResponses) GetCapabilitiesWithResponse(ctx context.Context, r
 
 // ListCategoriesWithResponse ListCategories
 //
+// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
+//
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /api/v1/resources/categories (the `ListCategories` operationId).
@@ -6361,7 +7319,48 @@ func (c *ClientWithResponses) PutCategoryWithResponse(ctx context.Context, id st
 	return ParsePutCategoryResponse(rsp)
 }
 
+// GetCoverageWithResponse Read actual coverage for a billing plan ID
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/coverage/{id} (the `GetCoverage` operationId).
+func (c *ClientWithResponses) GetCoverageWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetCoverageResponse, error) {
+	rsp, err := c.GetCoverage(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCoverageResponse(rsp)
+}
+
+// PutCoverageWithBodyWithResponse Replace plan coverage with revision control; coverage.manage permission required
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+func (c *ClientWithResponses) PutCoverageWithBodyWithResponse(ctx context.Context, id string, params *PutCoverageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutCoverageResponse, error) {
+	rsp, err := c.PutCoverageWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutCoverageResponse(rsp)
+}
+
+// PutCoverageWithResponse Replace plan coverage with revision control; coverage.manage permission required
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/resources/coverage/{id} (the `PutCoverage` operationId).
+func (c *ClientWithResponses) PutCoverageWithResponse(ctx context.Context, id string, params *PutCoverageParams, body PutCoverageJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCoverageResponse, error) {
+	rsp, err := c.PutCoverage(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutCoverageResponse(rsp)
+}
+
 // ListDirectoriesWithResponse ListDirectories
+//
+// Requires current content admission in the served school: valid campus eligibility or verified teacher status. Missing admission returns 403; unavailable required facts return 503. No preview, content, counts or statistics are returned on rejection.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -6401,6 +7400,8 @@ func (c *ClientWithResponses) PutDirectoryWithResponse(ctx context.Context, id s
 }
 
 // GetResourceWithResponse GetResource
+//
+// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -6466,6 +7467,8 @@ func (c *ClientWithResponses) ApplyDecisionWithResponse(ctx context.Context, id 
 }
 
 // DownloadResourceWithResponse DownloadResource
+//
+// Checks current content admission, configured eligibility, entitlements and resource state before returning any file bytes. Missing conditions return 403; unknown dependencies return 503. Same policy as preview.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -6541,6 +7544,21 @@ func (c *ClientWithResponses) PutGrantWithResponse(ctx context.Context, id strin
 		return nil, err
 	}
 	return ParsePutGrantResponse(rsp)
+}
+
+// PreviewResourceWithResponse PreviewResource
+//
+// Authenticated inline file bytes, with the exact same current content, eligibility, entitlement and resource-state checks as download. No partial preview or conversion bypass. Errors return no file bytes.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/items/{id}/preview (the `PreviewResource` operationId).
+func (c *ClientWithResponses) PreviewResourceWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PreviewResourceResponse, error) {
+	rsp, err := c.PreviewResource(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePreviewResourceResponse(rsp)
 }
 
 // CreateRequestWithBodyWithResponse CreateRequest
@@ -6671,6 +7689,19 @@ func (c *ClientWithResponses) ListOwnResourcesWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseListOwnResourcesResponse(rsp)
+}
+
+// MyResourcesReferencesWithResponse performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+//
+// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) MyResourcesReferencesWithResponse(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*MyResourcesReferencesResponse, error) {
+	rsp, err := c.MyResourcesReferences(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMyResourcesReferencesResponse(rsp)
 }
 
 // CreatePackageWithBodyWithResponse CreatePackage
@@ -7119,6 +8150,156 @@ func ParsePutCategoryResponse(rsp *http.Response) (*PutCategoryResponse, error) 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Category
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCoverageResponse parses an HTTP response from a GetCoverageWithResponse call
+func ParseGetCoverageResponse(rsp *http.Response) (*GetCoverageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCoverageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Coverage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutCoverageResponse parses an HTTP response from a PutCoverageWithResponse call
+func ParsePutCoverageResponse(rsp *http.Response) (*PutCoverageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutCoverageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Coverage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -7846,6 +9027,74 @@ func ParsePutGrantResponse(rsp *http.Response) (*PutGrantResponse, error) {
 	return response, nil
 }
 
+// ParsePreviewResourceResponse parses an HTTP response from a PreviewResourceWithResponse call
+func ParsePreviewResourceResponse(rsp *http.Response) (*PreviewResourceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PreviewResourceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseCreateRequestResponse parses an HTTP response from a CreateRequestWithResponse call
 func ParseCreateRequestResponse(rsp *http.Response) (*CreateRequestResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -7908,6 +9157,15 @@ func ParseCreateRequestResponse(rsp *http.Response) (*CreateRequestResponse, err
 			return nil, err
 		}
 		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest struct {
+			Code *string `json:"code,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
@@ -8283,6 +9541,74 @@ func ParseListOwnResourcesResponse(rsp *http.Response) (*ListOwnResourcesRespons
 			return nil, err
 		}
 		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseMyResourcesReferencesResponse parses an HTTP response from a MyResourcesReferencesWithResponse call
+func ParseMyResourcesReferencesResponse(rsp *http.Response) (*MyResourcesReferencesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &MyResourcesReferencesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest References
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem

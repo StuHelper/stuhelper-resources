@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-const m=JSON.parse(fs.readFileSync('module.json','utf8'));
+import YAML from 'yaml';
+const m=YAML.parse(fs.readFileSync('module.yaml','utf8'));
 const specs=m.specifications.map(p=>fs.readFileSync(p,'utf8')).join('\n');
 for(const [id,refs] of Object.entries(m.scenario_tests)){
   assert(specs.includes(`| ${id} |`),`Missing scenario ${id}`);

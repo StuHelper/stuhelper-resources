@@ -143,3 +143,46 @@ func TestReceiptHTTPStatesMatchGeneratedContract(t *testing.T) {
 		}
 	}
 }
+
+func TestCoverageHTTPAndAccessMethods(t *testing.T) {
+	h := newFixture(t)
+	handler, e := httpapi.New(h.s, authenticator{})
+	must(t, e)
+	body := `{"plan_id":"plan","revision":0,"rules":[{"school_id":"school","category_id":"exam"}]}`
+	call := func(method, token, body string, want int) {
+		t.Helper()
+		req := httptest.NewRequest(method, "/api/v1/resources/coverage/plan", strings.NewReader(body))
+		req.Header.Set("Authorization", token)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", "coverage-http")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != want {
+			t.Fatalf("%d: %s", w.Code, w.Body.String())
+		}
+		if want == 200 {
+			var c sdk.Coverage
+			must(t, json.Unmarshal(w.Body.Bytes(), &c))
+			if c.PlanId != "plan" || len(c.Rules) != 1 || c.Revision != 1 {
+				t.Fatal(c)
+			}
+		}
+	}
+	call("PUT", "Bearer reader", body, 403)
+	call("PUT", "Bearer global", body, 200)
+	call("PUT", "Bearer global", body, 200)
+	call("GET", "Bearer reader", "", 200)
+	call("PUT", "Bearer global", `{"plan_id":"plan","revision":1,"rules":[],"unexpected":true}`, 400)
+	item := h.publish(t, h.draft(t, "methods", "restricted"))
+	got, e := h.s.Get(h.ctx, reader, item.ID)
+	must(t, e)
+	if got.UnlockReason != "eligible" || len(got.AvailableMethods) != 1 || got.AvailableMethods[0] != "purchase" {
+		t.Fatal(got)
+	}
+	h.purchase(t, item.ID, "http-order", 1, false)
+	got, e = h.s.Get(h.ctx, reader, item.ID)
+	must(t, e)
+	if !got.DownloadAllowed || len(got.AvailableMethods) != 1 || got.AvailableMethods[0] != "download" {
+		t.Fatal(got)
+	}
+}

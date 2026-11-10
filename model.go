@@ -1,5 +1,5 @@
 // Package resources owns learning-resource publications and configurable taxonomy.
-// Files, academic references, moderation and entitlements are supplied through ports.
+// Files, academic references and moderation are supplied through ports.
 package resources
 
 import (
@@ -12,6 +12,7 @@ import (
 )
 
 var (
+	ErrRateLimited     = errors.New("rate_limited")
 	ErrInput           = errors.New("resources_invalid_input")
 	ErrUnauthenticated = errors.New("resources_authentication_required")
 	ErrDenied          = errors.New("resources_permission_denied")
@@ -160,14 +161,19 @@ type VersionRecord struct {
 	DecisionRevision int64
 }
 type Resource struct {
-	ID              string   `json:"id"`
-	Revision        int64    `json:"revision"`
-	State           string   `json:"state"`
-	Current         *Version `json:"current,omitempty"`
-	Proposal        *Version `json:"proposal,omitempty"`
-	DownloadAllowed bool     `json:"download_allowed"`
-	AccessReason    string   `json:"access_reason"`
-	Owned           bool     `json:"owned"`
+	AvailableMethods      []string `json:"available_methods,omitempty"`
+	UnlockReason          string   `json:"unlock_reason,omitempty"`
+	MissingConditions     []string `json:"missing_conditions,omitempty"`
+	UnavailableConditions []string `json:"unavailable_conditions,omitempty"`
+	RuleVersion           string   `json:"rule_version,omitempty"`
+	ID                    string   `json:"id"`
+	Revision              int64    `json:"revision"`
+	State                 string   `json:"state"`
+	Current               *Version `json:"current,omitempty"`
+	Proposal              *Version `json:"proposal,omitempty"`
+	DownloadAllowed       bool     `json:"download_allowed"`
+	AccessReason          string   `json:"access_reason"`
+	Owned                 bool     `json:"owned"`
 }
 type Page struct {
 	Items      []Resource `json:"items"`
@@ -199,6 +205,7 @@ type Request struct {
 	Evidence       []string `json:"evidence,omitempty"`
 }
 type RequestReceipt struct {
+	ResourceTitle  string    `json:"resource_title,omitempty"`
 	TaskID         string    `json:"task_id,omitempty"`
 	ResourceID     string    `json:"resource_id,omitempty"`
 	Kind           string    `json:"kind,omitempty"`
@@ -349,15 +356,11 @@ type Entitlement struct {
 	Purchased bool
 	Member    bool
 }
-type Entitlements interface {
-	Lookup(context.Context, Principal, string) (Entitlement, error)
-}
 type Dependencies struct {
-	Authority    Authority
-	Catalog      Catalog
-	Files        Files
-	Moderation   Moderation
-	Entitlements Entitlements
+	Authority  Authority
+	Catalog    Catalog
+	Files      Files
+	Moderation Moderation
 }
 type Config struct {
 	UploadProfiles                                                                          []UploadProfile
@@ -374,6 +377,7 @@ type Replay struct {
 	Result      json.RawMessage
 }
 type Event struct {
+	Reason                                string `json:"-"`
 	ID, Type, ResourceID, SchoolID, Actor string
 	Revision                              int64
 	Time                                  time.Time
@@ -388,10 +392,22 @@ type Job struct {
 type Repository interface {
 	Transaction(context.Context, func(Transaction) error) error
 	Claim(context.Context, string, time.Time, time.Duration) (Job, error)
-	PendingEvents(context.Context, int) ([]Event, error)
-	AcknowledgeEvent(context.Context, string) error
+	OutboxReader
 }
 type Transaction interface {
+	Coverage(string) (Coverage, error)
+	SaveCoverage(Coverage) error
+	Purchase(string) (PurchaseSource, error)
+	SavePurchase(PurchaseSource) error
+	Membership(string, string) (Membership, error)
+	SaveMembership(Membership) error
+	Inbox(string) (bool, error)
+	SaveInbox(string) error
+	Envelope(Envelope) error
+	Rights(string, string, string, string, string, time.Time) (Entitlement, error)
+	DiscoveryCurrent([]string) ([]DiscoveryDocument, error)
+	CloseOwner(Principal, string) error
+	OwnedReferences(Principal, []string) ([]string, error)
 	Lock(string) error
 	Category(string, int64) (Category, error)
 	SaveCategory(Category) error

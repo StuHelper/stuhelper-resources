@@ -110,7 +110,13 @@ func (t *transaction) Record(id string) (resources.Record, error) {
 	return read[resources.Record](t, `SELECT data FROM resources.records WHERE id=$1`, id)
 }
 func (t *transaction) SaveRecord(v resources.Record) error {
-	return t.save(`INSERT INTO resources.records(id,owner_key,school_id,state,active_id,proposal_id,data) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO UPDATE SET state=excluded.state,active_id=excluded.active_id,proposal_id=excluded.proposal_id,data=excluded.data`, v, v.ID, v.Owner.Key(), v.SchoolID, v.State, v.ActiveID, v.ProposalID)
+	if e := t.closedRecord(v); e != nil {
+		return e
+	}
+	if e := t.save(`INSERT INTO resources.records(id,owner_key,school_id,state,active_id,proposal_id,data,query_changed_at) VALUES($1,$2,$3,$4,$5,$6,$7,clock_timestamp()) ON CONFLICT(id) DO UPDATE SET state=excluded.state,active_id=excluded.active_id,proposal_id=excluded.proposal_id,data=excluded.data,query_changed_at=clock_timestamp()`, v, v.ID, v.Owner.Key(), v.SchoolID, v.State, v.ActiveID, v.ProposalID); e != nil {
+		return e
+	}
+	return t.saveDiscovery(v)
 }
 func (t *transaction) Version(id string) (resources.VersionRecord, error) {
 	return read[resources.VersionRecord](t, `SELECT data FROM resources.versions WHERE id=$1`, id)
@@ -155,7 +161,7 @@ func (t *transaction) Grants(resource string, n int, after string) ([]resources.
 	return list[resources.GrantRecord](t, `SELECT data FROM resources.grants WHERE resource_id=$1 AND id>$2 ORDER BY id LIMIT $3`, resource, after, n)
 }
 func (t *transaction) SaveGrant(v resources.GrantRecord) error {
-	return t.save(`INSERT INTO resources.grants(id,resource_id,subject_key,data) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET data=excluded.data`, v, v.Grant.ID, v.ResourceID, v.SubjectKey)
+	return t.save(`INSERT INTO resources.grants(id,resource_id,subject_key,data,query_changed_at) VALUES($1,$2,$3,$4,clock_timestamp()) ON CONFLICT(id) DO UPDATE SET data=excluded.data,query_changed_at=clock_timestamp()`, v, v.Grant.ID, v.ResourceID, v.SubjectKey)
 }
 func (t *transaction) Directory(id string) (resources.Directory, error) {
 	return read[resources.Directory](t, `SELECT data FROM resources.directories WHERE id=$1`, id)
@@ -185,10 +191,18 @@ func (t *transaction) SaveJob(v resources.Job) error {
 	return t.save(`INSERT INTO resources.jobs(id,state,available_at,lease_until,data) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET state=excluded.state,available_at=excluded.available_at,lease_until=excluded.lease_until,data=excluded.data`, v, v.ID, v.State, v.AvailableAt, v.LeaseUntil)
 }
 func (t *transaction) Event(v resources.Event) error {
-	if e := t.save(`INSERT INTO resources.audit(id,data) VALUES($1,$2)`, v, v.ID); e != nil {
+	if e := t.save(`INSERT INTO resources.audit(id,reason,result,data) VALUES($1,$2,'success',$3)`, v, v.ID, v.Reason); e != nil {
 		return e
 	}
-	return t.save(`INSERT INTO resources.outbox(id,data) VALUES($1,$2)`, v, v.ID)
+	data, e := json.Marshal(map[string]any{"revision": v.Revision})
+	if e != nil {
+		return resources.ErrInput
+	}
+	subject := v.ResourceID
+	if subject == "" {
+		subject = v.ID
+	}
+	return t.saveEnvelope(resources.Envelope{SpecVersion: "1.0", ID: v.ID, Source: "resources", Type: v.Type, Subject: subject, Time: v.Time, Data: data})
 }
 func (r *Repository) Claim(ctx context.Context, worker string, now time.Time, lease time.Duration) (resources.Job, error) {
 	var out resources.Job
@@ -207,22 +221,6 @@ func (r *Repository) Claim(ctx context.Context, worker string, now time.Time, le
 		return t.SaveJob(out)
 	})
 	return out, e
-}
-func (r *Repository) PendingEvents(ctx context.Context, n int) ([]resources.Event, error) {
-	if n < 1 || n > 100 {
-		return nil, resources.ErrInput
-	}
-	var out []resources.Event
-	e := r.Transaction(ctx, func(port resources.Transaction) error {
-		var e error
-		out, e = list[resources.Event](port.(*transaction), `SELECT data FROM resources.outbox WHERE NOT delivered ORDER BY id LIMIT $1`, n)
-		return e
-	})
-	return out, e
-}
-func (r *Repository) AcknowledgeEvent(ctx context.Context, id string) error {
-	_, e := r.DB.ExecContext(ctx, `UPDATE resources.outbox SET delivered=true WHERE id=$1`, id)
-	return safe(e)
 }
 
 // PrunePackages removes only expired selection snapshots, never business records or idempotency receipts.
@@ -246,7 +244,7 @@ func (r *Repository) CheckRuntime(ctx context.Context) error {
 	if e != nil || elevated || ownSchema || foreignAccess {
 		return resources.ErrDenied
 	}
-	for _, table := range []string{"audit", "replays", "category_revisions"} {
+	for _, table := range []string{"audit", "replays", "category_revisions", "inbox"} {
 		var read, insert, change bool
 		e = r.DB.QueryRowContext(ctx, `SELECT has_table_privilege($1,'SELECT'),has_table_privilege($1,'INSERT'),has_table_privilege($1,'UPDATE,DELETE')`, "resources."+table).Scan(&read, &insert, &change)
 		if e != nil || !read || !insert || change {
