@@ -160,7 +160,7 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 	copy.deps.Authority = &requestAuthority{source: s.deps.Authority, results: map[authorizationKey]error{}}
 	s = &copy
 	out := Page{Items: []Resource{}}
-	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.After) || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) {
+	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) {
 		return out, ErrInput
 	}
 	if mine && admin {
@@ -192,6 +192,21 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 			return out, e
 		}
 	}
+	if e := prepareBrowse(&f); e != nil {
+		return out, e
+	}
+	f.CourseIDs = nil
+	if f.CourseID != "" {
+		// Older embedders keep their existing literal-ID list behavior. New
+		// hosts provide the batch port, shared with the counts endpoint.
+		if _, ok := s.deps.Catalog.(CourseCountCatalog); ok && !mine {
+			refs, e := s.courseReferences(ctx, p, f.SchoolID, []string{f.CourseID})
+			if e != nil {
+				return out, e
+			}
+			f.CourseIDs = refs[f.CourseID]
+		}
+	}
 	var records []Record
 	e := s.repo.Transaction(ctx, func(tx Transaction) error {
 		if len(f.Attributes) > 0 {
@@ -206,12 +221,20 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 				return e
 			}
 		}
+		port, ok := tx.(BrowseTransaction)
+		if !ok {
+			return ErrUnavailable
+		}
 		var e error
-		records, e = tx.List(f)
+		records, out.Total, e = port.Browse(f)
 		return e
 	})
 	if e != nil {
 		return out, e
+	}
+	more := len(records) > f.Limit
+	if more {
+		records = records[:f.Limit]
 	}
 	for _, record := range records {
 		v, e := s.getRecord(ctx, p, record)
@@ -223,8 +246,11 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 		}
 		out.Items = append(out.Items, v)
 	}
-	if len(records) == f.Limit {
-		out.NextCursor = records[len(records)-1].ID
+	if more {
+		out.NextCursor, e = encodeBrowseCursor(f, records[len(records)-1])
+		if e != nil {
+			return Page{}, e
+		}
 	}
 	return out, nil
 }

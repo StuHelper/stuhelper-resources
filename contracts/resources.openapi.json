@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "StuHelper Resources API",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "description": "Configurable resource taxonomy, reviewed publications, access grants and authorized packages. No provider identities or credentials."
   },
   "paths": {
@@ -391,7 +391,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 1024
             }
           },
           {
@@ -400,6 +400,30 @@
             "schema": {
               "type": "string",
               "maxLength": 2000
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "id",
+                "newest"
+              ],
+              "default": "id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "file_type",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]{1,12}$",
+              "maxLength": 12,
+              "description": "Lowercase filename extension without the dot."
             }
           }
         ],
@@ -610,7 +634,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 1024
             }
           },
           {
@@ -619,6 +643,30 @@
             "schema": {
               "type": "string",
               "maxLength": 2000
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "id",
+                "newest"
+              ],
+              "default": "id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "file_type",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]{1,12}$",
+              "maxLength": 12,
+              "description": "Lowercase filename extension without the dot."
             }
           }
         ],
@@ -1489,16 +1537,6 @@
               }
             }
           },
-          "503": {
-            "description": "Dependency unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
           "429": {
             "description": "请求过于频繁，稍后重试",
             "content": {
@@ -1510,6 +1548,16 @@
                       "type": "string"
                     }
                   }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2617,7 +2665,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "maxLength": 2000
+              "maxLength": 1024
             }
           },
           {
@@ -2626,6 +2674,30 @@
             "schema": {
               "type": "string",
               "maxLength": 2000
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "id",
+                "newest"
+              ],
+              "default": "id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "file_type",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]{1,12}$",
+              "maxLength": 12,
+              "description": "Lowercase filename extension without the dot."
             }
           }
         ],
@@ -3647,6 +3719,239 @@
           }
         }
       }
+    },
+    "/api/v1/resources/counts": {
+      "get": {
+        "operationId": "GetResourceCounts",
+        "summary": "ListResources",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "in": "query",
+            "name": "course_ids",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 12899,
+              "description": "At most 100 readable course IDs; duplicates coalesce. Omit for only the total."
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "file_type",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceCounts"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revision, policy or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Configured resource limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache."
+      }
+    },
+    "/api/v1/resources/me/summary": {
+      "get": {
+        "operationId": "GetOwnResourceSummary",
+        "summary": "ListOwnResources",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnResourceSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revision, policy or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Configured resource limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted."
+      }
     }
   },
   "components": {
@@ -4334,11 +4639,17 @@
           "next_cursor": {
             "type": "string",
             "maxLength": 128
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total matching current-visible records before cursor pagination."
           }
         },
         "required": [
           "items",
-          "next_cursor"
+          "next_cursor",
+          "total"
         ]
       },
       "CategoryPage": {
@@ -5002,6 +5313,62 @@
             "maxLength": 128
           }
         }
+      },
+      "CourseResourceCount": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "course_id": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "course_id",
+          "count"
+        ]
+      },
+      "ResourceCounts": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "courses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CourseResourceCount"
+            },
+            "maxItems": 100
+          }
+        },
+        "required": [
+          "total",
+          "courses"
+        ]
+      },
+      "OwnResourceSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "resource_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "published_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "resource_count",
+          "published_count"
+        ]
       }
     },
     "securitySchemes": {

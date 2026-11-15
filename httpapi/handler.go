@@ -43,6 +43,23 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 	}
 	h := &handler{s: s, auth: auth, contract: router}
 	m := http.NewServeMux()
+	h.mount(m, "GET /api/v1/resources/me/summary", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		if len(r.URL.Query()) != 0 {
+			return nil, resources.ErrInput
+		}
+		return s.OwnSummary(r.Context(), p)
+	})
+	h.mount(m, "GET /api/v1/resources/counts", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		f, err := filter(r)
+		if err != nil {
+			return nil, err
+		}
+		var ids []string
+		if r.URL.Query().Has("course_ids") {
+			ids = strings.Split(r.URL.Query().Get("course_ids"), ",")
+		}
+		return s.Counts(r.Context(), p, f, ids)
+	})
 	h.mount(m, "GET /api/v1/resources/coverage/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.GetCoverage(r.Context(), p, r.PathValue("id"))
 	})
@@ -280,7 +297,7 @@ func boolean(r *http.Request, key string) (bool, error) {
 func filter(r *http.Request) (resources.Filter, error) {
 	q := r.URL.Query()
 	n, e := limit(r)
-	out := resources.Filter{SchoolID: q.Get("school_id"), CourseID: q.Get("course_id"), CategoryID: q.Get("category_id"), DirectoryID: q.Get("directory_id"), Query: q.Get("query"), After: q.Get("after"), Limit: n}
+	out := resources.Filter{SchoolID: q.Get("school_id"), CourseID: q.Get("course_id"), CategoryID: q.Get("category_id"), DirectoryID: q.Get("directory_id"), Query: q.Get("query"), After: q.Get("after"), Limit: n, Sort: q.Get("sort"), FileType: q.Get("file_type")}
 	if e != nil {
 		return out, e
 	}
