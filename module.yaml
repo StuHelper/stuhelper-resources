@@ -1,5 +1,5 @@
 id: resources
-version: 0.5.0
+version: 0.6.0
 kind: module
 api: 1
 critical: false
@@ -41,6 +41,7 @@ capability_requires:
 specifications:
   - docs/spec/account-query.md
   - docs/spec/resources.md
+  - docs/spec/ui-data.md
 scenario_tests:
   IQ-02:
     - postgres/query_write_test.go#TestAccountQueryRepositoryWritesRefreshTime
@@ -108,3 +109,7 @@ scenario_tests:
   RS-28:
     - entitlements_test.go#TestConcurrentBillingDeliveryAndEventSchemas
     - entitlements_test.go#TestEntitlementRejectedAtomicInboxAndValidation
+  RES-UI-01:
+    - ui_backend_test.go#TestUIResourceVisibleCountsNewestTypesAndOwnerSummary
+  RES-UI-02:
+    - ui_backend_test.go#TestUIResourceAggregateHTTPAuthorizationAndBoundaries
