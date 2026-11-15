@@ -2,9 +2,11 @@ package resources_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -110,5 +112,49 @@ func TestUIResourceAggregateHTTPAuthorizationAndBoundaries(t *testing.T) {
 				t.Fatal("query forged owner", w.Body.String())
 			}
 		}
+	}
+}
+
+func TestResourceListCursorKeepsExistingLengthLimit(t *testing.T) {
+	h := uiResourceFixture(t)
+	first := h.publish(t, h.draft(t, "cursor-older", "public"))
+	h.clock.Add(time.Hour)
+	second := h.publish(t, h.draft(t, "cursor-newer", "public"))
+	handler, err := httpapi.New(h.s, authenticator{})
+	must(t, err)
+	for _, tc := range []struct{ path, token string }{
+		{"/api/v1/resources", "Bearer reader"},
+		{"/api/v1/resources/manage", "Bearer global"},
+		{"/api/v1/resources/me", "Bearer owner"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			query := url.Values{"school_id": {"school"}, "sort": {"newest"}, "limit": {"1"}}
+			get := func() *httptest.ResponseRecorder {
+				req := httptest.NewRequest("GET", tc.path+"?"+query.Encode(), nil)
+				req.Header.Set("Authorization", tc.token)
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, req)
+				return w
+			}
+			w := get()
+			var page r.Page
+			if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &page) != nil || len(page.Items) != 1 || page.Items[0].ID != second.ID || page.NextCursor == "" {
+				t.Fatalf("first page: %d %s", w.Code, w.Body.String())
+			}
+			data, err := base64.RawURLEncoding.DecodeString(page.NextCursor)
+			must(t, err)
+			// JSON whitespace preserves the cursor scope and position while exercising the
+			// existing 2000-character HTTP limit with a valid newest cursor.
+			data = append(data, []byte(strings.Repeat(" ", 1500-len(data)))...)
+			query.Set("after", base64.RawURLEncoding.EncodeToString(data))
+			w = get()
+			if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &page) != nil || len(page.Items) != 1 || page.Items[0].ID != first.ID || page.NextCursor != "" || page.Total != 2 {
+				t.Fatalf("2000-character cursor: %d %s", w.Code, w.Body.String())
+			}
+			query.Set("after", base64.RawURLEncoding.EncodeToString(append(data, ' ')))
+			if w = get(); w.Code != 400 {
+				t.Fatalf("over-limit cursor: %d", w.Code)
+			}
+		})
 	}
 }
