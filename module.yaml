@@ -1,5 +1,5 @@
 id: resources
-version: 0.6.0
+version: 0.6.1
 kind: module
 api: 1
 critical: false
@@ -113,3 +113,5 @@ scenario_tests:
     - ui_backend_test.go#TestUIResourceVisibleCountsNewestTypesAndOwnerSummary
   RES-UI-02:
     - ui_backend_test.go#TestUIResourceAggregateHTTPAuthorizationAndBoundaries
+  RES-UI-03:
+    - ui_backend_test.go#TestResourceListCursorKeepsExistingLengthLimit

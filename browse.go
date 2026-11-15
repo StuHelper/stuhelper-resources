@@ -63,7 +63,7 @@ func prepareBrowse(f *Filter) error {
 	if f.Sort == "" {
 		f.Sort = "id"
 	}
-	if !slices.Contains([]string{"id", "newest"}, f.Sort) || !validFileType(f.FileType) || len(f.After) > 1024 {
+	if !slices.Contains([]string{"id", "newest"}, f.Sort) || !validFileType(f.FileType) || len(f.After) > 2000 {
 		return ErrInput
 	}
 	f.CursorTime, f.CursorID = nil, ""
