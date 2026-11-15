@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "StuHelper Resources API",
-    "version": "0.6.0",
+    "version": "0.6.1",
     "description": "Configurable resource taxonomy, reviewed publications, access grants and authorized packages. No provider identities or credentials."
   },
   "paths": {
@@ -391,7 +391,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "maxLength": 1024
+              "maxLength": 2000
             }
           },
           {
@@ -634,7 +634,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "maxLength": 1024
+              "maxLength": 2000
             }
           },
           {
@@ -2665,7 +2665,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "maxLength": 1024
+              "maxLength": 2000
             }
           },
           {
