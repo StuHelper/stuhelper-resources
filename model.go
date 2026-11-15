@@ -141,6 +141,7 @@ type Version struct {
 
 // Record and VersionRecord are private repository/port models, never HTTP DTOs.
 type Record struct {
+	BrowseAt    time.Time `json:"-"`
 	ID          string
 	Owner       Principal
 	SchoolID    string
@@ -178,9 +179,13 @@ type Resource struct {
 type Page struct {
 	Items      []Resource `json:"items"`
 	NextCursor string     `json:"next_cursor"`
+	Total      int64      `json:"total"`
 }
 type Filter struct {
 	SchoolID, CourseID, CategoryID, DirectoryID, Query, After, OwnerKey string
+	Sort, FileType, CursorID                                            string
+	CursorTime                                                          *time.Time
+	CourseIDs                                                           []string
 	Attributes                                                          map[string]Value
 	Limit                                                               int
 	IncludeUnpublished                                                  bool

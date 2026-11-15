@@ -410,6 +410,60 @@ func (e VersionState) Valid() bool {
 	}
 }
 
+// Defines values for ListResourcesParamsSort.
+const (
+	ListResourcesParamsSortId     ListResourcesParamsSort = "id"
+	ListResourcesParamsSortNewest ListResourcesParamsSort = "newest"
+)
+
+// Valid indicates whether the value is a known member of the ListResourcesParamsSort enum.
+func (e ListResourcesParamsSort) Valid() bool {
+	switch e {
+	case ListResourcesParamsSortId:
+		return true
+	case ListResourcesParamsSortNewest:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListManagedResourcesParamsSort.
+const (
+	ListManagedResourcesParamsSortId     ListManagedResourcesParamsSort = "id"
+	ListManagedResourcesParamsSortNewest ListManagedResourcesParamsSort = "newest"
+)
+
+// Valid indicates whether the value is a known member of the ListManagedResourcesParamsSort enum.
+func (e ListManagedResourcesParamsSort) Valid() bool {
+	switch e {
+	case ListManagedResourcesParamsSortId:
+		return true
+	case ListManagedResourcesParamsSortNewest:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListOwnResourcesParamsSort.
+const (
+	ListOwnResourcesParamsSortId     ListOwnResourcesParamsSort = "id"
+	ListOwnResourcesParamsSortNewest ListOwnResourcesParamsSort = "newest"
+)
+
+// Valid indicates whether the value is a known member of the ListOwnResourcesParamsSort enum.
+func (e ListOwnResourcesParamsSort) Valid() bool {
+	switch e {
+	case ListOwnResourcesParamsSortId:
+		return true
+	case ListOwnResourcesParamsSortNewest:
+		return true
+	default:
+		return false
+	}
+}
+
 // Associations defines model for Associations.
 type Associations struct {
 	CourseId   *string `json:"course_id,omitempty"`
@@ -469,6 +523,12 @@ type Consent struct {
 	Accepted bool   `json:"accepted"`
 	Digest   string `json:"digest"`
 	Version  string `json:"version"`
+}
+
+// CourseResourceCount defines model for CourseResourceCount.
+type CourseResourceCount struct {
+	Count    int    `json:"count"`
+	CourseId string `json:"course_id"`
 }
 
 // Coverage defines model for Coverage.
@@ -622,6 +682,12 @@ type Origin struct {
 // OriginKind defines model for Origin.Kind.
 type OriginKind string
 
+// OwnResourceSummary defines model for OwnResourceSummary.
+type OwnResourceSummary struct {
+	PublishedCount int `json:"published_count"`
+	ResourceCount  int `json:"resource_count"`
+}
+
 // Package defines model for Package.
 type Package struct {
 	ExpiresAt time.Time     `json:"expires_at"`
@@ -741,10 +807,19 @@ type ResourceState string
 // ResourceUnavailableConditions defines model for Resource.UnavailableConditions.
 type ResourceUnavailableConditions string
 
+// ResourceCounts defines model for ResourceCounts.
+type ResourceCounts struct {
+	Courses []CourseResourceCount `json:"courses"`
+	Total   int                   `json:"total"`
+}
+
 // ResourcePage defines model for ResourcePage.
 type ResourcePage struct {
 	Items      []Resource `json:"items"`
 	NextCursor string     `json:"next_cursor"`
+
+	// Total Total matching current-visible records before cursor pagination.
+	Total int `json:"total"`
 }
 
 // StateChange defines model for StateChange.
@@ -797,15 +872,20 @@ type VersionState string
 
 // ListResourcesParams defines parameters for ListResources.
 type ListResourcesParams struct {
-	SchoolId    *string `form:"school_id,omitempty" json:"school_id,omitempty"`
-	CourseId    *string `form:"course_id,omitempty" json:"course_id,omitempty"`
-	CategoryId  *string `form:"category_id,omitempty" json:"category_id,omitempty"`
-	DirectoryId *string `form:"directory_id,omitempty" json:"directory_id,omitempty"`
-	Query       *string `form:"query,omitempty" json:"query,omitempty"`
-	Attributes  *string `form:"attributes,omitempty" json:"attributes,omitempty"`
-	After       *string `form:"after,omitempty" json:"after,omitempty"`
-	Limit       *string `form:"limit,omitempty" json:"limit,omitempty"`
+	SchoolId    *string                  `form:"school_id,omitempty" json:"school_id,omitempty"`
+	CourseId    *string                  `form:"course_id,omitempty" json:"course_id,omitempty"`
+	CategoryId  *string                  `form:"category_id,omitempty" json:"category_id,omitempty"`
+	DirectoryId *string                  `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Query       *string                  `form:"query,omitempty" json:"query,omitempty"`
+	Attributes  *string                  `form:"attributes,omitempty" json:"attributes,omitempty"`
+	After       *string                  `form:"after,omitempty" json:"after,omitempty"`
+	Limit       *string                  `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort        *ListResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType    *string                  `form:"file_type,omitempty" json:"file_type,omitempty"`
 }
+
+// ListResourcesParamsSort defines parameters for ListResources.
+type ListResourcesParamsSort string
 
 // CreateDraftParams defines parameters for CreateDraft.
 type CreateDraftParams struct {
@@ -822,6 +902,15 @@ type ListCategoriesParams struct {
 // PutCategoryParams defines parameters for PutCategory.
 type PutCategoryParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// GetResourceCountsParams defines parameters for GetResourceCounts.
+type GetResourceCountsParams struct {
+	SchoolId   string  `form:"school_id" json:"school_id"`
+	CourseIds  *string `form:"course_ids,omitempty" json:"course_ids,omitempty"`
+	Query      *string `form:"query,omitempty" json:"query,omitempty"`
+	CategoryId *string `form:"category_id,omitempty" json:"category_id,omitempty"`
+	FileType   *string `form:"file_type,omitempty" json:"file_type,omitempty"`
 }
 
 // PutCoverageParams defines parameters for PutCoverage.
@@ -891,21 +980,31 @@ type SubmitResourceParams struct {
 
 // ListManagedResourcesParams defines parameters for ListManagedResources.
 type ListManagedResourcesParams struct {
-	SchoolId    *string `form:"school_id,omitempty" json:"school_id,omitempty"`
-	CourseId    *string `form:"course_id,omitempty" json:"course_id,omitempty"`
-	CategoryId  *string `form:"category_id,omitempty" json:"category_id,omitempty"`
-	DirectoryId *string `form:"directory_id,omitempty" json:"directory_id,omitempty"`
-	Query       *string `form:"query,omitempty" json:"query,omitempty"`
-	Attributes  *string `form:"attributes,omitempty" json:"attributes,omitempty"`
-	After       *string `form:"after,omitempty" json:"after,omitempty"`
-	Limit       *string `form:"limit,omitempty" json:"limit,omitempty"`
+	SchoolId    *string                         `form:"school_id,omitempty" json:"school_id,omitempty"`
+	CourseId    *string                         `form:"course_id,omitempty" json:"course_id,omitempty"`
+	CategoryId  *string                         `form:"category_id,omitempty" json:"category_id,omitempty"`
+	DirectoryId *string                         `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Query       *string                         `form:"query,omitempty" json:"query,omitempty"`
+	Attributes  *string                         `form:"attributes,omitempty" json:"attributes,omitempty"`
+	After       *string                         `form:"after,omitempty" json:"after,omitempty"`
+	Limit       *string                         `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort        *ListManagedResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType    *string                         `form:"file_type,omitempty" json:"file_type,omitempty"`
 }
+
+// ListManagedResourcesParamsSort defines parameters for ListManagedResources.
+type ListManagedResourcesParamsSort string
 
 // ListOwnResourcesParams defines parameters for ListOwnResources.
 type ListOwnResourcesParams struct {
-	After *string `form:"after,omitempty" json:"after,omitempty"`
-	Limit *string `form:"limit,omitempty" json:"limit,omitempty"`
+	After    *string                     `form:"after,omitempty" json:"after,omitempty"`
+	Limit    *string                     `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort     *ListOwnResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType *string                     `form:"file_type,omitempty" json:"file_type,omitempty"`
 }
+
+// ListOwnResourcesParamsSort defines parameters for ListOwnResources.
+type ListOwnResourcesParamsSort string
 
 // MyResourcesReferencesParams defines parameters for MyResourcesReferences.
 type MyResourcesReferencesParams struct {
@@ -1094,6 +1193,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /api/v1/resources/categories/{id} (the `PutCategory` operationId).
 	PutCategory(ctx context.Context, id string, params *PutCategoryParams, body PutCategoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetResourceCounts ListResources
+	//
+	// Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
+	//
+	// Corresponds with GET /api/v1/resources/counts (the `GetResourceCounts` operationId).
+	GetResourceCounts(ctx context.Context, params *GetResourceCountsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCoverage Read actual coverage for a billing plan ID
 	//
@@ -1288,6 +1394,13 @@ type ClientInterface interface {
 	// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
 	MyResourcesReferences(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetOwnResourceSummary ListOwnResources
+	//
+	// Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
+	//
+	// Corresponds with GET /api/v1/resources/me/summary (the `GetOwnResourceSummary` operationId).
+	GetOwnResourceSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// CreatePackageWithBody CreatePackage
 	//
 	// Takes any type of body and a specified content type.
@@ -1454,6 +1567,23 @@ func (c *Client) PutCategoryWithBody(ctx context.Context, id string, params *Put
 // Corresponds with PUT /api/v1/resources/categories/{id} (the `PutCategory` operationId).
 func (c *Client) PutCategory(ctx context.Context, id string, params *PutCategoryParams, body PutCategoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutCategoryRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetResourceCounts ListResources
+//
+// Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
+//
+// Corresponds with GET /api/v1/resources/counts (the `GetResourceCounts` operationId).
+func (c *Client) GetResourceCounts(ctx context.Context, params *GetResourceCountsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetResourceCountsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1947,6 +2077,23 @@ func (c *Client) MyResourcesReferences(ctx context.Context, params *MyResourcesR
 	return c.Client.Do(req)
 }
 
+// GetOwnResourceSummary ListOwnResources
+//
+// Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
+//
+// Corresponds with GET /api/v1/resources/me/summary (the `GetOwnResourceSummary` operationId).
+func (c *Client) GetOwnResourceSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetOwnResourceSummaryRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // CreatePackageWithBody CreatePackage
 //
 // Takes any type of body and a specified content type.
@@ -2229,6 +2376,30 @@ func NewListResourcesRequest(server string, params *ListResourcesParams) (*http.
 
 		}
 
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sort", *params.Sort, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.FileType != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "file_type", *params.FileType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -2456,6 +2627,104 @@ func NewPutCategoryRequestWithBody(server string, id string, params *PutCategory
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewGetResourceCountsRequest constructs an http.Request for the GetResourceCounts method
+func NewGetResourceCountsRequest(server string, params *GetResourceCountsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/counts")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "school_id", params.SchoolId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.CourseIds != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "course_ids", *params.CourseIds, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Query != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "query", *params.Query, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.CategoryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "category_id", *params.CategoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.FileType != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "file_type", *params.FileType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -3503,6 +3772,30 @@ func NewListManagedResourcesRequest(server string, params *ListManagedResourcesP
 
 		}
 
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sort", *params.Sort, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.FileType != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "file_type", *params.FileType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -3569,6 +3862,30 @@ func NewListOwnResourcesRequest(server string, params *ListOwnResourcesParams) (
 
 		}
 
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sort", *params.Sort, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.FileType != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "file_type", *params.FileType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -3623,6 +3940,33 @@ func NewMyResourcesReferencesRequest(server string, params *MyResourcesReference
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
 		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetOwnResourceSummaryRequest constructs an http.Request for the GetOwnResourceSummary method
+func NewGetOwnResourceSummaryRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/me/summary")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -4086,6 +4430,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /api/v1/resources/categories/{id} (the `PutCategory` operationId).
 	PutCategoryWithResponse(ctx context.Context, id string, params *PutCategoryParams, body PutCategoryJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCategoryResponse, error)
 
+	// GetResourceCountsWithResponse ListResources
+	//
+	// Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/counts (the `GetResourceCounts` operationId).
+	GetResourceCountsWithResponse(ctx context.Context, params *GetResourceCountsParams, reqEditors ...RequestEditorFn) (*GetResourceCountsResponse, error)
+
 	// GetCoverageWithResponse Read actual coverage for a billing plan ID
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -4296,6 +4649,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Returns a wrapper object for the known response body format(s).
 	MyResourcesReferencesWithResponse(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*MyResourcesReferencesResponse, error)
+
+	// GetOwnResourceSummaryWithResponse ListOwnResources
+	//
+	// Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/me/summary (the `GetOwnResourceSummary` operationId).
+	GetOwnResourceSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetOwnResourceSummaryResponse, error)
 
 	// CreatePackageWithBodyWithResponse CreatePackage
 	//
@@ -4812,6 +5174,96 @@ func (r PutCategoryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PutCategoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetResourceCountsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ResourceCounts
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetResourceCountsResponse) GetJSON200() *ResourceCounts {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetResourceCountsResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetResourceCountsResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetResourceCountsResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetResourceCountsResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r GetResourceCountsResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r GetResourceCountsResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetResourceCountsResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetResourceCountsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetResourceCountsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetResourceCountsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetResourceCountsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -6518,6 +6970,96 @@ func (r MyResourcesReferencesResponse) ContentType() string {
 	return ""
 }
 
+type GetOwnResourceSummaryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OwnResourceSummary
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetOwnResourceSummaryResponse) GetJSON200() *OwnResourceSummary {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetOwnResourceSummaryResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetOwnResourceSummaryResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetOwnResourceSummaryResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetOwnResourceSummaryResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r GetOwnResourceSummaryResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r GetOwnResourceSummaryResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetOwnResourceSummaryResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetOwnResourceSummaryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetOwnResourceSummaryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetOwnResourceSummaryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetOwnResourceSummaryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type CreatePackageResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7319,6 +7861,21 @@ func (c *ClientWithResponses) PutCategoryWithResponse(ctx context.Context, id st
 	return ParsePutCategoryResponse(rsp)
 }
 
+// GetResourceCountsWithResponse ListResources
+//
+// Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/counts (the `GetResourceCounts` operationId).
+func (c *ClientWithResponses) GetResourceCountsWithResponse(ctx context.Context, params *GetResourceCountsParams, reqEditors ...RequestEditorFn) (*GetResourceCountsResponse, error) {
+	rsp, err := c.GetResourceCounts(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetResourceCountsResponse(rsp)
+}
+
 // GetCoverageWithResponse Read actual coverage for a billing plan ID
 //
 // Returns a wrapper object for the known response body format(s).
@@ -7702,6 +8259,21 @@ func (c *ClientWithResponses) MyResourcesReferencesWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParseMyResourcesReferencesResponse(rsp)
+}
+
+// GetOwnResourceSummaryWithResponse ListOwnResources
+//
+// Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/me/summary (the `GetOwnResourceSummary` operationId).
+func (c *ClientWithResponses) GetOwnResourceSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetOwnResourceSummaryResponse, error) {
+	rsp, err := c.GetOwnResourceSummary(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetOwnResourceSummaryResponse(rsp)
 }
 
 // CreatePackageWithBodyWithResponse CreatePackage
@@ -8150,6 +8722,81 @@ func ParsePutCategoryResponse(rsp *http.Response) (*PutCategoryResponse, error) 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Category
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetResourceCountsResponse parses an HTTP response from a GetResourceCountsWithResponse call
+func ParseGetResourceCountsResponse(rsp *http.Response) (*GetResourceCountsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetResourceCountsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ResourceCounts
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9609,6 +10256,81 @@ func ParseMyResourcesReferencesResponse(rsp *http.Response) (*MyResourcesReferen
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetOwnResourceSummaryResponse parses an HTTP response from a GetOwnResourceSummaryWithResponse call
+func ParseGetOwnResourceSummaryResponse(rsp *http.Response) (*GetOwnResourceSummaryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetOwnResourceSummaryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OwnResourceSummary
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
