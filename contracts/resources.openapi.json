@@ -1861,6 +1861,15 @@
               "type": "string",
               "maxLength": 2000
             }
+          },
+          {
+            "name": "tree",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "When true (requires course_id and empty parent_id/after), returns the full course directory tree up to 500 nodes."
           }
         ],
         "responses": {
@@ -2698,6 +2707,42 @@
               "pattern": "^[a-z0-9]{1,12}$",
               "maxLength": 12,
               "description": "Lowercase filename extension without the dot."
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "published",
+                "unlisted",
+                "blocked"
+              ]
+            }
+          },
+          {
+            "name": "proposal_state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "pending",
+                "preparing",
+                "rejected"
+              ]
+            }
+          },
+          {
+            "name": "failed_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
             }
           }
         ],
@@ -3952,6 +3997,120 @@
         },
         "description": "Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted."
       }
+    },
+    "/api/v1/resources/coverage": {
+      "get": {
+        "operationId": "ListCoverage",
+        "summary": "List billing plan coverage configurations",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoveragePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revision, policy or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Configured resource limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Requires global coverage.manage permission."
+      }
     }
   },
   "components": {
@@ -4614,6 +4773,23 @@
           "unlock_reason": {
             "type": "string",
             "maxLength": 128
+          },
+          "operation_state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "working",
+              "failed"
+            ],
+            "description": "Scoped administrator view only: current background review or publication job state for the active proposal."
+          },
+          "operation_error_code": {
+            "type": "string",
+            "enum": [
+              "resources_dependency_pending",
+              "resources_dependency_failed"
+            ],
+            "description": "Scoped administrator view only: sanitized error code of the active proposal background job."
           }
         },
         "required": [
@@ -4638,7 +4814,7 @@
           },
           "next_cursor": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 2000
           },
           "total": {
             "type": "integer",
@@ -5009,7 +5185,7 @@
             "items": {
               "$ref": "#/components/schemas/Directory"
             },
-            "maxItems": 100
+            "maxItems": 500
           },
           "next_cursor": {
             "type": "string",
@@ -5368,6 +5544,27 @@
         "required": [
           "resource_count",
           "published_count"
+        ]
+      },
+      "CoveragePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Coverage"
+            },
+            "maxItems": 100
+          },
+          "next_cursor": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
         ]
       }
     },

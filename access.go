@@ -75,15 +75,45 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 	}
 	return s.getRecord(ctx, p, r)
 }
+func populateAdminOperation(tx Transaction, r Record, out *Resource) {
+	if out.Proposal == nil || (out.Proposal.State != "pending" && out.Proposal.State != "preparing") {
+		return
+	}
+	kind := "review"
+	if out.Proposal.State == "preparing" {
+		kind = "publish"
+	}
+	job, err := tx.Job(hash([]string{kind, r.ID, out.Proposal.ID, "", ""}))
+	if err != nil {
+		return
+	}
+	if job.State == "pending" || job.State == "working" || job.State == "failed" {
+		out.OperationState = job.State
+		if job.ErrorCode == "resources_dependency_pending" || job.ErrorCode == "resources_dependency_failed" {
+			out.OperationErrorCode = job.ErrorCode
+		}
+	}
+}
+
 func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resource, error) {
+	return s.getRecordForViewer(ctx, p, r, false)
+}
+
+func (s *Service) getRecordForViewer(ctx context.Context, p Principal, r Record, knownManager bool) (Resource, error) {
 	var out Resource
 	var e error
-	privileged := r.Owner == p && p.Valid()
+	isManager := knownManager
+	privileged := isManager || (r.Owner == p && p.Valid())
 	if !privileged {
 		e = s.auth(ctx, p, "manage", r.SchoolID)
-		privileged = e == nil
+		isManager = e == nil
+		privileged = isManager
 		if e != nil && !denied(e) {
 			return out, e
+		}
+	} else if !isManager && r.Owner == p && p.Valid() {
+		if s.auth(ctx, p, "manage", r.SchoolID) == nil {
+			isManager = true
 		}
 	}
 	if !privileged {
@@ -94,7 +124,14 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 			return out, ErrNotFound
 		}
 	}
-	e = s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = ownerView(tx, r, p); return e })
+	e = s.repo.Transaction(ctx, func(tx Transaction) error {
+		var err error
+		out, err = ownerView(tx, r, p)
+		if err == nil && isManager {
+			populateAdminOperation(tx, r, &out)
+		}
+		return err
+	})
 	if e != nil {
 		return out, e
 	}
@@ -160,7 +197,7 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 	copy.deps.Authority = &requestAuthority{source: s.deps.Authority, results: map[authorizationKey]error{}}
 	s = &copy
 	out := Page{Items: []Resource{}}
-	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) {
+	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) || validAdminFilters(f, admin) != nil {
 		return out, ErrInput
 	}
 	if mine && admin {
@@ -237,7 +274,7 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 		records = records[:f.Limit]
 	}
 	for _, record := range records {
-		v, e := s.getRecord(ctx, p, record)
+		v, e := s.getRecordForViewer(ctx, p, record, admin)
 		if errors.Is(e, ErrNotFound) || denied(e) {
 			continue
 		}

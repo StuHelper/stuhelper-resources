@@ -8,11 +8,13 @@ CREATE TABLE IF NOT EXISTS resources.versions (id text PRIMARY KEY, resource_id 
 CREATE TABLE IF NOT EXISTS resources.grants (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), subject_key text NOT NULL, data jsonb NOT NULL, query_changed_at timestamptz NOT NULL DEFAULT now(), UNIQUE(resource_id,subject_key));
 CREATE TABLE IF NOT EXISTS resources.directories (id text PRIMARY KEY, school_id text NOT NULL, course_id text NOT NULL, parent_id text NOT NULL, data jsonb NOT NULL);
 CREATE INDEX IF NOT EXISTS resources_directories_parent ON resources.directories(school_id,parent_id,id);
+CREATE INDEX IF NOT EXISTS resources_directories_course ON resources.directories(school_id,course_id,id);
 CREATE TABLE IF NOT EXISTS resources.packages (id text PRIMARY KEY, expires_at timestamptz NOT NULL, data jsonb NOT NULL);
 CREATE INDEX IF NOT EXISTS resources_packages_expiry ON resources.packages(expires_at);
 CREATE TABLE IF NOT EXISTS resources.requests (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), data jsonb NOT NULL);
 CREATE TABLE IF NOT EXISTS resources.jobs (id text PRIMARY KEY, state text NOT NULL, available_at timestamptz NOT NULL, lease_until timestamptz NOT NULL, data jsonb NOT NULL);
 CREATE INDEX IF NOT EXISTS resources_jobs_claim ON resources.jobs(state,available_at,lease_until);
+CREATE INDEX IF NOT EXISTS resources_jobs_resource ON resources.jobs((data->>'ResourceID'),state);
 CREATE TABLE IF NOT EXISTS resources.replays (key text PRIMARY KEY, data jsonb NOT NULL);
 CREATE TABLE IF NOT EXISTS resources.audit (id text PRIMARY KEY, data jsonb NOT NULL, reason text NOT NULL DEFAULT '', result text NOT NULL DEFAULT 'unknown' CHECK(result IN ('success','denied','failed','unknown')), recorded_xid xid8 NOT NULL DEFAULT pg_current_xact_id(), audit_actor text NOT NULL DEFAULT 'unknown', audit_target text NOT NULL DEFAULT 'unknown', audit_action text NOT NULL DEFAULT 'unknown', audit_school text NOT NULL DEFAULT '*', audit_group text NOT NULL DEFAULT '*', audit_time timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS resources.outbox(id text PRIMARY KEY, data jsonb NOT NULL, seq bigint GENERATED ALWAYS AS IDENTITY UNIQUE, sent_at timestamptz);

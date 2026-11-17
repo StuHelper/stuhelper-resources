@@ -42,9 +42,22 @@ type browseCursor struct {
 }
 
 func browseScope(f Filter) string {
-	data, _ := json.Marshal([]any{f.OwnerKey, f.IncludeUnpublished, f.SchoolID, f.CourseID, f.CategoryID, f.DirectoryID, f.Query, f.Attributes, f.Sort, f.FileType})
+	data, _ := json.Marshal([]any{f.OwnerKey, f.IncludeUnpublished, f.SchoolID, f.CourseID, f.CategoryID, f.DirectoryID, f.State, f.ProposalState, f.FailedOnly, f.Query, f.Attributes, f.Sort, f.FileType})
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+func validAdminFilters(f Filter, admin bool) error {
+	if !admin && (f.State != "" || f.ProposalState != "" || f.FailedOnly) {
+		return ErrInput
+	}
+	if f.State != "" && !slices.Contains([]string{"draft", "published", "unlisted", "blocked"}, f.State) {
+		return ErrInput
+	}
+	if f.ProposalState != "" && !slices.Contains([]string{"draft", "pending", "preparing", "rejected"}, f.ProposalState) {
+		return ErrInput
+	}
+	return nil
 }
 
 func validFileType(value string) bool {

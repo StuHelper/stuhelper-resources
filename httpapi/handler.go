@@ -60,6 +60,13 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 		}
 		return s.Counts(r.Context(), p, f, ids)
 	})
+	h.mount(m, "GET /api/v1/resources/coverage", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		n, e := limit(r)
+		if e != nil {
+			return nil, e
+		}
+		return s.ListCoverage(r.Context(), p, n, r.URL.Query().Get("after"))
+	})
 	h.mount(m, "GET /api/v1/resources/coverage/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.GetCoverage(r.Context(), p, r.PathValue("id"))
 	})
@@ -157,11 +164,21 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 		return s.PutGrant(r.Context(), p, r.PathValue("id"), r.PathValue("grant"), key(r), in)
 	})
 	h.mount(m, "GET /api/v1/resources/directories", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
-		n, e := limit(r)
+		tree, e := boolean(r, "tree")
 		if e != nil {
 			return nil, e
 		}
 		q := r.URL.Query()
+		if tree {
+			if q.Get("parent_id") != "" || q.Get("after") != "" || q.Has("limit") {
+				return nil, resources.ErrInput
+			}
+			return s.CourseDirectoryTree(r.Context(), p, q.Get("school_id"), q.Get("course_id"))
+		}
+		n, e := limit(r)
+		if e != nil {
+			return nil, e
+		}
 		return s.Directories(r.Context(), p, q.Get("school_id"), q.Get("course_id"), q.Get("parent_id"), n, q.Get("after"))
 	})
 	write[resources.DirectoryWrite](h, m, "PUT /api/v1/resources/directories/{id}", func(r *http.Request, p resources.Principal, in resources.DirectoryWrite) (any, error) {
@@ -297,9 +314,10 @@ func boolean(r *http.Request, key string) (bool, error) {
 func filter(r *http.Request) (resources.Filter, error) {
 	q := r.URL.Query()
 	n, e := limit(r)
-	out := resources.Filter{SchoolID: q.Get("school_id"), CourseID: q.Get("course_id"), CategoryID: q.Get("category_id"), DirectoryID: q.Get("directory_id"), Query: q.Get("query"), After: q.Get("after"), Limit: n, Sort: q.Get("sort"), FileType: q.Get("file_type")}
-	if e != nil {
-		return out, e
+	failedOnly, fe := boolean(r, "failed_only")
+	out := resources.Filter{SchoolID: q.Get("school_id"), CourseID: q.Get("course_id"), CategoryID: q.Get("category_id"), DirectoryID: q.Get("directory_id"), State: q.Get("state"), ProposalState: q.Get("proposal_state"), FailedOnly: failedOnly, Query: q.Get("query"), After: q.Get("after"), Limit: n, Sort: q.Get("sort"), FileType: q.Get("file_type")}
+	if e != nil || fe != nil {
+		return out, resources.ErrInput
 	}
 	if raw := q.Get("attributes"); raw != "" {
 		if len(raw) > 16000 || json.Unmarshal([]byte(raw), &out.Attributes) != nil {

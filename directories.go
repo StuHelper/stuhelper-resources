@@ -99,6 +99,81 @@ func directoryDepth(tx Transaction, school, id string, seen map[string]bool, bud
 	}
 	return deepest, nil
 }
+
+type CourseTreeTransaction interface {
+	CourseDirectories(school, course string, limit int) ([]Directory, error)
+}
+
+func (s *Service) CourseDirectoryTree(ctx context.Context, p Principal, school, course string) (DirectoryPage, error) {
+	out := DirectoryPage{Items: []Directory{}}
+	if !validID(school) || !validID(course) {
+		return out, ErrInput
+	}
+	isManager := false
+	if e := s.auth(ctx, p, "directories.manage", school); e == nil {
+		isManager = true
+	} else if !denied(e) {
+		return out, e
+	} else if e = s.auth(ctx, p, "discover", school); e != nil {
+		return out, e
+	}
+	var all []Directory
+	e := s.repo.Transaction(ctx, func(tx Transaction) error {
+		port, ok := tx.(CourseTreeTransaction)
+		if !ok {
+			return ErrUnavailable
+		}
+		var err error
+		all, err = port.CourseDirectories(school, course, 501)
+		return err
+	})
+	if e != nil {
+		return out, e
+	}
+	if len(all) > 500 {
+		return out, ErrCapacity
+	}
+	byID := make(map[string]Directory, len(all))
+	children := make(map[string][]Directory, len(all))
+	for _, d := range all {
+		byID[d.ID] = d
+	}
+	var roots []Directory
+	for _, d := range all {
+		if !isManager && !d.Enabled {
+			continue
+		}
+		if d.ParentID == "" {
+			roots = append(roots, d)
+			continue
+		}
+		parent, inCourse := byID[d.ParentID]
+		if !inCourse {
+			if isManager {
+				roots = append(roots, d)
+			}
+			continue
+		}
+		if !isManager && !parent.Enabled {
+			continue
+		}
+		children[d.ParentID] = append(children[d.ParentID], d)
+	}
+	queue := roots
+	seen := make(map[string]bool, len(all))
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+		if seen[curr.ID] {
+			continue
+		}
+		seen[curr.ID] = true
+		out.Items = append(out.Items, curr)
+		queue = append(queue, children[curr.ID]...)
+	}
+	return out, nil
+}
+
 func (s *Service) Directories(ctx context.Context, p Principal, school, course, parent string, n int, after string) (DirectoryPage, error) {
 	out := DirectoryPage{Items: []Directory{}}
 	if !validID(school) || !optionalID(course) || !optionalID(parent) || !optionalID(after) || n < 1 || n > 100 {

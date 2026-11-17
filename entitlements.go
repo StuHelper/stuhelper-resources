@@ -21,6 +21,13 @@ type Coverage struct {
 	Revision int64          `json:"revision"`
 	Rules    []CoverageRule `json:"rules"`
 }
+type CoveragePage struct {
+	Items      []Coverage `json:"items"`
+	NextCursor string     `json:"next_cursor"`
+}
+type CoverageListTransaction interface {
+	Coverages(int, string) ([]Coverage, error)
+}
 type PurchaseSource struct {
 	OrderID    string    `json:"order_id"`
 	Owner      Principal `json:"owner"`
@@ -40,6 +47,35 @@ type UnlockDecision struct {
 	Reason   string `json:"reason"`
 }
 
+func (s *Service) ListCoverage(ctx context.Context, p Principal, limit int, after string) (CoveragePage, error) {
+	out := CoveragePage{Items: []Coverage{}}
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if limit < 1 || limit > 100 || !optionalID(after) {
+		return out, ErrInput
+	}
+	if e := s.auth(ctx, p, "coverage.manage", ""); e != nil {
+		return out, e
+	}
+	e := s.repo.Transaction(ctx, func(tx Transaction) error {
+		port, ok := tx.(CoverageListTransaction)
+		if !ok {
+			return ErrUnavailable
+		}
+		rows, err := port.Coverages(limit+1, after)
+		if err != nil {
+			return err
+		}
+		if len(rows) > limit {
+			out.NextCursor = rows[limit-1].PlanID
+			rows = rows[:limit]
+		}
+		out.Items = rows
+		return nil
+	})
+	return out, e
+}
 func (s *Service) GetCoverage(ctx context.Context, p Principal, id string) (Coverage, error) {
 	var out Coverage
 	if !validID(id) {

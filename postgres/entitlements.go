@@ -8,6 +8,9 @@ import (
 func (t *transaction) Coverage(id string) (m.Coverage, error) {
 	return read[m.Coverage](t, `SELECT data FROM resources.coverage WHERE id=$1`, id)
 }
+func (t *transaction) Coverages(limit int, after string) ([]m.Coverage, error) {
+	return list[m.Coverage](t, `SELECT data FROM resources.coverage WHERE id COLLATE "C">$1 COLLATE "C" ORDER BY id COLLATE "C" LIMIT $2`, after, limit)
+}
 func (t *transaction) SaveCoverage(v m.Coverage) error {
 	return t.save(`INSERT INTO resources.coverage(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=excluded.data`, v, v.PlanID)
 }

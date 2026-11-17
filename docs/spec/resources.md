@@ -1,7 +1,7 @@
 ---
 type: spec
 status: Accepted
-updated: 2026-11-10
+updated: 2026-11-18
 ---
 
 # 资料分类、发布与交付
@@ -31,6 +31,10 @@ updated: 2026-11-10
 ## 目录与下载包
 
 目录归属学校，可以进一步关联课程。管理员调整父目录时检查循环、学校与课程范围和子树深度。层级最多十六，单次遍历最多一千目录，每个目录最多一百子目录；超限返回明确错误。
+
+GET /api/v1/resources/directories 在指定 course_id 时支持 tree=true 单次返回整棵课程目录树（最多 500 个节点，超限返回 413），普通准入用户仅可见启用目录子树，目录管理员可见全部节点。
+
+管理列表 GET /api/v1/resources/manage 支持按 state、proposal_state 与 failed_only 筛选，并在管理视角返回脱敏的后台任务状态 operation_state 与错误码 operation_error_code。
 
 资料包按当前权限选择文件，忽略无权访问的资料，不在清单中列出缺项。按文件数与字节上限拆成多个包，保存文件名、大小与实际包清单。清单读取和每包下载再次检查权限与当前版本，变更后要求重新生成。
 
@@ -145,6 +149,8 @@ postgres.Repository.DiscoverySnapshot(ctx, cursor, limit) 供受信重建任务�
 
 GET /api/v1/resources/coverage/{id} 读取 billing 套餐 ID 对应的实际资料范围。PUT 同路径使用 Idempotency-Key、revision 和 coverage.manage 全站权限替换配置。空 rules 表示无覆盖，未配置返回 not_found。
 
+GET /api/v1/resources/coverage 在 coverage.manage 全站权限下按套餐 ID 字节序分页列出已配置的覆盖规则。
+
 每套覆盖最多 100 条规则。规则之间取并集，每条规则内 school_id 必填，directory_id 与 category_id 可选且同时匹配。目录精确匹配，不包含子目录；目录必须属于指定学校。配置更新后下一次访问立即生效。
 
 会员投影按 owner、plan_id 保存，访问时检查 valid_from <= 当前时间 < valid_until。到期无需清理任务。单独授权、会员与各 order_id 的购买来源分别撤销。普通下架仅保留已购交付，停用拒绝全部交付。
@@ -187,3 +193,4 @@ billing 文件是本仓消费方约束，已按 P7a 当前 Schema 核对 owner �
 | RS-06 | 会员仅按当前配置范围生效，覆盖修改立即生效 |
 | RS-15 | 会员到期即时失效，旧修订不恢复已退款权益 |
 | RS-28 | 下架与停用拒绝 paid，outbox 失败回滚权益与 inbox，重试恢复 |
+| RES-22 | 管理列表按资源状态、提案状态与失败任务筛选并展示脱敏任务状态，套餐覆盖分页列表与课程目录树按权限返回 |
