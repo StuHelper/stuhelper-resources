@@ -35,6 +35,24 @@ func (e DecisionAction) Valid() bool {
 	}
 }
 
+// Defines values for DuplicateResourceAccess.
+const (
+	DuplicateResourceAccessPublic     DuplicateResourceAccess = "public"
+	DuplicateResourceAccessRestricted DuplicateResourceAccess = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the DuplicateResourceAccess enum.
+func (e DuplicateResourceAccess) Valid() bool {
+	switch e {
+	case DuplicateResourceAccessPublic:
+		return true
+	case DuplicateResourceAccessRestricted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FieldKind.
 const (
 	Choice  FieldKind = "choice"
@@ -590,6 +608,27 @@ type DraftWrite struct {
 	Revision int64    `json:"revision"`
 }
 
+// DuplicateResource defines model for DuplicateResource.
+type DuplicateResource struct {
+	Access     DuplicateResourceAccess `json:"access"`
+	CategoryId string                  `json:"category_id"`
+	CreatedAt  time.Time               `json:"created_at"`
+	Filename   string                  `json:"filename"`
+	Id         string                  `json:"id"`
+	Owned      bool                    `json:"owned"`
+	Size       int64                   `json:"size"`
+	Title      string                  `json:"title"`
+	VersionId  string                  `json:"version_id"`
+}
+
+// DuplicateResourceAccess defines model for DuplicateResource.Access.
+type DuplicateResourceAccess string
+
+// DuplicateResourceList defines model for DuplicateResourceList.
+type DuplicateResourceList struct {
+	Items []DuplicateResource `json:"items"`
+}
+
 // Field defines model for Field.
 type Field struct {
 	Filterable bool              `json:"filterable"`
@@ -677,6 +716,9 @@ type Origin struct {
 	Kind    OriginKind `json:"kind"`
 	License *string    `json:"license,omitempty"`
 	Source  *string    `json:"source,omitempty"`
+
+	// VerifiedInstructor Optional opt-in for verified course instructors; server-verified against current Authority and Catalog facts.
+	VerifiedInstructor *bool `json:"verified_instructor,omitempty"`
 }
 
 // OriginKind defines model for Origin.Kind.
@@ -865,6 +907,9 @@ type Version struct {
 	Metadata  Metadata     `json:"metadata"`
 	Number    int64        `json:"number"`
 	State     VersionState `json:"state"`
+
+	// VerifiedInstructor Server-verified snapshot indicating the version was submitted by a verified instructor of the course.
+	VerifiedInstructor *bool `json:"verified_instructor,omitempty"`
 }
 
 // VersionState defines model for Version.State.
@@ -930,6 +975,13 @@ type ListDirectoriesParams struct {
 // PutDirectoryParams defines parameters for PutDirectory.
 type PutDirectoryParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// FindDuplicateResourcesParams defines parameters for FindDuplicateResources.
+type FindDuplicateResourcesParams struct {
+	SchoolId string `form:"school_id" json:"school_id"`
+	CourseId string `form:"course_id" json:"course_id"`
+	Sha256   string `form:"sha256" json:"sha256"`
 }
 
 // UpdateDraftParams defines parameters for UpdateDraft.
@@ -1240,6 +1292,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /api/v1/resources/directories/{id} (the `PutDirectory` operationId).
 	PutDirectory(ctx context.Context, id string, params *PutDirectoryParams, body PutDirectoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// FindDuplicateResources Find published resources with identical file digest in the same course
+	//
+	// Checks published resources in the target course (including merged course aliases) matching the SHA-256 file digest. Requires both discover and upload permissions in the school.
+	//
+	// Corresponds with GET /api/v1/resources/duplicates (the `FindDuplicateResources` operationId).
+	FindDuplicateResources(ctx context.Context, params *FindDuplicateResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetResource GetResource
 	//
@@ -1684,6 +1743,23 @@ func (c *Client) PutDirectoryWithBody(ctx context.Context, id string, params *Pu
 // Corresponds with PUT /api/v1/resources/directories/{id} (the `PutDirectory` operationId).
 func (c *Client) PutDirectory(ctx context.Context, id string, params *PutDirectoryParams, body PutDirectoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutDirectoryRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// FindDuplicateResources Find published resources with identical file digest in the same course
+//
+// Checks published resources in the target course (including merged course aliases) matching the SHA-256 file digest. Requires both discover and upload permissions in the school.
+//
+// Corresponds with GET /api/v1/resources/duplicates (the `FindDuplicateResources` operationId).
+func (c *Client) FindDuplicateResources(ctx context.Context, params *FindDuplicateResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFindDuplicateResourcesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2981,6 +3057,72 @@ func NewPutDirectoryRequestWithBody(server string, id string, params *PutDirecto
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewFindDuplicateResourcesRequest constructs an http.Request for the FindDuplicateResources method
+func NewFindDuplicateResourcesRequest(server string, params *FindDuplicateResourcesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/duplicates")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "school_id", params.SchoolId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "course_id", params.CourseId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sha256", params.Sha256, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -4483,6 +4625,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /api/v1/resources/directories/{id} (the `PutDirectory` operationId).
 	PutDirectoryWithResponse(ctx context.Context, id string, params *PutDirectoryParams, body PutDirectoryJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDirectoryResponse, error)
 
+	// FindDuplicateResourcesWithResponse Find published resources with identical file digest in the same course
+	//
+	// Checks published resources in the target course (including merged course aliases) matching the SHA-256 file digest. Requires both discover and upload permissions in the school.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/duplicates (the `FindDuplicateResources` operationId).
+	FindDuplicateResourcesWithResponse(ctx context.Context, params *FindDuplicateResourcesParams, reqEditors ...RequestEditorFn) (*FindDuplicateResourcesResponse, error)
+
 	// GetResourceWithResponse GetResource
 	//
 	// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
@@ -5624,6 +5775,96 @@ func (r PutDirectoryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PutDirectoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type FindDuplicateResourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DuplicateResourceList
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON200() *DuplicateResourceList {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r FindDuplicateResourcesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r FindDuplicateResourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FindDuplicateResourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r FindDuplicateResourcesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -7956,6 +8197,21 @@ func (c *ClientWithResponses) PutDirectoryWithResponse(ctx context.Context, id s
 	return ParsePutDirectoryResponse(rsp)
 }
 
+// FindDuplicateResourcesWithResponse Find published resources with identical file digest in the same course
+//
+// Checks published resources in the target course (including merged course aliases) matching the SHA-256 file digest. Requires both discover and upload permissions in the school.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/duplicates (the `FindDuplicateResources` operationId).
+func (c *ClientWithResponses) FindDuplicateResourcesWithResponse(ctx context.Context, params *FindDuplicateResourcesParams, reqEditors ...RequestEditorFn) (*FindDuplicateResourcesResponse, error) {
+	rsp, err := c.FindDuplicateResources(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFindDuplicateResourcesResponse(rsp)
+}
+
 // GetResourceWithResponse GetResource
 //
 // Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
@@ -9097,6 +9353,81 @@ func ParsePutDirectoryResponse(rsp *http.Response) (*PutDirectoryResponse, error
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Directory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseFindDuplicateResourcesResponse parses an HTTP response from a FindDuplicateResourcesWithResponse call
+func ParseFindDuplicateResourcesResponse(rsp *http.Response) (*FindDuplicateResourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FindDuplicateResourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DuplicateResourceList
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

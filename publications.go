@@ -6,6 +6,78 @@ import (
 	"slices"
 )
 
+type DuplicateTransaction interface {
+	DuplicateResources(school string, courseIDs []string, sha256, ownerKey string, limit int) ([]DuplicateResource, error)
+}
+type OwnerClosureTransaction interface {
+	IsClosedOwner(Principal) (bool, error)
+}
+
+func (s *Service) verifyInstructor(ctx context.Context, p Principal, a Associations) error {
+	if e := s.auth(ctx, p, "upload.instructor", a.SchoolID); e != nil {
+		return e
+	}
+	port, ok := s.deps.Catalog.(InstructorCatalog)
+	if !ok {
+		return ErrUnavailable
+	}
+	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+	defer cancel()
+	if e := port.VerifyCourseInstructor(work, p, a); e != nil {
+		if errors.Is(e, ErrDenied) || errors.Is(e, ErrInput) || errors.Is(e, ErrNotFound) {
+			return ErrDenied
+		}
+		return ErrUnavailable
+	}
+	return nil
+}
+
+func (s *Service) FindDuplicates(ctx context.Context, p Principal, schoolID, courseID, sha256 string) (DuplicateResourceList, error) {
+	out := DuplicateResourceList{Items: []DuplicateResource{}}
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(schoolID) || !validID(courseID) || !digestPattern.MatchString(sha256) {
+		return out, ErrInput
+	}
+	if e := s.auth(ctx, p, "discover", schoolID); e != nil {
+		return out, e
+	}
+	if e := s.auth(ctx, p, "upload", schoolID); e != nil {
+		return out, e
+	}
+	courseIDs := []string{courseID}
+	if _, ok := s.deps.Catalog.(CourseCountCatalog); ok {
+		refs, e := s.courseReferences(ctx, p, schoolID, []string{courseID})
+		if e != nil {
+			return out, e
+		}
+		courseIDs = refs[courseID]
+	} else {
+		work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+		defer cancel()
+		if e := s.deps.Catalog.Validate(work, Associations{SchoolID: schoolID, CourseID: courseID}); e != nil {
+			if errors.Is(e, ErrInput) || errors.Is(e, ErrNotFound) {
+				return out, ErrInput
+			}
+			if errors.Is(e, ErrDenied) {
+				return out, ErrDenied
+			}
+			return out, ErrUnavailable
+		}
+	}
+	e := s.repo.Transaction(ctx, func(tx Transaction) error {
+		port, ok := tx.(DuplicateTransaction)
+		if !ok {
+			return ErrUnavailable
+		}
+		var err error
+		out.Items, err = port.DuplicateResources(schoolID, courseIDs, sha256, p.Key(), 20)
+		return err
+	})
+	return out, e
+}
+
 func (s *Service) validateDraft(ctx context.Context, m Metadata) error {
 	if e := validateMetadata(m, s.cfg.Terms); e != nil {
 		return e
@@ -43,6 +115,11 @@ func (s *Service) CreateDraft(ctx context.Context, p Principal, key string, in D
 	}
 	if e := s.validateDraft(ctx, in.Metadata); e != nil {
 		return out, e
+	}
+	if in.Metadata.Origin.VerifiedInstructor {
+		if e := s.verifyInstructor(ctx, p, in.Metadata.Associations); e != nil {
+			return out, e
+		}
 	}
 	e := s.mutation(ctx, p, "upload", in.Metadata.Associations.SchoolID, key, "", in, func(tx Transaction) (any, error) {
 		count, _, _, e := tx.Counts()
@@ -92,6 +169,14 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 	}
 	if e = s.validateDraft(ctx, in.Metadata); e != nil {
 		return out, e
+	}
+	if in.Metadata.Origin.VerifiedInstructor {
+		if r.Owner != p {
+			return out, ErrDenied
+		}
+		if e = s.verifyInstructor(ctx, p, in.Metadata.Associations); e != nil {
+			return out, e
+		}
 	}
 	action := "upload"
 	if r.Owner != p {
@@ -256,6 +341,30 @@ func ownerView(tx Transaction, r Record, p Principal) (Resource, error) {
 		}
 		out.Proposal = &v.Version
 	}
+	hasInstructorFlag := (out.Current != nil && (out.Current.VerifiedInstructor || out.Current.Metadata.Origin.VerifiedInstructor)) ||
+		(out.Proposal != nil && (out.Proposal.VerifiedInstructor || out.Proposal.Metadata.Origin.VerifiedInstructor))
+	if hasInstructorFlag {
+		if port, ok := tx.(OwnerClosureTransaction); ok {
+			closed, e := port.IsClosedOwner(r.Owner)
+			if e != nil {
+				return out, e
+			}
+			if closed {
+				if out.Current != nil {
+					curr := *out.Current
+					curr.VerifiedInstructor = false
+					curr.Metadata.Origin.VerifiedInstructor = false
+					out.Current = &curr
+				}
+				if out.Proposal != nil {
+					prop := *out.Proposal
+					prop.VerifiedInstructor = false
+					prop.Metadata.Origin.VerifiedInstructor = false
+					out.Proposal = &prop
+				}
+			}
+		}
+	}
 	return out, nil
 }
 func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Command) (Resource, error) {
@@ -263,6 +372,20 @@ func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Co
 	r, e := s.record(ctx, id)
 	if e != nil {
 		return out, e
+	}
+	if r.ProposalID != "" {
+		pv, e := s.version(ctx, r.ProposalID)
+		if e != nil {
+			return out, e
+		}
+		if pv.Version.Metadata.Origin.VerifiedInstructor {
+			if r.Owner != p {
+				return out, ErrDenied
+			}
+			if e = s.verifyInstructor(ctx, p, pv.Version.Metadata.Associations); e != nil {
+				return out, e
+			}
+		}
 	}
 	action := "upload"
 	if r.Owner != p {
@@ -292,6 +415,10 @@ func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Co
 		if e = validateDirectory(tx, v.Version.Metadata); e != nil {
 			return nil, e
 		}
+		if v.Version.Metadata.Origin.VerifiedInstructor && r.Owner != p {
+			return nil, ErrDenied
+		}
+		v.Version.VerifiedInstructor = v.Version.Metadata.Origin.VerifiedInstructor
 		v.Version.State = "pending"
 		r.Revision++
 		if e = tx.SaveVersion(v); e != nil {

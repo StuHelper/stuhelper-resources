@@ -97,6 +97,8 @@ scenario_tests:
     - integration_test.go#TestListReusesRequestAuthorizationButRechecksNextRequest
   RES-17:
     - integration_test.go#TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting
+  RES-21:
+    - dedup_instructor_test.go#TestCourseDuplicateDigestCheckAndVerifiedInstructorAttribution
   RS-05:
     - entitlements_test.go#TestFourAccessSourceCombinations
     - entitlements_test.go#TestEntitlementSourcesCoverageExpiryRefundAndEligibility

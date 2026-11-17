@@ -49,6 +49,15 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 		}
 		return s.OwnSummary(r.Context(), p)
 	})
+	h.mount(m, "GET /api/v1/resources/duplicates", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		q := r.URL.Query()
+		for k := range q {
+			if k != "school_id" && k != "course_id" && k != "sha256" {
+				return nil, resources.ErrInput
+			}
+		}
+		return s.FindDuplicates(r.Context(), p, q.Get("school_id"), q.Get("course_id"), q.Get("sha256"))
+	})
 	h.mount(m, "GET /api/v1/resources/counts", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		f, err := filter(r)
 		if err != nil {

@@ -33,3 +33,8 @@ func (t *transaction) closedRecord(v r.Record) error {
 	}
 	return nil
 }
+func (t *transaction) IsClosedOwner(p r.Principal) (bool, error) {
+	var closed bool
+	e := t.tx.QueryRowContext(t.ctx, `SELECT EXISTS(SELECT 1 FROM resources.closed_owners WHERE owner_key=$1)`, p.Key()).Scan(&closed)
+	return closed, safe(e)
+}

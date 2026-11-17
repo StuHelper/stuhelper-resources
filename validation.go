@@ -184,6 +184,9 @@ func validateMetadata(m Metadata, terms Terms) error {
 	if a.OfferingID != "" && a.CourseID == "" {
 		return ErrInput
 	}
+	if m.Origin.VerifiedInstructor && (a.SchoolID == "" || a.CourseID == "") {
+		return ErrInput
+	}
 	o := m.Origin
 	if !text(o.Source, 2000) || !text(o.Author, 200) || !text(o.License, 4000) {
 		return ErrInput
