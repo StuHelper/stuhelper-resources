@@ -8,7 +8,11 @@ import (
 	"fmt"
 	r "github.com/StuHelper/stuhelper-resources"
 	aq "github.com/StuHelper/stuhelper-resources/accountquery"
+	"github.com/StuHelper/stuhelper-resources/httpapi"
+	"github.com/StuHelper/stuhelper-resources/sdk"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"sync"
 	"testing"
@@ -295,5 +299,116 @@ func TestPurchaseAndDownloadConditionsAreIndependent(t *testing.T) {
 	must(t, h.db.QueryRow("SELECT count(*) FROM resources.purchases WHERE id='independent' AND data->>'revoked'='false'").Scan(&n))
 	if n != 1 {
 		t.Fatal("qualification change removed purchase", n)
+	}
+}
+
+func TestOwnEntitledResourceListRetainsUnlistedPurchasesAndHonorsRevocation(t *testing.T) {
+	h := newFixture(t)
+	handler, err := httpapi.New(h.s, authenticator{})
+	must(t, err)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	client, err := sdk.NewClientWithResponses(server.URL)
+	must(t, err)
+
+	rPurchased := h.publish(t, h.draft(t, "ent-purchased", "restricted"))
+	h.clock.Add(time.Minute)
+	rGranted := h.publish(t, h.draft(t, "ent-granted", "restricted"))
+	h.clock.Add(time.Minute)
+	h.publish(t, h.draft(t, "ent-other", "restricted"))
+
+	if _, err := h.s.ListEntitled(h.ctx, r.Principal{}, r.Filter{Limit: 10}); !errors.Is(err, r.ErrUnauthenticated) {
+		t.Fatalf("expected 401, got %v", err)
+	}
+	emptyPage, err := h.s.ListEntitled(h.ctx, reader, r.Filter{Limit: 10})
+	if err != nil || emptyPage.Total != 0 || len(emptyPage.Items) != 0 {
+		t.Fatalf("expected empty entitled list, got %+v %v", emptyPage, err)
+	}
+
+	h.purchase(t, rPurchased.ID, "ent-order-1", 1, false)
+	exp := h.clock.Now().Add(10 * time.Minute)
+	grant, err := h.s.PutGrant(h.ctx, manager, rGranted.ID, "ent-grant-1", "ent-grant-key-1", r.GrantWrite{SubjectKey: reader.Key(), ExpiresAt: &exp})
+	must(t, err)
+
+	// Paginate via generated SDK with sort=newest.
+	sortNewest := sdk.ListEntitledResourcesParamsSort("newest")
+	limitOne := "1"
+	resp1, err := client.ListEntitledResourcesWithResponse(h.ctx, &sdk.ListEntitledResourcesParams{Sort: &sortNewest, Limit: &limitOne}, func(_ context.Context, req *http.Request) error {
+		req.Header.Set("Authorization", "Bearer reader")
+		return nil
+	})
+	must(t, err)
+	if resp1.StatusCode() != 200 || resp1.JSON200 == nil || resp1.JSON200.Total != 2 || len(resp1.JSON200.Items) != 1 || resp1.JSON200.Items[0].Id != rGranted.ID || resp1.JSON200.NextCursor == "" {
+		t.Fatalf("SDK page 1: status=%d body=%s", resp1.StatusCode(), resp1.Body)
+	}
+	after := resp1.JSON200.NextCursor
+	resp2, err := client.ListEntitledResourcesWithResponse(h.ctx, &sdk.ListEntitledResourcesParams{Sort: &sortNewest, Limit: &limitOne, After: &after}, func(_ context.Context, req *http.Request) error {
+		req.Header.Set("Authorization", "Bearer reader")
+		return nil
+	})
+	must(t, err)
+	if resp2.StatusCode() != 200 || resp2.JSON200 == nil || resp2.JSON200.Total != 2 || len(resp2.JSON200.Items) != 1 || resp2.JSON200.Items[0].Id != rPurchased.ID || resp2.JSON200.NextCursor != "" {
+		t.Fatalf("SDK page 2: status=%d body=%s", resp2.StatusCode(), resp2.Body)
+	}
+
+	// Ordinary unlisting retains purchased item in /me/entitlements (while hiding from public list), and excludes grant-only item.
+	rPurchased, err = h.s.SetState(h.ctx, manager, rPurchased.ID, "unlist-purchased", r.StateChange{Revision: rPurchased.Revision, State: "unlisted", Reason: "归档下架"})
+	must(t, err)
+	_, err = h.s.SetState(h.ctx, manager, rGranted.ID, "unlist-granted", r.StateChange{Revision: rGranted.Revision, State: "unlisted", Reason: "归档下架"})
+	must(t, err)
+
+	publicPage, err := h.s.List(h.ctx, reader, r.Filter{SchoolID: "school", Limit: 10}, false, false)
+	must(t, err)
+	for _, item := range publicPage.Items {
+		if item.ID == rPurchased.ID || item.ID == rGranted.ID {
+			t.Fatalf("unlisted item leaked in public list: %s", item.ID)
+		}
+	}
+
+	entitledAfterUnlist, err := h.s.ListEntitled(h.ctx, reader, r.Filter{Limit: 10})
+	if err != nil || entitledAfterUnlist.Total != 1 || len(entitledAfterUnlist.Items) != 1 || entitledAfterUnlist.Items[0].ID != rPurchased.ID || !entitledAfterUnlist.Items[0].DownloadAllowed {
+		t.Fatalf("unlisted purchased resource missing or not downloadable: %+v %v", entitledAfterUnlist, err)
+	}
+
+	// Pausing download.restricted keeps purchased item visible with DownloadAllowed=false; revoking discover blocks access.
+	h.auth.set(reader.Key()+":download.restricted", true)
+	pausedPage, err := h.s.ListEntitled(h.ctx, reader, r.Filter{Limit: 10})
+	if err != nil || pausedPage.Total != 1 || len(pausedPage.Items) != 1 || pausedPage.Items[0].DownloadAllowed {
+		t.Fatalf("paused download condition broke entitled list consistency: %+v %v", pausedPage, err)
+	}
+	h.auth.set(reader.Key()+":download.restricted", false)
+
+	h.auth.set("discover", true)
+	if _, err := h.s.ListEntitled(h.ctx, reader, r.Filter{SchoolID: "school", Limit: 10}); !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("expected discover denial with explicit school_id, got %v", err)
+	}
+	noAdmission, err := h.s.ListEntitled(h.ctx, reader, r.Filter{Limit: 10})
+	if err != nil || noAdmission.Total != 0 || len(noAdmission.Items) != 0 {
+		t.Fatalf("expected empty list without content admission, got %+v %v", noAdmission, err)
+	}
+	h.auth.set("discover", false)
+
+	// Refunding purchase or blocking resource or expiring grant excludes items.
+	_, err = h.s.SetState(h.ctx, manager, rPurchased.ID, "block-purchased", r.StateChange{Revision: rPurchased.Revision, State: "blocked", Reason: "安全问题"})
+	must(t, err)
+	afterBlock, err := h.s.ListEntitled(h.ctx, reader, r.Filter{Limit: 10})
+	if err != nil || afterBlock.Total != 0 || len(afterBlock.Items) != 0 {
+		t.Fatalf("blocked resource exposed in entitled list: %+v %v", afterBlock, err)
+	}
+
+	// Restore rGranted to published, verify grant expiry removes it.
+	rGrantedCurr, err := h.s.Get(h.ctx, manager, rGranted.ID)
+	must(t, err)
+	_, err = h.s.SetState(h.ctx, manager, rGranted.ID, "republish-granted", r.StateChange{Revision: rGrantedCurr.Revision, State: "published", Reason: "恢复上架"})
+	must(t, err)
+	withGrant, err := h.s.ListEntitled(h.ctx, reader, r.Filter{Limit: 10})
+	if err != nil || withGrant.Total != 1 || withGrant.Items[0].ID != rGranted.ID {
+		t.Fatalf("republished granted resource missing: %+v %v", withGrant, err)
+	}
+	h.clock.Add(15 * time.Minute)
+	_ = grant
+	expiredGrant, err := h.s.ListEntitled(h.ctx, reader, r.Filter{Limit: 10})
+	if err != nil || expiredGrant.Total != 0 || len(expiredGrant.Items) != 0 {
+		t.Fatalf("expired grant remained in entitled list: %+v %v", expiredGrant, err)
 	}
 }

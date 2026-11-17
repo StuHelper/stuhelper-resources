@@ -42,7 +42,7 @@ type browseCursor struct {
 }
 
 func browseScope(f Filter) string {
-	data, _ := json.Marshal([]any{f.OwnerKey, f.IncludeUnpublished, f.SchoolID, f.CourseID, f.CategoryID, f.DirectoryID, f.Query, f.Attributes, f.Sort, f.FileType})
+	data, _ := json.Marshal([]any{f.OwnerKey, f.EntitledKey, f.IncludeUnpublished, f.SchoolID, f.CourseID, f.CategoryID, f.DirectoryID, f.Query, f.Attributes, f.Sort, f.FileType})
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }

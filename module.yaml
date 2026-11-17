@@ -109,6 +109,8 @@ scenario_tests:
   RS-28:
     - entitlements_test.go#TestConcurrentBillingDeliveryAndEventSchemas
     - entitlements_test.go#TestEntitlementRejectedAtomicInboxAndValidation
+  RES-19:
+    - entitlements_test.go#TestOwnEntitledResourceListRetainsUnlistedPurchasesAndHonorsRevocation
   RES-UI-01:
     - ui_backend_test.go#TestUIResourceVisibleCountsNewestTypesAndOwnerSummary
   RES-UI-02:

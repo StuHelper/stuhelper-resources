@@ -1,7 +1,7 @@
 ---
 type: spec
 status: Accepted
-updated: 2026-11-10
+updated: 2026-11-18
 ---
 
 # 资料分类、发布与交付
@@ -149,6 +149,8 @@ GET /api/v1/resources/coverage/{id} 读取 billing 套餐 ID 对应的实际资�
 
 会员投影按 owner、plan_id 保存，访问时检查 valid_from <= 当前时间 < valid_until。到期无需清理任务。单独授权、会员与各 order_id 的购买来源分别撤销。普通下架仅保留已购交付，停用拒绝全部交付。
 
+GET /api/v1/resources/me/entitlements 按服务端认证身份分页返回本人有效购买（含普通下架资料）与未到期单独授权的非停用资料，复用请求级学校内容准入与实时下载资格检查，不接受客户端伪造主体参数。
+
 Service.UnlockEligibility(ctx, principal, resourceID) 返回 (UnlockDecision, error)。购买资格使用 resources.purchase，下载资格继续使用 resources.download.restricted。
 
 Authority 接口分别接收模块内动作 purchase 与 download.restricted，由宿主映射到 platform 动作。
@@ -187,3 +189,4 @@ billing 文件是本仓消费方约束，已按 P7a 当前 Schema 核对 owner �
 | RS-06 | 会员仅按当前配置范围生效，覆盖修改立即生效 |
 | RS-15 | 会员到期即时失效，旧修订不恢复已退款权益 |
 | RS-28 | 下架与停用拒绝 paid，outbox 失败回滚权益与 inbox，重试恢复 |
+| RES-19 | 本人已购与获授资料列表保留普通下架已购项，排除退款、到期授权、停用及无准入学校记录 |

@@ -464,6 +464,24 @@ func (e ListOwnResourcesParamsSort) Valid() bool {
 	}
 }
 
+// Defines values for ListEntitledResourcesParamsSort.
+const (
+	ListEntitledResourcesParamsSortId     ListEntitledResourcesParamsSort = "id"
+	ListEntitledResourcesParamsSortNewest ListEntitledResourcesParamsSort = "newest"
+)
+
+// Valid indicates whether the value is a known member of the ListEntitledResourcesParamsSort enum.
+func (e ListEntitledResourcesParamsSort) Valid() bool {
+	switch e {
+	case ListEntitledResourcesParamsSortId:
+		return true
+	case ListEntitledResourcesParamsSortNewest:
+		return true
+	default:
+		return false
+	}
+}
+
 // Associations defines model for Associations.
 type Associations struct {
 	CourseId   *string `json:"course_id,omitempty"`
@@ -1006,6 +1024,23 @@ type ListOwnResourcesParams struct {
 // ListOwnResourcesParamsSort defines parameters for ListOwnResources.
 type ListOwnResourcesParamsSort string
 
+// ListEntitledResourcesParams defines parameters for ListEntitledResources.
+type ListEntitledResourcesParams struct {
+	SchoolId    *string                          `form:"school_id,omitempty" json:"school_id,omitempty"`
+	CourseId    *string                          `form:"course_id,omitempty" json:"course_id,omitempty"`
+	CategoryId  *string                          `form:"category_id,omitempty" json:"category_id,omitempty"`
+	DirectoryId *string                          `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Query       *string                          `form:"query,omitempty" json:"query,omitempty"`
+	Attributes  *string                          `form:"attributes,omitempty" json:"attributes,omitempty"`
+	After       *string                          `form:"after,omitempty" json:"after,omitempty"`
+	Limit       *string                          `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort        *ListEntitledResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType    *string                          `form:"file_type,omitempty" json:"file_type,omitempty"`
+}
+
+// ListEntitledResourcesParamsSort defines parameters for ListEntitledResources.
+type ListEntitledResourcesParamsSort string
+
 // MyResourcesReferencesParams defines parameters for MyResourcesReferences.
 type MyResourcesReferencesParams struct {
 	// Ids Comma-separated IDs referenced by own records, at most 100. Any unowned ID rejects the whole batch.
@@ -1388,6 +1423,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 	ListOwnResources(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListEntitledResources List own purchased and granted resources
+	//
+	// Lists non-blocked resources unlocked by the authenticated caller through non-revoked purchases (including ordinary unlisted items) or active non-expired direct grants. Requires current content admission in each returned school.
+	//
+	// Corresponds with GET /api/v1/resources/me/entitlements (the `ListEntitledResources` operationId).
+	ListEntitledResources(ctx context.Context, params *ListEntitledResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// MyResourcesReferences performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
 	//
@@ -2052,6 +2094,23 @@ func (c *Client) ListManagedResources(ctx context.Context, params *ListManagedRe
 // Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 func (c *Client) ListOwnResources(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListOwnResourcesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListEntitledResources List own purchased and granted resources
+//
+// Lists non-blocked resources unlocked by the authenticated caller through non-revoked purchases (including ordinary unlisted items) or active non-expired direct grants. Requires current content admission in each returned school.
+//
+// Corresponds with GET /api/v1/resources/me/entitlements (the `ListEntitledResources` operationId).
+func (c *Client) ListEntitledResources(ctx context.Context, params *ListEntitledResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListEntitledResourcesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3900,6 +3959,168 @@ func NewListOwnResourcesRequest(server string, params *ListOwnResourcesParams) (
 	return req, nil
 }
 
+// NewListEntitledResourcesRequest constructs an http.Request for the ListEntitledResources method
+func NewListEntitledResourcesRequest(server string, params *ListEntitledResourcesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/me/entitlements")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.SchoolId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "school_id", *params.SchoolId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.CourseId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "course_id", *params.CourseId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.CategoryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "category_id", *params.CategoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.DirectoryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "directory_id", *params.DirectoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Query != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "query", *params.Query, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Attributes != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "attributes", *params.Attributes, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.After != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sort", *params.Sort, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.FileType != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "file_type", *params.FileType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewMyResourcesReferencesRequest constructs an http.Request for the MyResourcesReferences method
 func NewMyResourcesReferencesRequest(server string, params *MyResourcesReferencesParams) (*http.Request, error) {
 	var err error
@@ -4642,6 +4863,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 	ListOwnResourcesWithResponse(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*ListOwnResourcesResponse, error)
+
+	// ListEntitledResourcesWithResponse List own purchased and granted resources
+	//
+	// Lists non-blocked resources unlocked by the authenticated caller through non-revoked purchases (including ordinary unlisted items) or active non-expired direct grants. Requires current content admission in each returned school.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/me/entitlements (the `ListEntitledResources` operationId).
+	ListEntitledResourcesWithResponse(ctx context.Context, params *ListEntitledResourcesParams, reqEditors ...RequestEditorFn) (*ListEntitledResourcesResponse, error)
 
 	// MyResourcesReferencesWithResponse performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
 	//
@@ -6887,6 +7117,96 @@ func (r ListOwnResourcesResponse) ContentType() string {
 	return ""
 }
 
+type ListEntitledResourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ResourcePage
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON200() *ResourcePage {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r ListEntitledResourcesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListEntitledResourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListEntitledResourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListEntitledResourcesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type MyResourcesReferencesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8246,6 +8566,21 @@ func (c *ClientWithResponses) ListOwnResourcesWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseListOwnResourcesResponse(rsp)
+}
+
+// ListEntitledResourcesWithResponse List own purchased and granted resources
+//
+// Lists non-blocked resources unlocked by the authenticated caller through non-revoked purchases (including ordinary unlisted items) or active non-expired direct grants. Requires current content admission in each returned school.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/me/entitlements (the `ListEntitledResources` operationId).
+func (c *ClientWithResponses) ListEntitledResourcesWithResponse(ctx context.Context, params *ListEntitledResourcesParams, reqEditors ...RequestEditorFn) (*ListEntitledResourcesResponse, error) {
+	rsp, err := c.ListEntitledResources(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListEntitledResourcesResponse(rsp)
 }
 
 // MyResourcesReferencesWithResponse performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
@@ -10135,6 +10470,81 @@ func ParseListOwnResourcesResponse(rsp *http.Response) (*ListOwnResourcesRespons
 	}
 
 	response := &ListOwnResourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ResourcePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListEntitledResourcesResponse parses an HTTP response from a ListEntitledResourcesWithResponse call
+func ParseListEntitledResourcesResponse(rsp *http.Response) (*ListEntitledResourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListEntitledResourcesResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

@@ -76,6 +76,9 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 	return s.getRecord(ctx, p, r)
 }
 func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resource, error) {
+	return s.getRecordWithEntitlement(ctx, p, r, false)
+}
+func (s *Service) getRecordWithEntitlement(ctx context.Context, p Principal, r Record, entitledPurchaser bool) (Resource, error) {
 	var out Resource
 	var e error
 	privileged := r.Owner == p && p.Valid()
@@ -148,7 +151,7 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 		}
 	}
 	// Unlisted content is visible only to its owner, administrators or current purchasers.
-	if r.State == "unlisted" && !privileged && !out.DownloadAllowed {
+	if r.State == "unlisted" && !privileged && !out.DownloadAllowed && !entitledPurchaser {
 		return Resource{}, ErrNotFound
 	}
 	return out, nil
