@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	resources "github.com/StuHelper/stuhelper-resources"
 	"github.com/StuHelper/stuhelper-resources/contracts"
 	"github.com/getkin/kin-openapi/openapi3"
@@ -344,10 +345,15 @@ func failure(w http.ResponseWriter, e error) {
 }
 
 type stream struct {
-	w          http.ResponseWriter
-	kind, name string
-	inline     bool
-	written    bool
+	w             http.ResponseWriter
+	kind, name    string
+	etag          string
+	contentRange  string
+	contentLength int64
+	bytes         int64
+	status        int
+	inline        bool
+	written       bool
 }
 
 func (s *stream) Write(b []byte) (int, error) {
@@ -359,10 +365,111 @@ func (s *stream) Write(b []byte) (int, error) {
 			s.w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
 		}
 		s.w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": s.name}))
+		if s.etag != "" {
+			s.w.Header().Set("ETag", s.etag)
+			s.w.Header().Set("Accept-Ranges", "bytes")
+		}
+		if s.contentLength > 0 {
+			s.w.Header().Set("Content-Length", strconv.FormatInt(s.contentLength, 10))
+		}
+		if s.contentRange != "" {
+			s.w.Header().Set("Content-Range", s.contentRange)
+		}
+		if s.status != 0 && s.status != http.StatusOK {
+			s.w.WriteHeader(s.status)
+		}
 		s.written = true
 	}
-	return s.w.Write(b)
+	n, err := s.w.Write(b)
+	s.bytes += int64(n)
+	return n, err
 }
+
+func etagMatches(headerVal, sha256 string) bool {
+	raw := strings.TrimSpace(headerVal)
+	if raw == "" {
+		return false
+	}
+	if raw == "*" {
+		return true
+	}
+	target := "\"" + sha256 + "\""
+	for _, part := range strings.Split(raw, ",") {
+		tag := strings.TrimSpace(part)
+		tag = strings.TrimPrefix(tag, "W/")
+		if tag == target {
+			return true
+		}
+	}
+	return false
+}
+
+func parseByteRange(rangeHeader, ifRange, etag string, size int64) (*resources.ByteRange, bool) {
+	if rangeHeader == "" {
+		return nil, true
+	}
+	if cond := strings.TrimSpace(ifRange); cond != "" && cond != etag {
+		return nil, true
+	}
+	if !strings.HasPrefix(rangeHeader, "bytes=") {
+		return nil, true
+	}
+	spec := strings.TrimSpace(strings.TrimPrefix(rangeHeader, "bytes="))
+	if spec == "" || size <= 0 {
+		return nil, false
+	}
+	parts := strings.Split(spec, ",")
+	var parsed []resources.ByteRange
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		startStr, endStr, ok := strings.Cut(part, "-")
+		if !ok || startStr == "" && endStr == "" {
+			return nil, false
+		}
+		if startStr == "" {
+			if strings.HasPrefix(endStr, "+") || strings.HasPrefix(endStr, "-") {
+				return nil, false
+			}
+			suffix, err := strconv.ParseInt(endStr, 10, 64)
+			if err != nil || suffix <= 0 {
+				return nil, false
+			}
+			if suffix >= size {
+				parsed = append(parsed, resources.ByteRange{Offset: 0, Length: size})
+			} else {
+				parsed = append(parsed, resources.ByteRange{Offset: size - suffix, Length: suffix})
+			}
+			continue
+		}
+		if strings.HasPrefix(startStr, "+") || strings.HasPrefix(startStr, "-") {
+			return nil, false
+		}
+		start, err := strconv.ParseInt(startStr, 10, 64)
+		if err != nil || start < 0 || start >= size {
+			return nil, false
+		}
+		if endStr == "" {
+			parsed = append(parsed, resources.ByteRange{Offset: start, Length: size - start})
+			continue
+		}
+		if strings.HasPrefix(endStr, "+") || strings.HasPrefix(endStr, "-") {
+			return nil, false
+		}
+		end, err := strconv.ParseInt(endStr, 10, 64)
+		if err != nil || end < start {
+			return nil, false
+		}
+		if end >= size {
+			end = size - 1
+		}
+		parsed = append(parsed, resources.ByteRange{Offset: start, Length: end - start + 1})
+	}
+	if len(parsed) != 1 {
+		return nil, true
+	}
+	return &parsed[0], true
+}
+
 func (h *handler) download(w http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 	return h.file(w, r, p, false)
 }
@@ -380,13 +487,50 @@ func (h *handler) file(w http.ResponseWriter, r *http.Request, p resources.Princ
 		}
 		return nil, &resources.AccessFailure{Reason: resource.AccessReason, Missing: resource.MissingConditions, Unavailable: resource.UnavailableConditions, RuleVersion: resource.RuleVersion}
 	}
+	meta := *resource.Current.File
+	etag := "\"" + meta.SHA256 + "\""
+	if etagMatches(r.Header.Get("If-None-Match"), meta.SHA256) {
+		w.Header().Set("ETag", etag)
+		w.Header().Set("Accept-Ranges", "bytes")
+		if inline {
+			w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
+		}
+		w.WriteHeader(http.StatusNotModified)
+		return nil, nil
+	}
+	br, satisfiable := parseByteRange(r.Header.Get("Range"), r.Header.Get("If-Range"), etag, meta.Size)
+	if !satisfiable {
+		w.Header().Set("Content-Range", "bytes */"+strconv.FormatInt(meta.Size, 10))
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("ETag", etag)
+		writeJSON(w, http.StatusRequestedRangeNotSatisfiable, map[string]any{"code": resources.ErrInput.Error()})
+		return nil, nil
+	}
 	kind := "application/octet-stream"
 	if inline {
-		kind = resource.Current.File.ContentType
+		kind = meta.ContentType
 	}
-	out := &stream{w: w, kind: kind, name: resource.Current.File.Filename, inline: inline}
+	if br != nil {
+		end := br.Offset + br.Length - 1
+		out := &stream{
+			w:             w,
+			kind:          kind,
+			name:          meta.Filename,
+			inline:        inline,
+			etag:          etag,
+			contentLength: br.Length,
+			contentRange:  fmt.Sprintf("bytes %d-%d/%d", br.Offset, end, meta.Size),
+			status:        http.StatusPartialContent,
+		}
+		_, e = h.s.DownloadRange(r.Context(), p, resource.ID, *br, out)
+		if out.written && (e != nil || out.bytes != br.Length) {
+			panic(http.ErrAbortHandler)
+		}
+		return nil, e
+	}
+	out := &stream{w: w, kind: kind, name: meta.Filename, inline: inline, etag: etag, contentLength: meta.Size, status: http.StatusOK}
 	_, e = h.s.Download(r.Context(), p, resource.ID, out)
-	if e != nil && out.written {
+	if out.written && (e != nil || out.bytes != meta.Size) {
 		panic(http.ErrAbortHandler)
 	}
 	return nil, e

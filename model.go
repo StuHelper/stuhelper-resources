@@ -330,6 +330,10 @@ type Publication struct {
 	ResourceID, VersionID, MediaVersionID, OperationID, Access string
 	Owner                                                      Principal
 }
+type ByteRange struct {
+	Offset int64
+	Length int64
+}
 type Files interface {
 	Inspect(context.Context, Principal, string) (FileEvidence, error)
 	Publish(context.Context, Publication) (reference string, ready bool, err error)
@@ -337,6 +341,11 @@ type Files interface {
 	Download(context.Context, Principal, string, io.Writer) error
 	Archive(context.Context, Principal, []Selection, io.Writer) error
 	ReviewDownload(context.Context, Principal, string, string, io.Writer) error
+}
+
+// RangeFiles is an optional Files extension for direct byte-range delivery.
+type RangeFiles interface {
+	DownloadRange(context.Context, Principal, string, ByteRange, io.Writer) error
 }
 type ReviewSubmission struct {
 	ResourceID, VersionID, SchoolID, Title, Description string

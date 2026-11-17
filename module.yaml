@@ -91,6 +91,8 @@ scenario_tests:
     - references_test.go#TestComplaintTitleSnapshotRequiresAdmissionAtSubmission
   RES-14:
     - file_access_test.go#TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions
+  RES-20:
+    - file_access_test.go#TestPreviewAndDownloadETagConditionalAndByteRangeDelivery
   RES-15:
     - closure_test.go#TestClosedUploaderKeepsFilesAndCopyrightWithoutPublicAccountLink
   RES-16:

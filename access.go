@@ -275,6 +275,57 @@ func (s *Service) selection(ctx context.Context, p Principal, id string) (Select
 	}
 	return Selection{ResourceID: r.ID, VersionID: v.Version.ID, ReferenceID: v.ReferenceID, File: *v.Version.File}, nil
 }
+
+var errRangeStop = errors.New("range_complete")
+
+type slicingWriter struct {
+	w       io.Writer
+	skip    int64
+	remain  int64
+	written int64
+	stop    func()
+}
+
+func (s *slicingWriter) Write(p []byte) (int, error) {
+	total := len(p)
+	if s.skip > 0 {
+		if int64(len(p)) <= s.skip {
+			s.skip -= int64(len(p))
+			return total, nil
+		}
+		p = p[s.skip:]
+		s.skip = 0
+	}
+	if s.remain <= 0 {
+		if s.stop != nil {
+			s.stop()
+		}
+		return 0, errRangeStop
+	}
+	take := p
+	done := false
+	if int64(len(take)) >= s.remain {
+		take = take[:s.remain]
+		done = true
+	}
+	n, err := s.w.Write(take)
+	s.written += int64(n)
+	s.remain -= int64(n)
+	if err != nil {
+		return n, err
+	}
+	if done {
+		if s.stop != nil {
+			s.stop()
+		}
+		if len(take) == len(p) {
+			return total, nil
+		}
+		return 0, errRangeStop
+	}
+	return total, nil
+}
+
 func (s *Service) Download(ctx context.Context, p Principal, id string, w io.Writer) (File, error) {
 	selected, e := s.selection(ctx, p, id)
 	if e != nil {
@@ -283,6 +334,39 @@ func (s *Service) Download(ctx context.Context, p Principal, id string, w io.Wri
 	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
 	defer cancel()
 	e = s.deps.Files.Download(work, p, selected.ReferenceID, w)
+	return selected.File, e
+}
+func (s *Service) DownloadRange(ctx context.Context, p Principal, id string, br ByteRange, w io.Writer) (File, error) {
+	if br.Offset < 0 || br.Length < 1 {
+		return File{}, ErrInput
+	}
+	selected, e := s.selection(ctx, p, id)
+	if e != nil {
+		return File{}, e
+	}
+	if br.Offset >= selected.File.Size || br.Length > selected.File.Size-br.Offset {
+		return File{}, ErrInput
+	}
+	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+	defer cancel()
+	if rf, ok := s.deps.Files.(RangeFiles); ok {
+		lw := &slicingWriter{w: w, remain: br.Length}
+		e = rf.DownloadRange(work, p, selected.ReferenceID, br, lw)
+		if e == nil && lw.written != br.Length {
+			e = ErrUnavailable
+		}
+		return selected.File, e
+	}
+	sliceCtx, stop := context.WithCancel(work)
+	defer stop()
+	sw := &slicingWriter{w: w, skip: br.Offset, remain: br.Length, stop: stop}
+	e = s.deps.Files.Download(sliceCtx, p, selected.ReferenceID, sw)
+	if sw.written == br.Length && (e == nil || errors.Is(e, errRangeStop) || errors.Is(e, context.Canceled)) {
+		return selected.File, nil
+	}
+	if e == nil {
+		e = ErrUnavailable
+	}
 	return selected.File, e
 }
 func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in StateChange) (Resource, error) {
