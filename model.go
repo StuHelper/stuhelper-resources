@@ -394,6 +394,30 @@ type Job struct {
 	LeaseUntil, AvailableAt                                                          time.Time
 }
 
+type OperationalStats struct {
+	Records                int           `json:"records"`
+	MaxRecords             int           `json:"max_records,omitempty"`
+	RecordUtilization      float64       `json:"record_utilization,omitempty"`
+	Operations             int           `json:"operations"`
+	MaxOperations          int           `json:"max_operations,omitempty"`
+	OperationUtilization   float64       `json:"operation_utilization,omitempty"`
+	ActiveJobs             int           `json:"active_jobs"`
+	MaxJobs                int           `json:"max_jobs,omitempty"`
+	JobUtilization         float64       `json:"job_utilization,omitempty"`
+	PendingJobs            int           `json:"pending_jobs"`
+	WorkingJobs            int           `json:"working_jobs"`
+	FailedJobs             int           `json:"failed_jobs"`
+	DoneJobs               int           `json:"done_jobs"`
+	PendingOutbox          int           `json:"pending_outbox"`
+	OldestPendingOutboxAt  *time.Time    `json:"oldest_pending_outbox_at,omitempty"`
+	OldestPendingOutboxAge time.Duration `json:"oldest_pending_outbox_age,omitempty"`
+}
+
+type OperationalReader interface {
+	Ready(context.Context) error
+	OperationalStats(context.Context, time.Time) (OperationalStats, error)
+}
+
 type Repository interface {
 	Transaction(context.Context, func(Transaction) error) error
 	Claim(context.Context, string, time.Time, time.Duration) (Job, error)

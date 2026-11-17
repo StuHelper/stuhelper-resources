@@ -22,6 +22,53 @@ import (
 type Authenticator interface {
 	Authenticate(*http.Request) (resources.Principal, error)
 }
+
+type requestIDKey struct{}
+
+// WithRequestID attaches a bounded request identifier for response correlation.
+func WithRequestID(ctx context.Context, id string) context.Context {
+	if !validRequestID(id) {
+		return ctx
+	}
+	return context.WithValue(ctx, requestIDKey{}, id)
+}
+
+// RequestIDFromContext returns the validated request identifier, if present.
+func RequestIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	v, _ := ctx.Value(requestIDKey{}).(string)
+	if !validRequestID(v) {
+		return ""
+	}
+	return v
+}
+
+func validRequestID(s string) bool {
+	if len(s) < 1 || len(s) > 128 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == ':') {
+			return false
+		}
+	}
+	return true
+}
+
+func resolveRequestID(r *http.Request) string {
+	if id := RequestIDFromContext(r.Context()); id != "" {
+		return id
+	}
+	vals := r.Header.Values("X-Request-ID")
+	if len(vals) == 1 && validRequestID(vals[0]) {
+		return vals[0]
+	}
+	return ""
+}
+
 type handler struct {
 	s        *resources.Service
 	auth     Authenticator
@@ -193,12 +240,17 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 	m.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		reqID := resolveRequestID(r)
+		if reqID != "" {
+			w.Header().Set("X-Request-ID", reqID)
+			r = r.WithContext(WithRequestID(r.Context(), reqID))
+		}
 		p, e := h.auth.Authenticate(r)
 		if e != nil || !p.Valid() {
 			if errors.Is(e, resources.ErrUnavailable) {
-				failure(w, e)
+				failure(w, reqID, e)
 			} else {
-				failure(w, resources.ErrUnauthenticated)
+				failure(w, reqID, resources.ErrUnauthenticated)
 			}
 			return
 		}
@@ -213,18 +265,18 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 		defer stop()
 		r.Body = http.MaxBytesReader(w, r.Body, 128<<10)
 		if len(r.Header.Values("Idempotency-Key")) > 1 {
-			failure(w, resources.ErrInput)
+			failure(w, reqID, resources.ErrInput)
 			return
 		}
 		for _, values := range r.URL.Query() {
 			if len(values) != 1 {
-				failure(w, resources.ErrInput)
+				failure(w, reqID, resources.ErrInput)
 				return
 			}
 		}
 		route, params, err := h.contract.FindRoute(r)
 		if err != nil {
-			failure(w, resources.ErrInput)
+			failure(w, reqID, resources.ErrInput)
 			return
 		}
 		// Check absence here, including chunked requests. The validator's
@@ -233,19 +285,19 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 		if route.Operation.RequestBody == nil {
 			body, err := io.ReadAll(io.LimitReader(r.Body, 1))
 			if err != nil || len(body) != 0 {
-				failure(w, resources.ErrInput)
+				failure(w, reqID, resources.ErrInput)
 				return
 			}
 		}
 		// Authentication already succeeded above. This validates the contract's
 		// required fields, nested shapes and limits against the same request body.
 		if err = openapi3filter.ValidateRequest(ctx, &openapi3filter.RequestValidationInput{Request: r, PathParams: params, Route: route, Options: &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc, SkipSettingDefaults: true}}); err != nil {
-			failure(w, resources.ErrInput)
+			failure(w, reqID, resources.ErrInput)
 			return
 		}
 		out, e := run(w, r, p)
 		if e != nil {
-			failure(w, e)
+			failure(w, reqID, e)
 			return
 		}
 		if out != nil {
@@ -315,7 +367,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
-func failure(w http.ResponseWriter, e error) {
+func failure(w http.ResponseWriter, reqID string, e error) {
 	status, code := 503, resources.ErrUnavailable.Error()
 	for _, item := range []struct {
 		err    error
@@ -327,6 +379,9 @@ func failure(w http.ResponseWriter, e error) {
 		}
 	}
 	payload := map[string]any{"code": code}
+	if reqID != "" {
+		payload["request_id"] = reqID
+	}
 	var detail *resources.AccessFailure
 	if errors.As(e, &detail) {
 		payload["access_reason"] = detail.Reason

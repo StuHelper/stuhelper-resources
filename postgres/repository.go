@@ -232,7 +232,87 @@ func (r *Repository) PrunePackages(ctx context.Context, now time.Time, n int) er
 	return safe(e)
 }
 
+// PruneOutbox removes confirmed outbox envelopes older than before in bounded batches.
+func (r *Repository) PruneOutbox(ctx context.Context, before time.Time, n int) (int64, error) {
+	if before.IsZero() || n < 1 || n > 1000 {
+		return 0, resources.ErrInput
+	}
+	res, e := r.DB.ExecContext(ctx, `DELETE FROM resources.outbox WHERE id IN (SELECT id FROM resources.outbox WHERE sent_at IS NOT NULL AND sent_at<$1 ORDER BY sent_at LIMIT $2)`, before, n)
+	if e != nil {
+		return 0, safe(e)
+	}
+	rows, e := res.RowsAffected()
+	return rows, safe(e)
+}
+
+// PruneJobs removes completed background jobs older than before in bounded batches.
+func (r *Repository) PruneJobs(ctx context.Context, before time.Time, n int) (int64, error) {
+	if before.IsZero() || n < 1 || n > 1000 {
+		return 0, resources.ErrInput
+	}
+	res, e := r.DB.ExecContext(ctx, `DELETE FROM resources.jobs WHERE id IN (SELECT id FROM resources.jobs WHERE state='done' AND available_at<$1 ORDER BY available_at LIMIT $2)`, before, n)
+	if e != nil {
+		return 0, safe(e)
+	}
+	rows, e := res.RowsAffected()
+	return rows, safe(e)
+}
+
+// PruneSubmissionLimits removes expired per-owner rate-limit windows in bounded batches.
+func (r *Repository) PruneSubmissionLimits(ctx context.Context, now time.Time, n int) (int64, error) {
+	if now.IsZero() || n < 1 || n > 1000 {
+		return 0, resources.ErrInput
+	}
+	res, e := r.DB.ExecContext(ctx, `DELETE FROM resources.submission_limits WHERE owner_key IN (SELECT owner_key FROM resources.submission_limits WHERE started_at <= $1::timestamptz-interval '1 minute' ORDER BY started_at LIMIT $2)`, now, n)
+	if e != nil {
+		return 0, safe(e)
+	}
+	rows, e := res.RowsAffected()
+	return rows, safe(e)
+}
+
+// Ready verifies database connectivity and runtime schema/role isolation.
+func (r *Repository) Ready(ctx context.Context) error {
+	if r == nil || r.DB == nil {
+		return resources.ErrUnavailable
+	}
+	var probe int
+	if e := r.DB.QueryRowContext(ctx, `SELECT 1`).Scan(&probe); e != nil {
+		return safe(e)
+	}
+	return r.CheckRuntime(ctx)
+}
+
+// OperationalStats returns read-only queue, outbox lag, and capacity counters.
+func (r *Repository) OperationalStats(ctx context.Context, now time.Time) (resources.OperationalStats, error) {
+	var out resources.OperationalStats
+	var oldest sql.NullTime
+	e := r.DB.QueryRowContext(ctx, `SELECT
+		(SELECT count(*) FROM resources.records),
+		(SELECT count(*) FROM resources.replays),
+		(SELECT count(*) FROM resources.jobs WHERE state='pending'),
+		(SELECT count(*) FROM resources.jobs WHERE state='working'),
+		(SELECT count(*) FROM resources.jobs WHERE state='failed'),
+		(SELECT count(*) FROM resources.jobs WHERE state='done'),
+		(SELECT count(*) FROM resources.outbox WHERE sent_at IS NULL),
+		(SELECT min((data->>'time')::timestamptz) FROM resources.outbox WHERE sent_at IS NULL)`,
+	).Scan(&out.Records, &out.Operations, &out.PendingJobs, &out.WorkingJobs, &out.FailedJobs, &out.DoneJobs, &out.PendingOutbox, &oldest)
+	if e != nil {
+		return resources.OperationalStats{}, safe(e)
+	}
+	out.ActiveJobs = out.PendingJobs + out.WorkingJobs
+	if oldest.Valid {
+		t := oldest.Time.UTC()
+		out.OldestPendingOutboxAt = &t
+		if !now.IsZero() && now.After(t) {
+			out.OldestPendingOutboxAge = now.Sub(t)
+		}
+	}
+	return out, nil
+}
+
 var _ resources.Repository = (*Repository)(nil)
+var _ resources.OperationalReader = (*Repository)(nil)
 
 // CheckRuntime rejects migration credentials and cross-module access at startup.
 func (r *Repository) CheckRuntime(ctx context.Context) error {
