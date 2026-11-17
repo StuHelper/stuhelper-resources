@@ -42,6 +42,7 @@ func (s *Service) MyReferences(ctx context.Context, p Principal, ids []string) (
 		if e != nil {
 			return e
 		}
+		slices.Sort(owned)
 		if !slices.Equal(owned, ids) {
 			return ErrNotFound
 		}

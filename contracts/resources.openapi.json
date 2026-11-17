@@ -2413,6 +2413,12 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
@@ -2788,7 +2794,7 @@
     "/api/v1/resources/requests/{id}": {
       "get": {
         "operationId": "GetResourceRequest",
-        "summary": "GetResource",
+        "summary": "Read own request status",
         "parameters": [
           {
             "name": "id",
@@ -2887,7 +2893,7 @@
     "/api/v1/resources/requests/{id}/retry": {
       "post": {
         "operationId": "RetryResourceRequest",
-        "summary": "SubmitResource",
+        "summary": "Retry a failed request delivery",
         "parameters": [
           {
             "name": "id",
@@ -3401,7 +3407,8 @@
             "bearerAuth": []
           }
         ],
-        "description": "Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required."
+        "description": "Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.",
+        "summary": "List own uploaded reference names"
       }
     },
     "/api/v1/resources/items/{id}/preview": {
@@ -3424,6 +3431,12 @@
             "description": "Authorized complete file or archive",
             "content": {
               "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/pdf": {
                 "schema": {
                   "type": "string",
                   "format": "binary"
@@ -3723,7 +3736,7 @@
     "/api/v1/resources/counts": {
       "get": {
         "operationId": "GetResourceCounts",
-        "summary": "ListResources",
+        "summary": "Count current-visible published resources",
         "parameters": [
           {
             "in": "query",
@@ -3866,7 +3879,7 @@
     "/api/v1/resources/me/summary": {
       "get": {
         "operationId": "GetOwnResourceSummary",
-        "summary": "ListOwnResources",
+        "summary": "Read own resource summary counts",
         "parameters": [],
         "responses": {
           "200": {
@@ -4638,7 +4651,7 @@
           },
           "next_cursor": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 2000
           },
           "total": {
             "type": "integer",
@@ -5194,7 +5207,8 @@
           "purpose": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "RequestPage": {
         "type": "object",

@@ -82,6 +82,9 @@ scenario_tests:
     - integration_test.go#TestDatabaseIsolationAndAtomicAudit
   RES-10:
     - http_test.go#TestHTTPContractSDKAndUnknownInput
+  RES-24:
+    - http_test.go#TestCoverageHTTPAndAccessMethods
+    - collation_test.go#TestUTF8CollationPaginationAndOwnedReferences
   RES-11:
     - integration_test.go#TestReviewInspectionIsScopedAndGrantListsIdentifySubjects
   RES-12:
