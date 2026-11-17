@@ -115,3 +115,5 @@ scenario_tests:
     - ui_backend_test.go#TestUIResourceAggregateHTTPAuthorizationAndBoundaries
   RES-UI-03:
     - ui_backend_test.go#TestResourceListCursorKeepsExistingLengthLimit
+  RES-UI-04:
+    - ui_backend_test.go#TestResourceBrowseFiltersAndDynamicGroupFacets

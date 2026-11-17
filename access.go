@@ -160,7 +160,7 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 	copy.deps.Authority = &requestAuthority{source: s.deps.Authority, results: map[authorizationKey]error{}}
 	s = &copy
 	out := Page{Items: []Resource{}}
-	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) {
+	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) || validBrowseFilters(f) != nil {
 		return out, ErrInput
 	}
 	if mine && admin {
@@ -194,6 +194,11 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 	}
 	if e := prepareBrowse(&f); e != nil {
 		return out, e
+	}
+	if !mine {
+		if e := s.validateFilterAssociations(ctx, Associations{SchoolID: f.SchoolID, TermID: f.TermID, TeacherID: f.TeacherID}); e != nil {
+			return out, e
+		}
 	}
 	f.CourseIDs = nil
 	if f.CourseID != "" {

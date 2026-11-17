@@ -139,7 +139,11 @@ func (t *transaction) List(f resources.Filter) ([]resources.Record, error) {
  AND ($7='' OR v.data->'Version'->'metadata'->>'directory_id'=$7)
  AND ($8='' OR strpos(lower(v.data->'Version'->'metadata'->>'title'),lower($8))>0)
  AND coalesce(v.data->'Version'->'metadata'->'attributes','{}'::jsonb) @> $9::jsonb
- ORDER BY r.id LIMIT $10`, f.IncludeUnpublished, f.After, f.SchoolID, f.OwnerKey, f.CourseID, f.CategoryID, f.DirectoryID, f.Query, string(attrs), f.Limit)
+ AND ($10='' OR v.data->'Version'->'metadata'->'associations'->>'teacher_id'=$10)
+ AND ($11='' OR v.data->'Version'->'metadata'->'associations'->>'term_id'=$11)
+ AND ($12='' OR coalesce(v.data->'Version'->'metadata'->'tags','[]'::jsonb) @> jsonb_build_array($12::text))
+ AND ($13='' OR v.data->'Version'->'metadata'->>'access'=$13)
+ ORDER BY r.id LIMIT $14`, f.IncludeUnpublished, f.After, f.SchoolID, f.OwnerKey, f.CourseID, f.CategoryID, f.DirectoryID, f.Query, string(attrs), f.TeacherID, f.TermID, f.Tag, f.Access, f.Limit)
 }
 func (t *transaction) Counts() (a, b, c int, e error) {
 	e = t.tx.QueryRowContext(t.ctx, `SELECT (SELECT count(*) FROM resources.records),(SELECT count(*) FROM resources.replays),(SELECT count(*) FROM resources.jobs WHERE state IN ('pending','working'))`).Scan(&a, &b, &c)

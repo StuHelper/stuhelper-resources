@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -12,10 +13,29 @@ import (
 	"time"
 
 	r "github.com/StuHelper/stuhelper-resources"
+	"github.com/StuHelper/stuhelper-resources/contracts"
 	"github.com/StuHelper/stuhelper-resources/httpapi"
+	"github.com/StuHelper/stuhelper-resources/sdk"
+	"github.com/getkin/kin-openapi/openapi3"
 )
 
 type countCatalog struct{ *catalog }
+
+func (c countCatalog) Validate(ctx context.Context, a r.Associations) error {
+	if err := c.catalog.Validate(ctx, a); err != nil {
+		return err
+	}
+	if a.TeacherID == "other-school-teacher" {
+		return r.ErrDenied
+	}
+	if a.TeacherID != "" && a.TeacherID != "teacher-a" && a.TeacherID != "teacher-b" {
+		return r.ErrNotFound
+	}
+	if a.TermID != "" && a.TermID != "2024-fall" && a.TermID != "2025-spring" {
+		return r.ErrNotFound
+	}
+	return nil
+}
 
 func (c countCatalog) CourseReferences(_ context.Context, _ r.Principal, school string, ids []string) (map[string][]string, error) {
 	if school != "school" {
@@ -156,5 +176,127 @@ func TestResourceListCursorKeepsExistingLengthLimit(t *testing.T) {
 				t.Fatalf("over-limit cursor: %d", w.Code)
 			}
 		})
+	}
+}
+
+func TestResourceBrowseFiltersAndDynamicGroupFacets(t *testing.T) {
+	h := uiResourceFixture(t)
+	_, err := h.s.PutCategory(h.ctx, global, "slides", "seed-slides", r.CategoryWrite{
+		Names:   r.Names{"zh-CN": "课程讲义"},
+		Enabled: true,
+		Order:   15,
+		Fields: []r.Field{{
+			Key: "stage", Names: r.Names{"zh-CN": "阶段"}, Kind: "choice", Filterable: true, Groupable: true,
+			Options: []r.Option{
+				{ID: "final", Names: r.Names{"zh-CN": "期末"}},
+				{ID: "midterm", Names: r.Names{"zh-CN": "期中"}},
+			},
+		}},
+		GroupBy: "stage",
+	})
+	must(t, err)
+	_, err = h.s.PutCategory(h.ctx, global, "plain", "seed-plain", r.CategoryWrite{
+		Names: r.Names{"zh-CN": "参考书"}, Enabled: true, Order: 25, Fields: []r.Field{},
+	})
+	must(t, err)
+
+	makePub := func(key, cat string, attrs map[string]r.Value, teacher, term, access string, tags []string) r.Resource {
+		t.Helper()
+		meta := r.Metadata{
+			Title: "高等数学-" + key, Description: "课程资料", Tags: tags,
+			CategoryID: cat, CategoryRevision: 1, Attributes: attrs,
+			Associations: r.Associations{SchoolID: "school", CourseID: "course", TeacherID: teacher, TermID: term},
+			Access:       access, Origin: r.Origin{Kind: "unknown"},
+		}
+		item, err := h.s.CreateDraft(h.ctx, uploader, "draft-"+key, r.DraftWrite{Metadata: meta})
+		must(t, err)
+		file := r.File{VersionID: "file-" + key, Filename: key + ".pdf", ContentType: "application/pdf", Size: 60, SHA256: strings.Repeat("b", 64)}
+		h.files.mu.Lock()
+		h.files.items[file.VersionID] = r.FileEvidence{File: file, Owner: uploader, Module: "resources", SchoolID: "school", State: "awaiting_approval", Access: access}
+		h.files.mu.Unlock()
+		item, err = h.s.AttachFile(h.ctx, uploader, item.ID, "attach-"+key, r.FileLink{Revision: item.Revision, MediaVersionID: file.VersionID})
+		must(t, err)
+		return h.publish(t, item)
+	}
+
+	y2024, y2025 := int64(2024), int64(2025)
+	optMid, optFinal := "midterm", "final"
+	r1 := makePub("r1", "exam", map[string]r.Value{"year": {Number: &y2025}}, "teacher-a", "2025-spring", "public", []string{"真题", "解析"})
+	h.clock.Add(time.Minute)
+	r2 := makePub("r2", "exam", map[string]r.Value{"year": {Number: &y2024}}, "teacher-b", "2024-fall", "restricted", []string{"真题"})
+	h.clock.Add(time.Minute)
+	makePub("r3", "exam", map[string]r.Value{}, "teacher-a", "2025-spring", "public", []string{"汇编"})
+	makePub("s1", "slides", map[string]r.Value{"stage": {Option: &optMid}}, "teacher-a", "2025-spring", "public", nil)
+	makePub("s2", "slides", map[string]r.Value{"stage": {Option: &optFinal}}, "teacher-a", "2025-spring", "public", nil)
+	makePub("p1", "plain", map[string]r.Value{}, "teacher-a", "2025-spring", "public", nil)
+
+	// Public & counts filtering by teacher_id, term_id, tag, access.
+	page, err := h.s.List(h.ctx, reader, r.Filter{SchoolID: "school", CourseID: "course", TeacherID: "teacher-a", TermID: "2025-spring", Tag: "解析", Access: "public", Sort: "newest", Limit: 10}, false, false)
+	if err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != r1.ID {
+		t.Fatalf("filtered list: %+v %v", page, err)
+	}
+	restrictedCounts, err := h.s.Counts(h.ctx, reader, r.Filter{SchoolID: "school", CourseID: "course", TeacherID: "teacher-b", Access: "restricted", Tag: "真题"}, []string{"course"})
+	if err != nil || restrictedCounts.Total != 1 || len(restrictedCounts.Courses) != 1 || restrictedCounts.Courses[0].Count != 1 {
+		t.Fatalf("filtered counts: %+v %v", restrictedCounts, err)
+	}
+	if _, err := h.s.List(h.ctx, reader, r.Filter{SchoolID: "school", TeacherID: "unknown-teacher", Limit: 10}, false, false); !errors.Is(err, r.ErrInput) {
+		t.Fatalf("unknown teacher not rejected: %v", err)
+	}
+	if _, err := h.s.Counts(h.ctx, reader, r.Filter{SchoolID: "school", TeacherID: "other-school-teacher"}, nil); !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("cross-school teacher not denied: %v", err)
+	}
+
+	// Cursor scope binds new filters.
+	f := r.Filter{SchoolID: "school", Tag: "真题", Sort: "newest", Limit: 1}
+	firstPage, err := h.s.List(h.ctx, reader, f, false, false)
+	if err != nil || firstPage.NextCursor == "" || firstPage.Items[0].ID != r2.ID {
+		t.Fatalf("tag page 1: %+v %v", firstPage, err)
+	}
+	f.After = firstPage.NextCursor
+	f.Access = "public"
+	if _, err := h.s.List(h.ctx, reader, f, false, false); !errors.Is(err, r.ErrInput) {
+		t.Fatalf("cursor reused across access filter: %v", err)
+	}
+
+	// Dynamic integer & choice group_by facets and ungrouped count.
+	examCounts, err := h.s.Counts(h.ctx, reader, r.Filter{SchoolID: "school", CourseID: "course", CategoryID: "exam"}, []string{"course"})
+	if err != nil || examCounts.Total != 3 || examCounts.GroupBy != "year" || examCounts.UngroupedCount != 1 || len(examCounts.Groups) != 2 || examCounts.Groups[0].Key != "2025" || examCounts.Groups[0].Count != 1 || examCounts.Groups[1].Key != "2024" || examCounts.Groups[1].Count != 1 {
+		t.Fatalf("integer group facets: %+v %v", examCounts, err)
+	}
+	slideCounts, err := h.s.Counts(h.ctx, reader, r.Filter{SchoolID: "school", CategoryID: "slides"}, nil)
+	if err != nil || slideCounts.GroupBy != "stage" || len(slideCounts.Groups) != 2 || slideCounts.Groups[0].Key != "final" || slideCounts.Groups[1].Key != "midterm" {
+		t.Fatalf("choice group order should follow configured options: %+v %v", slideCounts, err)
+	}
+	plainCounts, err := h.s.Counts(h.ctx, reader, r.Filter{SchoolID: "school", CategoryID: "plain"}, nil)
+	if err != nil || plainCounts.GroupBy != "" || len(plainCounts.Groups) != 0 || plainCounts.UngroupedCount != 0 {
+		t.Fatalf("non-grouped category returned group facets: %+v %v", plainCounts, err)
+	}
+
+	// HTTP + generated SDK for /me filtering and /counts schema conformance.
+	handler, err := httpapi.New(h.s, authenticator{})
+	must(t, err)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	client, err := sdk.NewClientWithResponses(server.URL)
+	must(t, err)
+	accessFilter := sdk.ListOwnResourcesParamsAccessRestricted
+	tagFilter := "真题"
+	ownResp, err := client.ListOwnResourcesWithResponse(h.ctx, &sdk.ListOwnResourcesParams{Access: &accessFilter, Tag: &tagFilter}, func(_ context.Context, req *http.Request) error {
+		req.Header.Set("Authorization", "Bearer owner")
+		return nil
+	})
+	must(t, err)
+	if ownResp.StatusCode() != 200 || ownResp.JSON200 == nil || ownResp.JSON200.Total != 1 || len(ownResp.JSON200.Items) != 1 || ownResp.JSON200.Items[0].Id != r2.ID {
+		t.Fatalf("SDK ListOwnResources filter: status=%d body=%s", ownResp.StatusCode(), ownResp.Body)
+	}
+
+	doc, err := openapi3.NewLoader().LoadFromData(contracts.Document())
+	must(t, err)
+	raw, err := json.Marshal(examCounts)
+	must(t, err)
+	var decoded any
+	must(t, json.Unmarshal(raw, &decoded))
+	if err := doc.Components.Schemas["ResourceCounts"].Value.VisitJSON(decoded); err != nil {
+		t.Fatalf("ResourceCounts violates OpenAPI schema: %v", err)
 	}
 }

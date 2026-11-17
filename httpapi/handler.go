@@ -297,7 +297,7 @@ func boolean(r *http.Request, key string) (bool, error) {
 func filter(r *http.Request) (resources.Filter, error) {
 	q := r.URL.Query()
 	n, e := limit(r)
-	out := resources.Filter{SchoolID: q.Get("school_id"), CourseID: q.Get("course_id"), CategoryID: q.Get("category_id"), DirectoryID: q.Get("directory_id"), Query: q.Get("query"), After: q.Get("after"), Limit: n, Sort: q.Get("sort"), FileType: q.Get("file_type")}
+	out := resources.Filter{SchoolID: q.Get("school_id"), CourseID: q.Get("course_id"), CategoryID: q.Get("category_id"), DirectoryID: q.Get("directory_id"), TeacherID: q.Get("teacher_id"), TermID: q.Get("term_id"), Tag: q.Get("tag"), Access: q.Get("access"), Query: q.Get("query"), After: q.Get("after"), Limit: n, Sort: q.Get("sort"), FileType: q.Get("file_type")}
 	if e != nil {
 		return out, e
 	}

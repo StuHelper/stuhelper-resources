@@ -1,7 +1,7 @@
 ---
 type: spec
 status: Accepted
-updated: 2026-11-15
+updated: 2026-11-18
 ---
 
 # 原型资料列表与计数
@@ -9,6 +9,8 @@ updated: 2026-11-15
 ## 列表扩展
 
 现有资料列表增加 sort=newest 和 file_type。newest 按选中版本的 created_at、资料 ID 降序，file_type 是小写文件扩展名，不含点，最长十二个字母或数字。原有 sort=id 行为保留。
+
+公开、管理与本人资料列表均支持可选的 teacher_id、term_id、tag 和 access（public 或 restricted）筛选。公开与管理列表传入 teacher_id 或 term_id 时通过 catalog 校验学校归属，本人列表仅按归属过滤，不依赖当前准入。
 
 列表增加 total，表示应用筛选后、分页前的总数。query 同时匹配标题和描述。当前课程的合并别名由 catalog 批量解析，列表与计数使用相同归属。最新排序游标绑定账号范围、筛选与排序，不能跨条件重用。
 
@@ -18,7 +20,11 @@ updated: 2026-11-15
 
 ## 可见计数
 
-GET /api/v1/resources/counts 要求 school_id，可附 course_ids、category_id、file_type 和 query。course_ids 最多一百项，重复值去重。total 是当前筛选总数，courses 为请求的各课程数量，包括零值。
+GET /api/v1/resources/counts 要求 school_id，可附 course_ids、course_id、category_id、directory_id、teacher_id、term_id、tag、access、attributes、file_type 和 query。
+
+course_ids 最多一百项并自动去重。total 是当前筛选总数，courses 为各请求课程数量，包含零值。
+
+指定 category_id 且该分类配置了非空 group_by 字段时，响应按分类配置动态返回 group_by、groups 与 ungrouped_count。整数分组按数值降序排列，选项分组按配置选项顺序排列，文本分组按字节序排列，未知值计入 ungrouped_count，不在代码中按分类名硬编码。
 
 列表和计数复用 Repository 的同一筛选条件。统计的是用户可发现的资料元数据，下载资格继续由下载接口独立校验。未发布、下架和封禁内容不进入公开列表及计数。
 
@@ -43,3 +49,4 @@ GET /api/v1/resources/me/summary 只返回本人 resource_count 与 published_co
 | RES-UI-01 | 最新与文件类型筛选、分页、可见数量一致、本人统计和撤权 |
 | RES-UI-02 | HTTP 正常、登录拒绝、跨学校、空 ID、上限和未知文件类型 |
 | RES-UI-03 | 三个列表接受有效的 2000 字符游标并正确翻页，超长游标返回 400 |
+| RES-UI-04 | 教师、学期、标签与访问条件筛选在列表和计数一致生效，分类配置驱动动态分组统计 |

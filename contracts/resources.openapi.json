@@ -425,6 +425,45 @@
               "maxLength": 12,
               "description": "Lowercase filename extension without the dot."
             }
+          },
+          {
+            "name": "teacher_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "term_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "access",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "public",
+                "restricted"
+              ]
+            }
           }
         ],
         "responses": {
@@ -630,6 +669,54 @@
         "summary": "ListOwnResources",
         "parameters": [
           {
+            "name": "school_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
+            "name": "course_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
+            "name": "category_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
+            "name": "directory_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
+            "name": "attributes",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
             "name": "after",
             "in": "query",
             "schema": {
@@ -667,6 +754,45 @@
               "pattern": "^[a-z0-9]{1,12}$",
               "maxLength": 12,
               "description": "Lowercase filename extension without the dot."
+            }
+          },
+          {
+            "name": "teacher_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "term_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "access",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "public",
+                "restricted"
+              ]
             }
           }
         ],
@@ -2699,6 +2825,45 @@
               "maxLength": 12,
               "description": "Lowercase filename extension without the dot."
             }
+          },
+          {
+            "name": "teacher_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "term_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "access",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "public",
+                "restricted"
+              ]
+            }
           }
         ],
         "responses": {
@@ -3769,7 +3934,75 @@
             "required": false,
             "schema": {
               "type": "string",
-              "maxLength": 200
+              "pattern": "^[a-z0-9]{1,12}$",
+              "maxLength": 12,
+              "description": "Lowercase filename extension without the dot."
+            }
+          },
+          {
+            "name": "course_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "directory_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "attributes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
+            "name": "teacher_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "term_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "access",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "public",
+                "restricted"
+              ]
             }
           }
         ],
@@ -5345,6 +5578,21 @@
               "$ref": "#/components/schemas/CourseResourceCount"
             },
             "maxItems": 100
+          },
+          "group_by": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceGroupCount"
+            },
+            "maxItems": 1000
+          },
+          "ungrouped_count": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [
@@ -5368,6 +5616,29 @@
         "required": [
           "resource_count",
           "published_count"
+        ]
+      },
+      "ResourceGroupCount": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "value": {
+            "$ref": "#/components/schemas/Value"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "key",
+          "value",
+          "count"
         ]
       }
     },
