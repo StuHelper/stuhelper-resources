@@ -261,3 +261,46 @@ func (t *transaction) Requests(p resources.Principal, n int, after string) ([]re
 	}
 	return list[resources.RequestRecord](t, `SELECT data FROM resources.requests WHERE data->'Reporter'=$1::jsonb AND id>$2 ORDER BY id LIMIT $3`, string(encoded), after, n)
 }
+
+func (t *transaction) DeleteDraftRecord(v resources.Record) error {
+	var linked bool
+	e := t.tx.QueryRowContext(t.ctx, `SELECT EXISTS(SELECT 1 FROM resources.requests WHERE resource_id=$1) OR EXISTS(SELECT 1 FROM resources.grants WHERE resource_id=$1) OR EXISTS(SELECT 1 FROM resources.purchases WHERE resource_id=$1)`, v.ID).Scan(&linked)
+	if e != nil {
+		return safe(e)
+	}
+	if linked {
+		return resources.ErrConflict
+	}
+	tombstone := v
+	tombstone.Revision++
+	tombstone.State = "draft"
+	tombstone.ActiveID = ""
+	tombstone.ProposalID = ""
+	if e = t.saveDiscovery(tombstone); e != nil {
+		return e
+	}
+	if _, e = t.tx.ExecContext(t.ctx, `DELETE FROM resources.jobs WHERE data->>'ResourceID'=$1`, v.ID); e != nil {
+		return safe(e)
+	}
+	if _, e = t.tx.ExecContext(t.ctx, `DELETE FROM resources.versions WHERE resource_id=$1`, v.ID); e != nil {
+		return safe(e)
+	}
+	result, e := t.tx.ExecContext(t.ctx, `DELETE FROM resources.records WHERE id=$1`, v.ID)
+	if e != nil {
+		return safe(e)
+	}
+	n, e := result.RowsAffected()
+	if e != nil {
+		return safe(e)
+	}
+	if n == 0 {
+		return resources.ErrNotFound
+	}
+	return nil
+}
+
+func (t *transaction) DeletedRecordSchool(id string) (string, error) {
+	var school string
+	e := t.tx.QueryRowContext(t.ctx, `SELECT data->>'school_id' FROM resources.discovery_history WHERE id=$1 ORDER BY revision DESC LIMIT 1`, id).Scan(&school)
+	return school, safe(e)
+}

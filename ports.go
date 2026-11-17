@@ -117,6 +117,7 @@ func (s *Service) ApplyContentDecision(ctx context.Context, p Principal, in Deci
 			}
 			current.DecisionID = in.ID
 			current.DecisionRevision = in.Revision
+			current.Version.DecisionReason = sanitizeDecisionReason(in.Reason)
 			current.Version.State = "rejected"
 			if in.Action == "publish" {
 				current.Version.State = "preparing"

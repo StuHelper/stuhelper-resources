@@ -557,6 +557,12 @@ type Decision struct {
 // DecisionAction defines model for Decision.Action.
 type DecisionAction string
 
+// DeleteReceipt defines model for DeleteReceipt.
+type DeleteReceipt struct {
+	Deleted bool   `json:"deleted"`
+	Id      string `json:"id"`
+}
+
 // Directory defines model for Directory.
 type Directory struct {
 	CourseId *string           `json:"course_id,omitempty"`
@@ -586,8 +592,10 @@ type DirectoryWrite struct {
 
 // DraftWrite defines model for DraftWrite.
 type DraftWrite struct {
-	Metadata Metadata `json:"metadata"`
-	Revision int64    `json:"revision"`
+	MediaVersionId *string  `json:"media_version_id,omitempty"`
+	Metadata       Metadata `json:"metadata"`
+	Revision       int64    `json:"revision"`
+	Submit         *bool    `json:"submit,omitempty"`
 }
 
 // Field defines model for Field.
@@ -858,13 +866,15 @@ type Value struct {
 
 // Version defines model for Version.
 type Version struct {
-	Category  Category     `json:"category"`
-	CreatedAt time.Time    `json:"created_at"`
-	File      *File        `json:"file,omitempty"`
-	Id        string       `json:"id"`
-	Metadata  Metadata     `json:"metadata"`
-	Number    int64        `json:"number"`
-	State     VersionState `json:"state"`
+	Category       Category     `json:"category"`
+	CreatedAt      time.Time    `json:"created_at"`
+	DecisionReason *string      `json:"decision_reason,omitempty"`
+	File           *File        `json:"file,omitempty"`
+	Id             string       `json:"id"`
+	Metadata       Metadata     `json:"metadata"`
+	Number         int64        `json:"number"`
+	State          VersionState `json:"state"`
+	SubmittedAt    *time.Time   `json:"submitted_at,omitempty"`
 }
 
 // VersionState defines model for Version.State.
@@ -932,6 +942,12 @@ type PutDirectoryParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// DeleteDraftParams defines parameters for DeleteDraft.
+type DeleteDraftParams struct {
+	Revision       *int64 `form:"revision,omitempty" json:"revision,omitempty"`
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // UpdateDraftParams defines parameters for UpdateDraft.
 type UpdateDraftParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -975,6 +991,11 @@ type ChangeStateParams struct {
 
 // SubmitResourceParams defines parameters for SubmitResource.
 type SubmitResourceParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// WithdrawProposalParams defines parameters for WithdrawProposal.
+type WithdrawProposalParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -1066,6 +1087,9 @@ type ChangeStateJSONRequestBody = StateChange
 
 // SubmitResourceJSONRequestBody defines body for SubmitResource for application/json ContentType.
 type SubmitResourceJSONRequestBody = Command
+
+// WithdrawProposalJSONRequestBody defines body for WithdrawProposal for application/json ContentType.
+type WithdrawProposalJSONRequestBody = Command
 
 // CreatePackageJSONRequestBody defines body for CreatePackage for application/json ContentType.
 type CreatePackageJSONRequestBody = PackageRequest
@@ -1241,6 +1265,11 @@ type ClientInterface interface {
 	// Corresponds with PUT /api/v1/resources/directories/{id} (the `PutDirectory` operationId).
 	PutDirectory(ctx context.Context, id string, params *PutDirectoryParams, body PutDirectoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DeleteDraft Delete an own never-published draft or rejected resource
+	//
+	// Corresponds with DELETE /api/v1/resources/items/{id} (the `DeleteDraft` operationId).
+	DeleteDraft(ctx context.Context, id string, params *DeleteDraftParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetResource GetResource
 	//
 	// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
@@ -1378,6 +1407,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/v1/resources/items/{id}/submit (the `SubmitResource` operationId).
 	SubmitResource(ctx context.Context, id string, params *SubmitResourceParams, body SubmitResourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WithdrawProposalWithBody Withdraw an own pending proposal back to draft
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+	WithdrawProposalWithBody(ctx context.Context, id string, params *WithdrawProposalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WithdrawProposal Withdraw an own pending proposal back to draft
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+	WithdrawProposal(ctx context.Context, id string, params *WithdrawProposalParams, body WithdrawProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListManagedResources List resources within the administrators school scope
 	//
@@ -1684,6 +1727,21 @@ func (c *Client) PutDirectoryWithBody(ctx context.Context, id string, params *Pu
 // Corresponds with PUT /api/v1/resources/directories/{id} (the `PutDirectory` operationId).
 func (c *Client) PutDirectory(ctx context.Context, id string, params *PutDirectoryParams, body PutDirectoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutDirectoryRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteDraft Delete an own never-published draft or rejected resource
+//
+// Corresponds with DELETE /api/v1/resources/items/{id} (the `DeleteDraft` operationId).
+func (c *Client) DeleteDraft(ctx context.Context, id string, params *DeleteDraftParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteDraftRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2022,6 +2080,40 @@ func (c *Client) SubmitResourceWithBody(ctx context.Context, id string, params *
 // Corresponds with POST /api/v1/resources/items/{id}/submit (the `SubmitResource` operationId).
 func (c *Client) SubmitResource(ctx context.Context, id string, params *SubmitResourceParams, body SubmitResourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSubmitResourceRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WithdrawProposalWithBody Withdraw an own pending proposal back to draft
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+func (c *Client) WithdrawProposalWithBody(ctx context.Context, id string, params *WithdrawProposalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWithdrawProposalRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WithdrawProposal Withdraw an own pending proposal back to draft
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+func (c *Client) WithdrawProposal(ctx context.Context, id string, params *WithdrawProposalParams, body WithdrawProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWithdrawProposalRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2986,6 +3078,80 @@ func NewPutDirectoryRequestWithBody(server string, id string, params *PutDirecto
 	return req, nil
 }
 
+// NewDeleteDraftRequest constructs an http.Request for the DeleteDraft method
+func NewDeleteDraftRequest(server string, id string, params *DeleteDraftParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/items/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Revision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "revision", *params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewGetResourceRequest constructs an http.Request for the GetResource method
 func NewGetResourceRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -3616,6 +3782,66 @@ func NewSubmitResourceRequestWithBody(server string, id string, params *SubmitRe
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/resources/items/%s/submit", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewWithdrawProposalRequest calls the generic WithdrawProposal builder with application/json body
+func NewWithdrawProposalRequest(server string, id string, params *WithdrawProposalParams, body WithdrawProposalJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewWithdrawProposalRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewWithdrawProposalRequestWithBody constructs an http.Request for the WithdrawProposal method, with any body, and a specified content type
+func NewWithdrawProposalRequestWithBody(server string, id string, params *WithdrawProposalParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/items/%s/withdraw", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -4483,6 +4709,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /api/v1/resources/directories/{id} (the `PutDirectory` operationId).
 	PutDirectoryWithResponse(ctx context.Context, id string, params *PutDirectoryParams, body PutDirectoryJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDirectoryResponse, error)
 
+	// DeleteDraftWithResponse Delete an own never-published draft or rejected resource
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/resources/items/{id} (the `DeleteDraft` operationId).
+	DeleteDraftWithResponse(ctx context.Context, id string, params *DeleteDraftParams, reqEditors ...RequestEditorFn) (*DeleteDraftResponse, error)
+
 	// GetResourceWithResponse GetResource
 	//
 	// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
@@ -4628,6 +4861,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /api/v1/resources/items/{id}/submit (the `SubmitResource` operationId).
 	SubmitResourceWithResponse(ctx context.Context, id string, params *SubmitResourceParams, body SubmitResourceJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitResourceResponse, error)
+
+	// WithdrawProposalWithBodyWithResponse Withdraw an own pending proposal back to draft
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+	WithdrawProposalWithBodyWithResponse(ctx context.Context, id string, params *WithdrawProposalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*WithdrawProposalResponse, error)
+
+	// WithdrawProposalWithResponse Withdraw an own pending proposal back to draft
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+	WithdrawProposalWithResponse(ctx context.Context, id string, params *WithdrawProposalParams, body WithdrawProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*WithdrawProposalResponse, error)
 
 	// ListManagedResourcesWithResponse List resources within the administrators school scope
 	//
@@ -5624,6 +5871,96 @@ func (r PutDirectoryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PutDirectoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteDraftResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DeleteReceipt
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteDraftResponse) GetJSON200() *DeleteReceipt {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r DeleteDraftResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r DeleteDraftResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r DeleteDraftResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r DeleteDraftResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r DeleteDraftResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r DeleteDraftResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r DeleteDraftResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteDraftResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteDraftResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteDraftResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteDraftResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -6701,6 +7038,96 @@ func (r SubmitResourceResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r SubmitResourceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type WithdrawProposalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Resource
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r WithdrawProposalResponse) GetJSON200() *Resource {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r WithdrawProposalResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r WithdrawProposalResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r WithdrawProposalResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r WithdrawProposalResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r WithdrawProposalResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r WithdrawProposalResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r WithdrawProposalResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r WithdrawProposalResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WithdrawProposalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WithdrawProposalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WithdrawProposalResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -7956,6 +8383,19 @@ func (c *ClientWithResponses) PutDirectoryWithResponse(ctx context.Context, id s
 	return ParsePutDirectoryResponse(rsp)
 }
 
+// DeleteDraftWithResponse Delete an own never-published draft or rejected resource
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/resources/items/{id} (the `DeleteDraft` operationId).
+func (c *ClientWithResponses) DeleteDraftWithResponse(ctx context.Context, id string, params *DeleteDraftParams, reqEditors ...RequestEditorFn) (*DeleteDraftResponse, error) {
+	rsp, err := c.DeleteDraft(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteDraftResponse(rsp)
+}
+
 // GetResourceWithResponse GetResource
 //
 // Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
@@ -8220,6 +8660,32 @@ func (c *ClientWithResponses) SubmitResourceWithResponse(ctx context.Context, id
 		return nil, err
 	}
 	return ParseSubmitResourceResponse(rsp)
+}
+
+// WithdrawProposalWithBodyWithResponse Withdraw an own pending proposal back to draft
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+func (c *ClientWithResponses) WithdrawProposalWithBodyWithResponse(ctx context.Context, id string, params *WithdrawProposalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*WithdrawProposalResponse, error) {
+	rsp, err := c.WithdrawProposalWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWithdrawProposalResponse(rsp)
+}
+
+// WithdrawProposalWithResponse Withdraw an own pending proposal back to draft
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+func (c *ClientWithResponses) WithdrawProposalWithResponse(ctx context.Context, id string, params *WithdrawProposalParams, body WithdrawProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*WithdrawProposalResponse, error) {
+	rsp, err := c.WithdrawProposal(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWithdrawProposalResponse(rsp)
 }
 
 // ListManagedResourcesWithResponse List resources within the administrators school scope
@@ -9156,6 +9622,81 @@ func ParsePutDirectoryResponse(rsp *http.Response) (*PutDirectoryResponse, error
 	return response, nil
 }
 
+// ParseDeleteDraftResponse parses an HTTP response from a DeleteDraftWithResponse call
+func ParseDeleteDraftResponse(rsp *http.Response) (*DeleteDraftResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteDraftResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeleteReceipt
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetResourceResponse parses an HTTP response from a GetResourceWithResponse call
 func ParseGetResourceResponse(rsp *http.Response) (*GetResourceResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -9996,6 +10537,81 @@ func ParseSubmitResourceResponse(rsp *http.Response) (*SubmitResourceResponse, e
 			return nil, err
 		}
 		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseWithdrawProposalResponse parses an HTTP response from a WithdrawProposalWithResponse call
+func ParseWithdrawProposalResponse(rsp *http.Response) (*WithdrawProposalResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WithdrawProposalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Resource
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest Problem
