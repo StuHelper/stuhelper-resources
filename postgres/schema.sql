@@ -10,6 +10,7 @@ CREATE INDEX IF NOT EXISTS resources_versions_category ON resources.versions ((d
 CREATE INDEX IF NOT EXISTS resources_versions_directory ON resources.versions ((data->'Version'->'metadata'->>'directory_id'));
 CREATE INDEX IF NOT EXISTS resources_versions_attributes ON resources.versions USING gin ((COALESCE(data->'Version'->'metadata'->'attributes','{}'::jsonb)) jsonb_path_ops);
 CREATE TABLE IF NOT EXISTS resources.grants (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), subject_key text NOT NULL, data jsonb NOT NULL, query_changed_at timestamptz NOT NULL DEFAULT now(), UNIQUE(resource_id,subject_key));
+CREATE INDEX IF NOT EXISTS resources_grants_subject ON resources.grants(subject_key,resource_id);
 CREATE TABLE IF NOT EXISTS resources.directories (id text PRIMARY KEY, school_id text NOT NULL, course_id text NOT NULL, parent_id text NOT NULL, data jsonb NOT NULL);
 CREATE INDEX IF NOT EXISTS resources_directories_parent ON resources.directories(school_id,parent_id,id);
 CREATE TABLE IF NOT EXISTS resources.packages (id text PRIMARY KEY, expires_at timestamptz NOT NULL, data jsonb NOT NULL);

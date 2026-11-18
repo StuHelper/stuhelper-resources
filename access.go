@@ -170,10 +170,13 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 	if err != nil {
 		return Resource{}, err
 	}
-	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil)
+	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil, false)
 }
 
 func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resource, error) {
+	return s.getRecordWithEntitlement(ctx, p, r, false)
+}
+func (s *Service) getRecordWithEntitlement(ctx context.Context, p Principal, r Record, entitledPurchaser bool) (Resource, error) {
 	var activeV, proposalV *VersionRecord
 	err := s.repo.Transaction(ctx, func(tx Transaction) error {
 		if r.ActiveID != "" {
@@ -200,10 +203,10 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 	if err != nil {
 		return Resource{}, err
 	}
-	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil)
+	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil, entitledPurchaser)
 }
 
-func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Record, activeV, proposalV *VersionRecord, facts *AccessFacts) (Resource, error) {
+func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Record, activeV, proposalV *VersionRecord, facts *AccessFacts, entitledPurchaser bool) (Resource, error) {
 	var out Resource
 	var e error
 	privileged := r.Owner == p && p.Valid()
@@ -273,7 +276,7 @@ func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Re
 		}
 	}
 	// Unlisted content is visible only to its owner, administrators or current purchasers.
-	if r.State == "unlisted" && !privileged && !out.DownloadAllowed {
+	if r.State == "unlisted" && !privileged && !out.DownloadAllowed && !entitledPurchaser {
 		return Resource{}, ErrNotFound
 	}
 	return out, nil
@@ -460,7 +463,7 @@ func (s *Service) hydrateRecords(ctx context.Context, p Principal, records []Rec
 				}
 				proposalPtr = &pv
 			}
-			v, e = s.evaluatePreloadedRecord(ctx, p, record, activePtr, proposalPtr, factsPtr)
+			v, e = s.evaluatePreloadedRecord(ctx, p, record, activePtr, proposalPtr, factsPtr, false)
 		}
 		if errors.Is(e, ErrNotFound) || denied(e) {
 			continue

@@ -18,6 +18,20 @@ func resourceBrowseBase(f r.Filter, projection string) (string, []any) {
 	conditions := []string{}
 	if f.IncludeUnpublished {
 		version = "COALESCE(NULLIF(r.proposal_id,''),r.active_id)"
+	} else if f.EntitledKey != "" {
+		ownerParam := bind(f.EntitledKey)
+		now := time.Now().UTC()
+		if f.EntitledNow != nil {
+			now = *f.EntitledNow
+		}
+		nowParam := bind(now)
+		conditions = append(conditions,
+			"r.active_id<>''",
+			"v.data->'Version'->>'state'='published'",
+			"COALESCE(v.data->>'ReferenceID','')<>''",
+			"r.school_id=ANY("+bind(f.AllowedSchools)+"::text[])",
+			"((r.state IN ('published','unlisted') AND EXISTS(SELECT 1 FROM resources.purchases p WHERE p.owner_key="+ownerParam+" AND p.resource_id=r.id AND p.data->>'revoked'='false')) OR (r.state='published' AND EXISTS(SELECT 1 FROM resources.grants g WHERE g.subject_key="+ownerParam+" AND g.resource_id=r.id AND COALESCE(g.data->'Grant'->>'revoked','false')<>'true' AND (g.data->'Grant'->>'expires_at' IS NULL OR (g.data->'Grant'->>'expires_at')::timestamptz>"+nowParam+"))))",
+		)
 	} else {
 		conditions = append(conditions, "r.state='published'", "v.data->'Version'->>'state'='published'")
 	}

@@ -101,6 +101,13 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 			return s.List(r.Context(), p, f, route.mine, route.admin)
 		})
 	}
+	h.mount(m, "GET /api/v1/resources/me/entitlements", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		f, e := filter(r)
+		if e != nil {
+			return nil, e
+		}
+		return s.ListEntitled(r.Context(), p, f)
+	})
 	write[resources.DraftWrite](h, m, "POST /api/v1/resources", func(r *http.Request, p resources.Principal, in resources.DraftWrite) (any, error) {
 		return s.CreateDraft(r.Context(), p, key(r), in)
 	})
