@@ -66,6 +66,8 @@ scenario_tests:
     - integration_test.go#TestPublicationContinuityAndStaleReview
   RES-03:
     - integration_test.go#TestIndependentRightsCampusRevocationAndUnlisting
+    - quota_test.go#TestQuotaRechecksCommittedCapacityBeforeCommit
+    - quota_test.go#TestQuotaIsolationKeepsSafetyActionsAvailableAndEnforcesExactCaps
   RES-04:
     - integration_test.go#TestConcurrentIdempotencyAndChangedPayload
   RES-05:
@@ -92,6 +94,8 @@ scenario_tests:
     - utf8_collation_test.go#TestUTF8CollationDatabasePreservesByteOrderForReferencesAndPagination
   RES-14:
     - file_access_test.go#TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions
+    - timeout_test.go#TestDownloadPreflightAndHTTPWriteAreBounded
+    - timeout_test.go#TestStreamProgressAndMetadataRPCTimeouts
   RES-15:
     - closure_test.go#TestClosedUploaderKeepsFilesAndCopyrightWithoutPublicAccountLink
   RES-16:
