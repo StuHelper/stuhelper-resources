@@ -17,7 +17,13 @@ func (s *Service) PutDirectory(ctx context.Context, p Principal, id, key string,
 	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
 	defer cancel()
 	if e := s.deps.Catalog.Validate(work, Associations{SchoolID: in.SchoolID, CourseID: in.CourseID}); e != nil {
-		return out, e
+		if ctx.Err() != nil {
+			return out, ctx.Err()
+		}
+		if errors.Is(e, ErrInput) || errors.Is(e, ErrNotFound) {
+			return out, ErrInput
+		}
+		return out, ErrUnavailable
 	}
 	e := s.mutation(ctx, p, "directories.manage", in.SchoolID, key, id, in, func(tx Transaction) (any, error) {
 		if e := tx.Lock("directories:" + in.SchoolID); e != nil {
@@ -242,7 +248,7 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 			auditSchool = sc
 		}
 	}
-	e := s.mutationWithAuditSchool(ctx, p, "package", "", auditSchool, key, "", in, func(tx Transaction) (any, error) {
+	e := s.mutationWithAuditSchool(ctx, p, "package", "", auditSchool, key, "", in, &mutationBudget{}, func(tx Transaction) (any, error) {
 		out = Package{ID: newID(), Parts: parts, ExpiresAt: s.now().Add(s.cfg.PackageTTL)}
 		if e := tx.SavePackage(PackageRecord{Package: out, Owner: p, Selections: selected}); e != nil {
 			return nil, e
@@ -298,7 +304,7 @@ func (s *Service) DownloadPackage(ctx context.Context, p Principal, id string, p
 	if part < 1 || part > len(bundle.Selections) {
 		return ErrInput
 	}
-	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
-	defer cancel()
-	return s.deps.Files.Archive(work, p, bundle.Selections[part-1], w)
+	return s.withStreamIdleTimeout(ctx, w, func(streamCtx context.Context, out io.Writer) error {
+		return s.deps.Files.Archive(streamCtx, p, bundle.Selections[part-1], out)
+	})
 }

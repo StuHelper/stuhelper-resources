@@ -36,6 +36,7 @@ func TestOutboxRevisionsSchoolScopedWorkerAuditAndFIFO(t *testing.T) {
 	// and package event Subject equals pkg.ID.
 	events, e := h.repo.PendingOutbox(h.ctx, 100, nil)
 	must(t, e)
+	sawRequest := false
 	sawPackageOutbox := false
 	sawPublishCompleted := false
 	for _, ev := range events {
@@ -51,6 +52,11 @@ func TestOutboxRevisionsSchoolScopedWorkerAuditAndFIFO(t *testing.T) {
 			t.Fatalf("event %s (subject=%s) emitted non-positive revision %d", ev.Type, ev.Subject, payload.Revision)
 		}
 		switch ev.Type {
+		case "resources.request.v1":
+			sawRequest = true
+			if ev.Subject != published.ID || payload.Revision != published.Revision {
+				t.Fatalf("request event subject=%s revision=%d want %s/%d", ev.Subject, payload.Revision, published.ID, published.Revision)
+			}
 		case "resources.grants.manage.v1":
 			if payload.Revision != grant.Revision {
 				t.Fatalf("grant event revision=%d want=%d", payload.Revision, grant.Revision)
@@ -75,6 +81,9 @@ func TestOutboxRevisionsSchoolScopedWorkerAuditAndFIFO(t *testing.T) {
 			}
 		}
 		must(t, h.repo.ConfirmOutbox(h.ctx, ev.ID))
+	}
+	if !sawRequest {
+		t.Fatal("missing request event")
 	}
 	if !sawPackageOutbox || !sawPublishCompleted {
 		t.Fatalf("missing expected events: package=%v publishCompleted=%v", sawPackageOutbox, sawPublishCompleted)
