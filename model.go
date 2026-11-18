@@ -8,7 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 var (
@@ -28,13 +31,29 @@ type Principal struct {
 }
 
 func (p Principal) Valid() bool {
-	return p.Issuer != "" && p.Subject != "" && len(p.Issuer) <= 512 && len(p.Subject) <= 256
+	if p.Issuer == "" || p.Subject == "" || len(p.Issuer) > 512 || len(p.Subject) > 256 {
+		return false
+	}
+	return utf8.ValidString(p.Issuer) && utf8.ValidString(p.Subject) && !strings.ContainsFunc(p.Issuer, unicode.IsControl) && !strings.ContainsFunc(p.Subject, unicode.IsControl)
 }
 func (p Principal) Key() string {
 	if !p.Valid() {
 		return ""
 	}
 	return base64.RawURLEncoding.EncodeToString([]byte(p.Issuer)) + ":" + base64.RawURLEncoding.EncodeToString([]byte(p.Subject))
+}
+func ParsePrincipalKey(key string) (Principal, error) {
+	if len(key) > 1100 || strings.Count(key, ":") != 1 {
+		return Principal{}, ErrInput
+	}
+	a, b, _ := strings.Cut(key, ":")
+	issuer, err1 := base64.RawURLEncoding.Strict().DecodeString(a)
+	subject, err2 := base64.RawURLEncoding.Strict().DecodeString(b)
+	p := Principal{Issuer: string(issuer), Subject: string(subject)}
+	if err1 != nil || err2 != nil || !p.Valid() || p.Key() != key {
+		return Principal{}, ErrInput
+	}
+	return p, nil
 }
 
 type Names map[string]string
@@ -316,6 +335,9 @@ type Capabilities struct {
 // Authority supplies current action eligibility and administration scope. Upload
 // and download decisions include the configured campus/phone facts. Missing facts
 // return unavailable; a permission grant cannot silently stand in for a fact.
+// Global administration (taxonomy.manage, coverage.manage) and instance-wide
+// admission pre-checks pass an empty scope (""); school-owned resources,
+// directories and coverage rules pass their concrete school_id.
 type Authority interface {
 	Check(context.Context, Principal, string, string) error
 }

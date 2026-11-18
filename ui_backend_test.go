@@ -267,6 +267,16 @@ func TestResourceBrowseFiltersAndDynamicGroupFacets(t *testing.T) {
 	if err != nil || slideCounts.GroupBy != "stage" || len(slideCounts.Groups) != 2 || slideCounts.Groups[0].Key != "final" || slideCounts.Groups[1].Key != "midterm" {
 		t.Fatalf("choice group order should follow configured options: %+v %v", slideCounts, err)
 	}
+	_, err = h.s.PutCategory(h.ctx, global, "slides", "remove-option", r.CategoryWrite{
+		Revision: 1, Names: r.Names{"zh-CN": "课程讲义"}, Enabled: true, Order: 15, GroupBy: "stage",
+		Fields: []r.Field{{Key: "stage", Names: r.Names{"zh-CN": "阶段"}, Kind: "choice", Filterable: true, Groupable: true, Options: []r.Option{{ID: "final", Names: r.Names{"zh-CN": "期末"}}}}},
+	})
+	must(t, err)
+	revised, err := h.s.Counts(h.ctx, reader, r.Filter{SchoolID: "school", CategoryID: "slides"}, nil)
+	must(t, err)
+	if revised.Total != 2 || revised.UngroupedCount != 1 || len(revised.Groups) != 1 || revised.Groups[0].Key != "final" || revised.Groups[0].Count != 1 {
+		t.Fatalf("removed option in facets: %+v", revised)
+	}
 	plainCounts, err := h.s.Counts(h.ctx, reader, r.Filter{SchoolID: "school", CategoryID: "plain"}, nil)
 	if err != nil || plainCounts.GroupBy != "" || len(plainCounts.Groups) != 0 || plainCounts.UngroupedCount != 0 {
 		t.Fatalf("non-grouped category returned group facets: %+v %v", plainCounts, err)

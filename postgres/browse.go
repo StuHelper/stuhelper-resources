@@ -66,18 +66,19 @@ func resourceBrowseBase(f r.Filter, projection string) (string, []any) {
 }
 
 func (t *transaction) Browse(f r.Filter) ([]r.Record, int64, error) {
-	base, args := resourceBrowseBase(f, "r.id,r.data,(v.data->'Version'->>'created_at')::timestamptz AS at")
+	base, args := resourceBrowseBase(f, "r.id,(v.data->'Version'->>'created_at')::timestamptz AS at")
 	bind := func(value any) string { args = append(args, value); return fmt.Sprintf("$%d", len(args)) }
-	cursor, order := "id>"+bind(f.After), "id"
+	cursor, order, pageOrder := `id COLLATE "C">`+bind(f.After), `id COLLATE "C"`, `page.id COLLATE "C"`
 	if f.Sort == "newest" {
 		// Replace the unused ID parameter instead of leaving an untyped bind.
 		args = args[:len(args)-1]
 		at := bind(f.CursorTime)
-		cursor = "(" + at + "::timestamptz IS NULL OR (at,id)<(" + at + "," + bind(f.CursorID) + "))"
-		order = "at DESC,id DESC"
+		cursor = "(" + at + `::timestamptz IS NULL OR (at,id COLLATE "C")<(` + at + "," + bind(f.CursorID) + ` COLLATE "C"))`
+		order = `at DESC,id COLLATE "C" DESC`
+		pageOrder = `page.at DESC,page.id COLLATE "C" DESC`
 	}
-	query := "WITH matched AS MATERIALIZED (" + base + "), page AS (SELECT * FROM matched WHERE " + cursor + " ORDER BY " + order + " LIMIT " + bind(f.Limit+1) + ") " +
-		"SELECT COALESCE((SELECT jsonb_agg(jsonb_build_object('record',data,'at',at) ORDER BY " + order + ") FROM page),'[]'::jsonb),(SELECT count(*) FROM matched)"
+	query := "WITH matched AS MATERIALIZED (" + base + "), page AS (SELECT id,at FROM matched WHERE " + cursor + " ORDER BY " + order + " LIMIT " + bind(f.Limit+1) + ") " +
+		"SELECT COALESCE((SELECT jsonb_agg(jsonb_build_object('record',rec.data,'at',page.at) ORDER BY " + pageOrder + ") FROM page JOIN resources.records rec ON rec.id=page.id),'[]'::jsonb),(SELECT count(*) FROM matched)"
 	var raw []byte
 	var total int64
 	if err := t.tx.QueryRowContext(t.ctx, query, args...).Scan(&raw, &total); err != nil {
@@ -115,7 +116,7 @@ func (t *transaction) ResourceCountsWithGroup(f r.Filter, references map[string]
 		return r.ResourceCounts{}, r.ErrInput
 	}
 	refsParam := bind(string(refs))
-	coursesJSON := "COALESCE((SELECT jsonb_agg(jsonb_build_object('course_id',key,'count',n) ORDER BY key) FROM (SELECT req.key,COALESCE(sum(c.n),0) AS n FROM requested req " +
+	coursesJSON := "COALESCE((SELECT jsonb_agg(jsonb_build_object('course_id',key,'count',n) ORDER BY key COLLATE \"C\") FROM (SELECT req.key,COALESCE(sum(c.n),0) AS n FROM requested req " +
 		"LEFT JOIN counts c ON req.value ? c.course_id GROUP BY req.key) rows),'[]'::jsonb)"
 	if groupField == nil {
 		query := "WITH matched AS MATERIALIZED (" + base + "), counts AS (SELECT course_id,count(*) AS n FROM matched GROUP BY course_id), " +
@@ -136,9 +137,9 @@ func (t *transaction) ResourceCountsWithGroup(f r.Filter, references map[string]
 		}
 		optParam := bind(optionIDs)
 		groupsCTE = "SELECT (group_attr->>'option') AS k, jsonb_build_object('option',group_attr->>'option') AS v, count(*) AS n, array_position(" + optParam + "::text[],group_attr->>'option') AS ord " +
-			"FROM matched WHERE COALESCE(group_attr->>'option','')<>'' GROUP BY (group_attr->>'option')"
+			"FROM matched WHERE group_attr->>'option' = ANY(" + optParam + "::text[]) GROUP BY (group_attr->>'option')"
 		groupsAgg = "COALESCE((SELECT jsonb_agg(jsonb_build_object('key',k,'value',v,'count',n) ORDER BY ord ASC NULLS LAST, k COLLATE \"C\" ASC) FROM grouped),'[]'::jsonb)"
-		ungroupedExpr = "(SELECT count(*) FROM matched WHERE COALESCE(group_attr->>'option','')='')"
+		ungroupedExpr = "(SELECT count(*) FROM matched WHERE (group_attr->>'option' = ANY(" + optParam + "::text[])) IS NOT TRUE)"
 	case "text":
 		groupsCTE = "SELECT (group_attr->>'text') AS k, jsonb_build_object('text',group_attr->>'text') AS v, count(*) AS n " +
 			"FROM matched WHERE COALESCE(group_attr->>'text','')<>'' GROUP BY (group_attr->>'text')"
