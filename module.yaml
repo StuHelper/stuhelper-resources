@@ -68,8 +68,10 @@ scenario_tests:
     - integration_test.go#TestIndependentRightsCampusRevocationAndUnlisting
   RES-04:
     - integration_test.go#TestConcurrentIdempotencyAndChangedPayload
+    - idempotency_guards_test.go#TestIdempotencyGuardsConcurrentRequestPinningAndConfigValidation
   RES-05:
     - integration_test.go#TestDeniedInputsDoNotReachDependencies
+    - idempotency_guards_test.go#TestIdempotencyGuardsConcurrentRequestPinningAndConfigValidation
   RES-06:
     - integration_test.go#TestDirectoryPackagesOmitUnauthorizedAndRecheckRights
   RES-07:

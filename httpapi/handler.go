@@ -14,6 +14,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -249,13 +250,17 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 			return
 		}
 		if out != nil {
-			status := 200
+			codes := []int{}
 			for code := range route.Operation.Responses.Map() {
 				n, e := strconv.Atoi(code)
 				if e == nil && n >= 200 && n < 300 {
-					status = n
-					break
+					codes = append(codes, n)
 				}
+			}
+			slices.Sort(codes)
+			status := 200
+			if len(codes) > 0 {
+				status = codes[0]
 			}
 			writeJSON(w, status, out)
 		}

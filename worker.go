@@ -224,6 +224,12 @@ func (s *Service) completeJob(tx Transaction, job Job, result jobResult) error {
 // keys. Providers must return the earlier result after an ambiguous timeout.
 func (s *Service) RetryPending(ctx context.Context, p Principal, id, key string, in Command) (Resource, error) {
 	var out Resource
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || in.Revision < 1 {
+		return out, ErrInput
+	}
 	r, e := s.record(ctx, id)
 	if e != nil {
 		return out, e
