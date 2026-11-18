@@ -202,6 +202,7 @@ type Page struct {
 }
 type Filter struct {
 	SchoolID, CourseID, CategoryID, DirectoryID, Query, After, OwnerKey string
+	TeacherID, TermID, Tag, Access                                      string
 	Sort, FileType, CursorID                                            string
 	CursorTime                                                          *time.Time
 	CourseIDs                                                           []string

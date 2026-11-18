@@ -888,10 +888,18 @@ export interface components {
         ResourceCounts: {
             total: number;
             courses: components["schemas"]["CourseResourceCount"][];
+            group_by?: string;
+            groups?: components["schemas"]["ResourceGroupCount"][];
+            ungrouped_count?: number;
         };
         OwnResourceSummary: {
             resource_count: number;
             published_count: number;
+        };
+        ResourceGroupCount: {
+            key: string;
+            value: components["schemas"]["Value"];
+            count: number;
         };
     };
     responses: never;
@@ -1176,6 +1184,10 @@ export interface operations {
                 limit?: string;
                 sort?: "id" | "newest";
                 file_type?: string;
+                teacher_id?: string;
+                term_id?: string;
+                tag?: string;
+                access?: "public" | "restricted";
             };
             header?: never;
             path?: never;
@@ -1359,6 +1371,10 @@ export interface operations {
                 limit?: string;
                 sort?: "id" | "newest";
                 file_type?: string;
+                teacher_id?: string;
+                term_id?: string;
+                tag?: string;
+                access?: "public" | "restricted";
             };
             header?: never;
             path?: never;
@@ -2892,6 +2908,10 @@ export interface operations {
                 limit?: string;
                 sort?: "id" | "newest";
                 file_type?: string;
+                teacher_id?: string;
+                term_id?: string;
+                tag?: string;
+                access?: "public" | "restricted";
             };
             header?: never;
             path?: never;
@@ -3753,6 +3773,13 @@ export interface operations {
                 query?: string;
                 category_id?: string;
                 file_type?: string;
+                course_id?: string;
+                directory_id?: string;
+                attributes?: string;
+                teacher_id?: string;
+                term_id?: string;
+                tag?: string;
+                access?: "public" | "restricted";
             };
             header?: never;
             path?: never;

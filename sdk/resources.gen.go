@@ -428,6 +428,42 @@ func (e ListResourcesParamsSort) Valid() bool {
 	}
 }
 
+// Defines values for ListResourcesParamsAccess.
+const (
+	ListResourcesParamsAccessPublic     ListResourcesParamsAccess = "public"
+	ListResourcesParamsAccessRestricted ListResourcesParamsAccess = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the ListResourcesParamsAccess enum.
+func (e ListResourcesParamsAccess) Valid() bool {
+	switch e {
+	case ListResourcesParamsAccessPublic:
+		return true
+	case ListResourcesParamsAccessRestricted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetResourceCountsParamsAccess.
+const (
+	GetResourceCountsParamsAccessPublic     GetResourceCountsParamsAccess = "public"
+	GetResourceCountsParamsAccessRestricted GetResourceCountsParamsAccess = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the GetResourceCountsParamsAccess enum.
+func (e GetResourceCountsParamsAccess) Valid() bool {
+	switch e {
+	case GetResourceCountsParamsAccessPublic:
+		return true
+	case GetResourceCountsParamsAccessRestricted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListManagedResourcesParamsSort.
 const (
 	ListManagedResourcesParamsSortId     ListManagedResourcesParamsSort = "id"
@@ -446,6 +482,24 @@ func (e ListManagedResourcesParamsSort) Valid() bool {
 	}
 }
 
+// Defines values for ListManagedResourcesParamsAccess.
+const (
+	ListManagedResourcesParamsAccessPublic     ListManagedResourcesParamsAccess = "public"
+	ListManagedResourcesParamsAccessRestricted ListManagedResourcesParamsAccess = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the ListManagedResourcesParamsAccess enum.
+func (e ListManagedResourcesParamsAccess) Valid() bool {
+	switch e {
+	case ListManagedResourcesParamsAccessPublic:
+		return true
+	case ListManagedResourcesParamsAccessRestricted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListOwnResourcesParamsSort.
 const (
 	ListOwnResourcesParamsSortId     ListOwnResourcesParamsSort = "id"
@@ -458,6 +512,24 @@ func (e ListOwnResourcesParamsSort) Valid() bool {
 	case ListOwnResourcesParamsSortId:
 		return true
 	case ListOwnResourcesParamsSortNewest:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListOwnResourcesParamsAccess.
+const (
+	ListOwnResourcesParamsAccessPublic     ListOwnResourcesParamsAccess = "public"
+	ListOwnResourcesParamsAccessRestricted ListOwnResourcesParamsAccess = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the ListOwnResourcesParamsAccess enum.
+func (e ListOwnResourcesParamsAccess) Valid() bool {
+	switch e {
+	case ListOwnResourcesParamsAccessPublic:
+		return true
+	case ListOwnResourcesParamsAccessRestricted:
 		return true
 	default:
 		return false
@@ -809,8 +881,18 @@ type ResourceUnavailableConditions string
 
 // ResourceCounts defines model for ResourceCounts.
 type ResourceCounts struct {
-	Courses []CourseResourceCount `json:"courses"`
-	Total   int                   `json:"total"`
+	Courses        []CourseResourceCount `json:"courses"`
+	GroupBy        *string               `json:"group_by,omitempty"`
+	Groups         *[]ResourceGroupCount `json:"groups,omitempty"`
+	Total          int                   `json:"total"`
+	UngroupedCount *int                  `json:"ungrouped_count,omitempty"`
+}
+
+// ResourceGroupCount defines model for ResourceGroupCount.
+type ResourceGroupCount struct {
+	Count int    `json:"count"`
+	Key   string `json:"key"`
+	Value Value  `json:"value"`
 }
 
 // ResourcePage defines model for ResourcePage.
@@ -872,20 +954,27 @@ type VersionState string
 
 // ListResourcesParams defines parameters for ListResources.
 type ListResourcesParams struct {
-	SchoolId    *string                  `form:"school_id,omitempty" json:"school_id,omitempty"`
-	CourseId    *string                  `form:"course_id,omitempty" json:"course_id,omitempty"`
-	CategoryId  *string                  `form:"category_id,omitempty" json:"category_id,omitempty"`
-	DirectoryId *string                  `form:"directory_id,omitempty" json:"directory_id,omitempty"`
-	Query       *string                  `form:"query,omitempty" json:"query,omitempty"`
-	Attributes  *string                  `form:"attributes,omitempty" json:"attributes,omitempty"`
-	After       *string                  `form:"after,omitempty" json:"after,omitempty"`
-	Limit       *string                  `form:"limit,omitempty" json:"limit,omitempty"`
-	Sort        *ListResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
-	FileType    *string                  `form:"file_type,omitempty" json:"file_type,omitempty"`
+	SchoolId    *string                    `form:"school_id,omitempty" json:"school_id,omitempty"`
+	CourseId    *string                    `form:"course_id,omitempty" json:"course_id,omitempty"`
+	CategoryId  *string                    `form:"category_id,omitempty" json:"category_id,omitempty"`
+	DirectoryId *string                    `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Query       *string                    `form:"query,omitempty" json:"query,omitempty"`
+	Attributes  *string                    `form:"attributes,omitempty" json:"attributes,omitempty"`
+	After       *string                    `form:"after,omitempty" json:"after,omitempty"`
+	Limit       *string                    `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort        *ListResourcesParamsSort   `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType    *string                    `form:"file_type,omitempty" json:"file_type,omitempty"`
+	TeacherId   *string                    `form:"teacher_id,omitempty" json:"teacher_id,omitempty"`
+	TermId      *string                    `form:"term_id,omitempty" json:"term_id,omitempty"`
+	Tag         *string                    `form:"tag,omitempty" json:"tag,omitempty"`
+	Access      *ListResourcesParamsAccess `form:"access,omitempty" json:"access,omitempty"`
 }
 
 // ListResourcesParamsSort defines parameters for ListResources.
 type ListResourcesParamsSort string
+
+// ListResourcesParamsAccess defines parameters for ListResources.
+type ListResourcesParamsAccess string
 
 // CreateDraftParams defines parameters for CreateDraft.
 type CreateDraftParams struct {
@@ -906,12 +995,22 @@ type PutCategoryParams struct {
 
 // GetResourceCountsParams defines parameters for GetResourceCounts.
 type GetResourceCountsParams struct {
-	SchoolId   string  `form:"school_id" json:"school_id"`
-	CourseIds  *string `form:"course_ids,omitempty" json:"course_ids,omitempty"`
-	Query      *string `form:"query,omitempty" json:"query,omitempty"`
-	CategoryId *string `form:"category_id,omitempty" json:"category_id,omitempty"`
-	FileType   *string `form:"file_type,omitempty" json:"file_type,omitempty"`
+	SchoolId    string                         `form:"school_id" json:"school_id"`
+	CourseIds   *string                        `form:"course_ids,omitempty" json:"course_ids,omitempty"`
+	Query       *string                        `form:"query,omitempty" json:"query,omitempty"`
+	CategoryId  *string                        `form:"category_id,omitempty" json:"category_id,omitempty"`
+	FileType    *string                        `form:"file_type,omitempty" json:"file_type,omitempty"`
+	CourseId    *string                        `form:"course_id,omitempty" json:"course_id,omitempty"`
+	DirectoryId *string                        `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Attributes  *string                        `form:"attributes,omitempty" json:"attributes,omitempty"`
+	TeacherId   *string                        `form:"teacher_id,omitempty" json:"teacher_id,omitempty"`
+	TermId      *string                        `form:"term_id,omitempty" json:"term_id,omitempty"`
+	Tag         *string                        `form:"tag,omitempty" json:"tag,omitempty"`
+	Access      *GetResourceCountsParamsAccess `form:"access,omitempty" json:"access,omitempty"`
 }
+
+// GetResourceCountsParamsAccess defines parameters for GetResourceCounts.
+type GetResourceCountsParamsAccess string
 
 // PutCoverageParams defines parameters for PutCoverage.
 type PutCoverageParams struct {
@@ -980,37 +1079,51 @@ type SubmitResourceParams struct {
 
 // ListManagedResourcesParams defines parameters for ListManagedResources.
 type ListManagedResourcesParams struct {
-	SchoolId    *string                         `form:"school_id,omitempty" json:"school_id,omitempty"`
-	CourseId    *string                         `form:"course_id,omitempty" json:"course_id,omitempty"`
-	CategoryId  *string                         `form:"category_id,omitempty" json:"category_id,omitempty"`
-	DirectoryId *string                         `form:"directory_id,omitempty" json:"directory_id,omitempty"`
-	Query       *string                         `form:"query,omitempty" json:"query,omitempty"`
-	Attributes  *string                         `form:"attributes,omitempty" json:"attributes,omitempty"`
-	After       *string                         `form:"after,omitempty" json:"after,omitempty"`
-	Limit       *string                         `form:"limit,omitempty" json:"limit,omitempty"`
-	Sort        *ListManagedResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
-	FileType    *string                         `form:"file_type,omitempty" json:"file_type,omitempty"`
+	SchoolId    *string                           `form:"school_id,omitempty" json:"school_id,omitempty"`
+	CourseId    *string                           `form:"course_id,omitempty" json:"course_id,omitempty"`
+	CategoryId  *string                           `form:"category_id,omitempty" json:"category_id,omitempty"`
+	DirectoryId *string                           `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Query       *string                           `form:"query,omitempty" json:"query,omitempty"`
+	Attributes  *string                           `form:"attributes,omitempty" json:"attributes,omitempty"`
+	After       *string                           `form:"after,omitempty" json:"after,omitempty"`
+	Limit       *string                           `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort        *ListManagedResourcesParamsSort   `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType    *string                           `form:"file_type,omitempty" json:"file_type,omitempty"`
+	TeacherId   *string                           `form:"teacher_id,omitempty" json:"teacher_id,omitempty"`
+	TermId      *string                           `form:"term_id,omitempty" json:"term_id,omitempty"`
+	Tag         *string                           `form:"tag,omitempty" json:"tag,omitempty"`
+	Access      *ListManagedResourcesParamsAccess `form:"access,omitempty" json:"access,omitempty"`
 }
 
 // ListManagedResourcesParamsSort defines parameters for ListManagedResources.
 type ListManagedResourcesParamsSort string
 
+// ListManagedResourcesParamsAccess defines parameters for ListManagedResources.
+type ListManagedResourcesParamsAccess string
+
 // ListOwnResourcesParams defines parameters for ListOwnResources.
 type ListOwnResourcesParams struct {
-	SchoolId    *string                     `form:"school_id,omitempty" json:"school_id,omitempty"`
-	CourseId    *string                     `form:"course_id,omitempty" json:"course_id,omitempty"`
-	CategoryId  *string                     `form:"category_id,omitempty" json:"category_id,omitempty"`
-	DirectoryId *string                     `form:"directory_id,omitempty" json:"directory_id,omitempty"`
-	Query       *string                     `form:"query,omitempty" json:"query,omitempty"`
-	Attributes  *string                     `form:"attributes,omitempty" json:"attributes,omitempty"`
-	After       *string                     `form:"after,omitempty" json:"after,omitempty"`
-	Limit       *string                     `form:"limit,omitempty" json:"limit,omitempty"`
-	Sort        *ListOwnResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
-	FileType    *string                     `form:"file_type,omitempty" json:"file_type,omitempty"`
+	SchoolId    *string                       `form:"school_id,omitempty" json:"school_id,omitempty"`
+	CourseId    *string                       `form:"course_id,omitempty" json:"course_id,omitempty"`
+	CategoryId  *string                       `form:"category_id,omitempty" json:"category_id,omitempty"`
+	DirectoryId *string                       `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Query       *string                       `form:"query,omitempty" json:"query,omitempty"`
+	Attributes  *string                       `form:"attributes,omitempty" json:"attributes,omitempty"`
+	After       *string                       `form:"after,omitempty" json:"after,omitempty"`
+	Limit       *string                       `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort        *ListOwnResourcesParamsSort   `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType    *string                       `form:"file_type,omitempty" json:"file_type,omitempty"`
+	TeacherId   *string                       `form:"teacher_id,omitempty" json:"teacher_id,omitempty"`
+	TermId      *string                       `form:"term_id,omitempty" json:"term_id,omitempty"`
+	Tag         *string                       `form:"tag,omitempty" json:"tag,omitempty"`
+	Access      *ListOwnResourcesParamsAccess `form:"access,omitempty" json:"access,omitempty"`
 }
 
 // ListOwnResourcesParamsSort defines parameters for ListOwnResources.
 type ListOwnResourcesParamsSort string
+
+// ListOwnResourcesParamsAccess defines parameters for ListOwnResources.
+type ListOwnResourcesParamsAccess string
 
 // MyResourcesReferencesParams defines parameters for MyResourcesReferences.
 type MyResourcesReferencesParams struct {
@@ -2410,6 +2523,54 @@ func NewListResourcesRequest(server string, params *ListResourcesParams) (*http.
 
 		}
 
+		if params.TeacherId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "teacher_id", *params.TeacherId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TermId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "term_id", *params.TermId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Tag != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tag", *params.Tag, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Access != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "access", *params.Access, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -2717,6 +2878,90 @@ func NewGetResourceCountsRequest(server string, params *GetResourceCountsParams)
 		if params.FileType != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "file_type", *params.FileType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.CourseId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "course_id", *params.CourseId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.DirectoryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "directory_id", *params.DirectoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Attributes != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "attributes", *params.Attributes, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TeacherId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "teacher_id", *params.TeacherId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TermId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "term_id", *params.TermId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Tag != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tag", *params.Tag, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Access != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "access", *params.Access, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -3806,6 +4051,54 @@ func NewListManagedResourcesRequest(server string, params *ListManagedResourcesP
 
 		}
 
+		if params.TeacherId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "teacher_id", *params.TeacherId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TermId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "term_id", *params.TermId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Tag != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tag", *params.Tag, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Access != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "access", *params.Access, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -3959,6 +4252,54 @@ func NewListOwnResourcesRequest(server string, params *ListOwnResourcesParams) (
 		if params.FileType != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "file_type", *params.FileType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TeacherId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "teacher_id", *params.TeacherId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TermId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "term_id", *params.TermId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Tag != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tag", *params.Tag, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Access != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "access", *params.Access, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
