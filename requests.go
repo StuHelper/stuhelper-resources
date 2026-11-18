@@ -28,9 +28,11 @@ func (s *Service) RequestStatus(ctx context.Context, p Principal, id string) (Re
 	out := rec.Receipt
 	out.TaskID = rec.ExternalID
 	if rec.ExternalID != "" {
-		status, e := s.deps.Moderation.Status(ctx, p, rec.ExternalID)
+		work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+		defer cancel()
+		status, e := s.deps.Moderation.Status(work, p, rec.ExternalID)
 		if e != nil {
-			return RequestReceipt{}, e
+			return RequestReceipt{}, normalizeDepError(ctx, e)
 		}
 		out.State = status.State
 		out.DecisionReason = status.Reason
@@ -73,7 +75,7 @@ func (s *Service) RetryRequest(ctx context.Context, p Principal, id, key string)
 	if e != nil {
 		return out, e
 	}
-	e = s.mutation(ctx, p, "request", r.SchoolID, key, id, struct{}{}, func(tx Transaction) (any, error) {
+	e = s.mutationWithBudget(ctx, p, "request", r.SchoolID, key, id, struct{}{}, &mutationBudget{addJob: true}, func(tx Transaction) (any, error) {
 		jobID := hash([]string{"request", rec.ResourceID, "", id, ""})
 		if e := tx.Lock("job:" + jobID); e != nil {
 			return nil, e

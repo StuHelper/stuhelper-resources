@@ -39,6 +39,10 @@ func New(repo Repository, deps Dependencies, cfg Config) (*Service, error) {
 	}
 	return &Service{repo: repo, deps: deps, cfg: cfg, now: func() time.Time { return clock().UTC() }}, nil
 }
+
+// OperationTimeout bounds stream preflight and a single stalled transfer operation.
+func (s *Service) OperationTimeout() time.Duration { return s.cfg.OperationTimeout }
+
 func (s *Service) Capabilities() Capabilities {
 	return Capabilities{UploadProfiles: append([]UploadProfile{}, s.cfg.UploadProfiles...), Terms: s.cfg.Terms, AllowedTypes: append([]string{}, s.cfg.AllowedTypes...), MaxFileSize: s.cfg.MaxFileSize, MaxPackageBytes: s.cfg.MaxPackageBytes, MaxPackageFiles: s.cfg.MaxPackageFiles, PurchaseAvailable: true}
 }
@@ -93,19 +97,106 @@ func (s *Service) precheckReplay(ctx context.Context, p Principal, action, id, k
 	return hit, err
 }
 
+func eventTargetAndRevision(id string, value any) (string, int64) {
+	target := id
+	var revision int64 = 1
+	switch v := value.(type) {
+	case Resource:
+		if target == "" {
+			target = v.ID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Category:
+		if target == "" {
+			target = v.ID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Directory:
+		if target == "" {
+			target = v.ID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Grant:
+		if target == "" {
+			target = v.ID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Coverage:
+		if target == "" {
+			target = v.PlanID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Package:
+		if target == "" {
+			target = v.ID
+		}
+	case requestCreation:
+		target, revision = v.ResourceID, v.resourceRevision
+	case RequestReceipt:
+		if target == "" {
+			target = v.ID
+		}
+	}
+	return target, revision
+}
+
+type mutationBudget struct {
+	exemptOps bool
+	addRecord bool
+	addJob    bool
+}
+
+// pending is one before the mutation and zero once its changes are visible
+// to this transaction. The final check runs under the budget lock at commit.
+func (s *Service) checkBudget(tx Transaction, b mutationBudget, pending int) error {
+	if b.exemptOps && !b.addRecord && !b.addJob {
+		return nil
+	}
+	records, operations, jobs, err := tx.Counts()
+	if err != nil {
+		return err
+	}
+	if !b.exemptOps && operations > s.cfg.MaxOperations-pending ||
+		b.addRecord && records > s.cfg.MaxRecords-pending ||
+		b.addJob && jobs > s.cfg.MaxJobs-pending {
+		return ErrCapacity
+	}
+	return nil
+}
+
 func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key, id string, input any, apply func(Transaction) (any, error), out any) error {
+	return s.mutationWithBudget(ctx, p, action, scope, key, id, input, &mutationBudget{}, apply, out)
+}
+
+func (s *Service) mutationWithBudget(ctx context.Context, p Principal, action, scope, key, id string, input any, budget *mutationBudget, apply func(Transaction) (any, error), out any) error {
+	_, err := s.mutationWithReplay(ctx, p, action, scope, scope, key, id, input, budget, apply, out)
+	return err
+}
+
+func (s *Service) mutationWithReplay(ctx context.Context, p Principal, action, scope, auditSchool, key, id string, input any, budget *mutationBudget, apply func(Transaction) (any, error), out any) (bool, error) {
 	if !p.Valid() {
-		return ErrUnauthenticated
+		return false, ErrUnauthenticated
 	}
 	if !validID(key) {
-		return ErrInput
+		return false, ErrInput
 	}
 	if e := s.auth(ctx, p, action, scope); e != nil {
-		return e
+		return false, e
 	}
 	operation := hash([]string{p.Key(), action, id, key})
 	digest := hash(input)
-	return s.repo.Transaction(ctx, func(tx Transaction) error {
+	replayed := false
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
 		if e := tx.Lock("operation:" + operation); e != nil {
 			return e
 		}
@@ -117,20 +208,14 @@ func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key,
 			if json.Unmarshal(prior.Result, out) != nil {
 				return ErrUnavailable
 			}
+			replayed = true
 			return nil
 		}
 		if !errors.Is(e, ErrNotFound) {
 			return e
 		}
-		if e = tx.Lock("budget"); e != nil {
+		if e = s.checkBudget(tx, *budget, 1); e != nil {
 			return e
-		}
-		records, operations, jobs, e := tx.Counts()
-		if e != nil {
-			return e
-		}
-		if records > s.cfg.MaxRecords || operations >= s.cfg.MaxOperations || jobs >= s.cfg.MaxJobs {
-			return ErrCapacity
 		}
 		value, e := apply(tx)
 		if e != nil {
@@ -140,14 +225,20 @@ func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key,
 		if e != nil {
 			return ErrUnavailable
 		}
-		auditTarget := id
-		if created, ok := value.(Resource); ok && auditTarget == "" {
-			auditTarget = created.ID
-		}
-		if e = tx.Event(Event{Reason: auditReason(input), ID: operation, Type: "resources." + action + ".v1", ResourceID: auditTarget, SchoolID: scope, Actor: p.Key(), Time: s.now()}); e != nil {
+		auditTarget, revision := eventTargetAndRevision(id, value)
+		if e = tx.Event(Event{Reason: auditReason(input), ID: operation, Type: "resources." + action + ".v1", ResourceID: auditTarget, SchoolID: auditSchool, Actor: p.Key(), Revision: revision, Time: s.now()}); e != nil {
 			return e
 		}
 		if e = tx.SaveReplay(Replay{Key: operation, Digest: digest, Result: data}); e != nil {
+			return e
+		}
+		// All business writes have finished. Hold the shared quota's exclusive
+		// lock only for the final counter read and commit. READ COMMITTED makes
+		// the previous holder's committed counters visible after we acquire it.
+		if e = tx.Lock("budget"); e != nil {
+			return e
+		}
+		if e = s.checkBudget(tx, *budget, 0); e != nil {
 			return e
 		}
 		if json.Unmarshal(data, out) != nil {
@@ -155,6 +246,7 @@ func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key,
 		}
 		return nil
 	})
+	return replayed, err
 }
 func (s *Service) PutCategory(ctx context.Context, p Principal, id, key string, input CategoryWrite) (Category, error) {
 	var out Category

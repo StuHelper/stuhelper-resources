@@ -1346,6 +1346,12 @@ export interface operations {
     ListOwnResources: {
         parameters: {
             query?: {
+                school_id?: string;
+                course_id?: string;
+                category_id?: string;
+                directory_id?: string;
+                query?: string;
+                attributes?: string;
                 after?: string;
                 limit?: string;
                 sort?: "id" | "newest";
@@ -2711,6 +2717,7 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": string;
+                    "application/zip": string;
                 };
             };
             /** @description Invalid request */
@@ -3490,6 +3497,8 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": string;
+                    "application/pdf": string;
+                    "*/*": string;
                 };
             };
             /** @description Invalid request */
