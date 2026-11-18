@@ -76,7 +76,17 @@ func (s *Service) ProcessOne(ctx context.Context, worker string) (bool, error) {
 		if e = tx.SaveJob(latest); e != nil {
 			return e
 		}
-		return tx.Event(Event{ID: hash([]string{"job", job.ID}), Type: "resources." + job.Kind + ".completed.v1", ResourceID: job.ResourceID, Actor: "worker", Time: s.now()})
+		var eventSchool string
+		var eventRevision int64 = 1
+		if job.ResourceID != "" {
+			if r, err := tx.Record(job.ResourceID); err == nil {
+				eventSchool = r.SchoolID
+				if r.Revision > 0 {
+					eventRevision = r.Revision
+				}
+			}
+		}
+		return tx.Event(Event{ID: hash([]string{"job", job.ID}), Type: "resources." + job.Kind + ".completed.v1", ResourceID: job.ResourceID, SchoolID: eventSchool, Actor: "worker", Revision: eventRevision, Time: s.now()})
 	})
 	if e != nil {
 		return true, e
@@ -224,11 +234,17 @@ func (s *Service) completeJob(tx Transaction, job Job, result jobResult) error {
 // keys. Providers must return the earlier result after an ambiguous timeout.
 func (s *Service) RetryPending(ctx context.Context, p Principal, id, key string, in Command) (Resource, error) {
 	var out Resource
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || in.Revision < 1 {
+		return out, ErrInput
+	}
 	r, e := s.record(ctx, id)
 	if e != nil {
 		return out, e
 	}
-	e = s.mutation(ctx, p, "manage", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+	e = s.mutationWithBudget(ctx, p, "manage", r.SchoolID, key, id, in, &mutationBudget{addJob: true}, func(tx Transaction) (any, error) {
 		if e := tx.Lock("resource:" + id); e != nil {
 			return nil, e
 		}

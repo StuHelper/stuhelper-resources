@@ -111,7 +111,8 @@ export interface paths {
         /** UpdateDraft */
         put: operations["UpdateDraft"];
         post?: never;
-        delete?: never;
+        /** Delete an own never-published draft or rejected resource */
+        delete: operations["DeleteDraft"];
         options?: never;
         head?: never;
         patch?: never;
@@ -385,7 +386,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GetResource */
+        /** Read own request status */
         get: operations["GetResourceRequest"];
         put?: never;
         post?: never;
@@ -404,7 +405,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** SubmitResource */
+        /** Retry a failed request delivery */
         post: operations["RetryResourceRequest"];
         delete?: never;
         options?: never;
@@ -470,7 +471,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required. */
+        /**
+         * List own uploaded reference names
+         * @description Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+         */
         get: operations["myResourcesReferences"];
         put?: never;
         post?: never;
@@ -526,7 +530,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * ListResources
+         * Count current-visible published resources
          * @description Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
          */
         get: operations["GetResourceCounts"];
@@ -546,7 +550,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * ListOwnResources
+         * Read own resource summary counts
          * @description Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
          */
         get: operations["GetOwnResourceSummary"];
@@ -572,6 +576,63 @@ export interface paths {
         get: operations["ListCoverage"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resources/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find published resources with identical file digest in the same course
+         * @description Checks published resources in the target course (including merged course aliases) matching the SHA-256 file digest. Requires both discover and upload permissions in the school.
+         */
+        get: operations["FindDuplicateResources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resources/me/entitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List own purchased and granted resources
+         * @description Lists non-blocked resources unlocked by the authenticated caller through non-revoked purchases (including ordinary unlisted items) or active non-expired direct grants. Requires current content admission in each returned school.
+         */
+        get: operations["ListEntitledResources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resources/items/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Withdraw an own pending proposal back to draft */
+        post: operations["WithdrawProposal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -665,6 +726,8 @@ export interface components {
             author?: string;
             license?: string;
             consent?: components["schemas"]["Consent"];
+            /** @description Optional opt-in for verified course instructors; server-verified against current Authority and Catalog facts. */
+            verified_instructor?: boolean;
         };
         Metadata: {
             title: string;
@@ -686,6 +749,8 @@ export interface components {
             /** Format: int64 */
             revision: number;
             metadata: components["schemas"]["Metadata"];
+            media_version_id?: string;
+            submit?: boolean;
         };
         FileLink: {
             /** Format: int64 */
@@ -715,6 +780,11 @@ export interface components {
             state: "draft" | "pending" | "rejected" | "approved" | "preparing" | "published" | "superseded" | "blocked";
             /** Format: date-time */
             created_at: string;
+            /** @description Server-verified snapshot indicating the version was submitted by a verified instructor of the course. */
+            verified_instructor?: boolean;
+            decision_reason?: string;
+            /** Format: date-time */
+            submitted_at?: string;
         };
         Resource: {
             id: string;
@@ -915,6 +985,9 @@ export interface components {
         ResourceCounts: {
             total: number;
             courses: components["schemas"]["CourseResourceCount"][];
+            group_by?: string;
+            groups?: components["schemas"]["ResourceGroupCount"][];
+            ungrouped_count?: number;
         };
         OwnResourceSummary: {
             resource_count: number;
@@ -923,6 +996,32 @@ export interface components {
         CoveragePage: {
             items: components["schemas"]["Coverage"][];
             next_cursor: string;
+        };
+        DuplicateResource: {
+            id: string;
+            version_id: string;
+            title: string;
+            category_id: string;
+            /** @enum {string} */
+            access: "public" | "restricted";
+            filename: string;
+            /** Format: int64 */
+            size: number;
+            owned: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        DuplicateResourceList: {
+            items: components["schemas"]["DuplicateResource"][];
+        };
+        DeleteReceipt: {
+            id: string;
+            deleted: boolean;
+        };
+        ResourceGroupCount: {
+            key: string;
+            value: components["schemas"]["Value"];
+            count: number;
         };
     };
     responses: never;
@@ -1207,6 +1306,10 @@ export interface operations {
                 limit?: string;
                 sort?: "id" | "newest";
                 file_type?: string;
+                teacher_id?: string;
+                term_id?: string;
+                tag?: string;
+                access?: "public" | "restricted";
             };
             header?: never;
             path?: never;
@@ -1380,10 +1483,20 @@ export interface operations {
     ListOwnResources: {
         parameters: {
             query?: {
+                school_id?: string;
+                course_id?: string;
+                category_id?: string;
+                directory_id?: string;
+                query?: string;
+                attributes?: string;
                 after?: string;
                 limit?: string;
                 sort?: "id" | "newest";
                 file_type?: string;
+                teacher_id?: string;
+                term_id?: string;
+                tag?: string;
+                access?: "public" | "restricted";
             };
             header?: never;
             path?: never;
@@ -1574,6 +1687,95 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Resource"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Revision, policy or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Configured resource limit exceeded */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    DeleteDraft: {
+        parameters: {
+            query?: {
+                revision?: number;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteReceipt"];
                 };
             };
             /** @description Invalid request */
@@ -2646,7 +2848,11 @@ export interface operations {
     DownloadResource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "If-None-Match"?: string;
+                "If-Range"?: string;
+                Range?: string;
+            };
             path: {
                 id: string;
             };
@@ -2654,14 +2860,41 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Authorized complete file or archive */
+            /** @description Authorized complete file */
             200: {
                 headers: {
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    "Content-Length"?: number;
+                    "Content-Disposition"?: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/octet-stream": string;
                 };
+            };
+            /** @description Authorized byte range */
+            206: {
+                headers: {
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    "Content-Length"?: number;
+                    "Content-Disposition"?: string;
+                    "Content-Range"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Not modified after current authorization check */
+            304: {
+                headers: {
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Invalid request */
             400: {
@@ -2717,6 +2950,18 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Range not satisfiable */
+            416: {
+                headers: {
+                    "Content-Range"?: string;
+                    "Accept-Ranges"?: string;
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Dependency unavailable */
             503: {
                 headers: {
@@ -2747,6 +2992,7 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": string;
+                    "application/zip": string;
                 };
             };
             /** @description Invalid request */
@@ -2921,6 +3167,10 @@ export interface operations {
                 state?: "draft" | "published" | "unlisted" | "blocked";
                 proposal_state?: "draft" | "pending" | "preparing" | "rejected";
                 failed_only?: boolean;
+                teacher_id?: string;
+                term_id?: string;
+                tag?: string;
+                access?: "public" | "restricted";
             };
             header?: never;
             path?: never;
@@ -3514,7 +3764,11 @@ export interface operations {
     PreviewResource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "If-None-Match"?: string;
+                "If-Range"?: string;
+                Range?: string;
+            };
             path: {
                 id: string;
             };
@@ -3522,14 +3776,45 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Authorized complete file or archive */
+            /** @description Authorized complete file */
             200: {
                 headers: {
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    "Content-Length"?: number;
+                    "Content-Disposition"?: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/octet-stream": string;
+                    "application/pdf": string;
+                    "*/*": string;
                 };
+            };
+            /** @description Authorized byte range */
+            206: {
+                headers: {
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    "Content-Length"?: number;
+                    "Content-Disposition"?: string;
+                    "Content-Range"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                    "application/pdf": string;
+                    "*/*": string;
+                };
+            };
+            /** @description Not modified after current authorization check */
+            304: {
+                headers: {
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Invalid request */
             400: {
@@ -3579,6 +3864,18 @@ export interface operations {
             /** @description Configured resource limit exceeded */
             413: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Range not satisfiable */
+            416: {
+                headers: {
+                    "Content-Range"?: string;
+                    "Accept-Ranges"?: string;
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3780,6 +4077,13 @@ export interface operations {
                 query?: string;
                 category_id?: string;
                 file_type?: string;
+                course_id?: string;
+                directory_id?: string;
+                attributes?: string;
+                teacher_id?: string;
+                term_id?: string;
+                tag?: string;
+                access?: "public" | "restricted";
             };
             header?: never;
             path?: never;
@@ -3963,6 +4267,278 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CoveragePage"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Revision, policy or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Configured resource limit exceeded */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    FindDuplicateResources: {
+        parameters: {
+            query: {
+                school_id: string;
+                course_id: string;
+                sha256: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateResourceList"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Revision, policy or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Configured resource limit exceeded */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ListEntitledResources: {
+        parameters: {
+            query?: {
+                school_id?: string;
+                course_id?: string;
+                category_id?: string;
+                directory_id?: string;
+                query?: string;
+                attributes?: string;
+                after?: string;
+                limit?: string;
+                sort?: "id" | "newest";
+                file_type?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourcePage"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Revision, policy or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Configured resource limit exceeded */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    WithdrawProposal: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Command"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Resource"];
                 };
             };
             /** @description Invalid request */

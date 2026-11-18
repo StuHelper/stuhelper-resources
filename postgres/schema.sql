@@ -5,7 +5,13 @@ CREATE TABLE IF NOT EXISTS resources.records (id text PRIMARY KEY, owner_key tex
 CREATE INDEX IF NOT EXISTS resources_records_owner ON resources.records(owner_key,id);
 CREATE INDEX IF NOT EXISTS resources_records_school ON resources.records(school_id,state,id);
 CREATE TABLE IF NOT EXISTS resources.versions (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), number bigint NOT NULL, data jsonb NOT NULL, UNIQUE(resource_id,number));
+CREATE INDEX IF NOT EXISTS resources_versions_published_sha256 ON resources.versions((data->'Version'->'metadata'->'associations'->>'school_id'),(data->'Version'->'file'->>'sha256')) WHERE data->'Version'->>'state'='published';
+CREATE INDEX IF NOT EXISTS resources_versions_course ON resources.versions ((data->'Version'->'metadata'->'associations'->>'course_id'));
+CREATE INDEX IF NOT EXISTS resources_versions_category ON resources.versions ((data->'Version'->'metadata'->>'category_id'));
+CREATE INDEX IF NOT EXISTS resources_versions_directory ON resources.versions ((data->'Version'->'metadata'->>'directory_id'));
+CREATE INDEX IF NOT EXISTS resources_versions_attributes ON resources.versions USING gin ((COALESCE(data->'Version'->'metadata'->'attributes','{}'::jsonb)) jsonb_path_ops);
 CREATE TABLE IF NOT EXISTS resources.grants (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), subject_key text NOT NULL, data jsonb NOT NULL, query_changed_at timestamptz NOT NULL DEFAULT now(), UNIQUE(resource_id,subject_key));
+CREATE INDEX IF NOT EXISTS resources_grants_subject ON resources.grants(subject_key,resource_id);
 CREATE TABLE IF NOT EXISTS resources.directories (id text PRIMARY KEY, school_id text NOT NULL, course_id text NOT NULL, parent_id text NOT NULL, data jsonb NOT NULL);
 CREATE INDEX IF NOT EXISTS resources_directories_parent ON resources.directories(school_id,parent_id,id);
 CREATE INDEX IF NOT EXISTS resources_directories_course ON resources.directories(school_id,course_id,id);
@@ -18,11 +24,13 @@ CREATE INDEX IF NOT EXISTS resources_jobs_resource ON resources.jobs((data->>'Re
 CREATE TABLE IF NOT EXISTS resources.replays (key text PRIMARY KEY, data jsonb NOT NULL);
 CREATE TABLE IF NOT EXISTS resources.audit (id text PRIMARY KEY, data jsonb NOT NULL, reason text NOT NULL DEFAULT '', result text NOT NULL DEFAULT 'unknown' CHECK(result IN ('success','denied','failed','unknown')), recorded_xid xid8 NOT NULL DEFAULT pg_current_xact_id(), audit_actor text NOT NULL DEFAULT 'unknown', audit_target text NOT NULL DEFAULT 'unknown', audit_action text NOT NULL DEFAULT 'unknown', audit_school text NOT NULL DEFAULT '*', audit_group text NOT NULL DEFAULT '*', audit_time timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS resources.outbox(id text PRIMARY KEY, data jsonb NOT NULL, seq bigint GENERATED ALWAYS AS IDENTITY UNIQUE, sent_at timestamptz);
-CREATE INDEX IF NOT EXISTS resources_outbox_pending ON resources.outbox((data->>'source') COLLATE "C",(data->>'subject') COLLATE "C",seq) WHERE sent_at IS NULL;
+DROP INDEX IF EXISTS resources.resources_outbox_pending;
+CREATE INDEX IF NOT EXISTS resources_outbox_pending_seq ON resources.outbox(seq) WHERE sent_at IS NULL;
 REVOKE ALL ON SCHEMA resources FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA resources FROM PUBLIC;
 
-CREATE INDEX IF NOT EXISTS resources_requests_reporter ON resources.requests((data->'Reporter'),id);
+CREATE INDEX IF NOT EXISTS resources_requests_reporter_c ON resources.requests((data->'Reporter'),id COLLATE "C");
+DROP INDEX IF EXISTS resources.resources_requests_reporter;
 
 CREATE TABLE IF NOT EXISTS resources.closed_owners(owner_key text PRIMARY KEY,closure_id text NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
 
@@ -54,3 +62,40 @@ CREATE INDEX IF NOT EXISTS resources_purchase_owner ON resources.purchases(owner
 CREATE TABLE IF NOT EXISTS resources.memberships(owner_key text NOT NULL,plan_id text NOT NULL,data jsonb NOT NULL,PRIMARY KEY(owner_key,plan_id));
 CREATE TABLE IF NOT EXISTS resources.inbox(id text PRIMARY KEY,received_at timestamptz NOT NULL DEFAULT now());
 REVOKE ALL ON TABLE resources.coverage,resources.purchases,resources.memberships,resources.inbox FROM PUBLIC;
+
+CREATE TABLE IF NOT EXISTS resources.counter_shards(name text NOT NULL,shard smallint NOT NULL CHECK(shard>=0 AND shard<64),delta bigint NOT NULL DEFAULT 0,PRIMARY KEY(name,shard));
+REVOKE ALL ON TABLE resources.counter_shards FROM PUBLIC;
+INSERT INTO resources.counter_shards(name,shard,delta)
+SELECT v.name,0,v.total FROM (VALUES
+  ('records',(SELECT count(*) FROM resources.records)),
+  ('replays',(SELECT count(*) FROM resources.replays)),
+  ('active_jobs',(SELECT count(*) FROM resources.jobs WHERE state IN ('pending','working')))
+) AS v(name,total)
+WHERE NOT EXISTS (SELECT 1 FROM resources.counter_shards cs WHERE cs.name=v.name);
+
+CREATE OR REPLACE FUNCTION resources.bump_counter(p_name text,p_key text,p_delta bigint) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN INSERT INTO resources.counter_shards(name,shard,delta) VALUES(p_name,pg_catalog.mod(pg_catalog.abs(pg_catalog.hashtext(p_key)::bigint),64)::smallint,p_delta) ON CONFLICT(name,shard) DO UPDATE SET delta=resources.counter_shards.delta+EXCLUDED.delta; END $$;
+REVOKE ALL ON FUNCTION resources.bump_counter(text,text,bigint) FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION resources.count_records_row() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN IF TG_OP='INSERT' THEN PERFORM resources.bump_counter('records',NEW.id,1); ELSIF TG_OP='DELETE' THEN PERFORM resources.bump_counter('records',OLD.id,-1); END IF; RETURN NULL; END $$;
+REVOKE ALL ON FUNCTION resources.count_records_row() FROM PUBLIC;
+DROP TRIGGER IF EXISTS resources_records_counter_row ON resources.records;
+CREATE TRIGGER resources_records_counter_row AFTER INSERT OR DELETE ON resources.records FOR EACH ROW EXECUTE FUNCTION resources.count_records_row();
+
+CREATE OR REPLACE FUNCTION resources.count_replays_row() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN IF TG_OP='INSERT' THEN PERFORM resources.bump_counter('replays',NEW.key,1); ELSIF TG_OP='DELETE' THEN PERFORM resources.bump_counter('replays',OLD.key,-1); END IF; RETURN NULL; END $$;
+REVOKE ALL ON FUNCTION resources.count_replays_row() FROM PUBLIC;
+DROP TRIGGER IF EXISTS resources_replays_counter_row ON resources.replays;
+CREATE TRIGGER resources_replays_counter_row AFTER INSERT OR DELETE ON resources.replays FOR EACH ROW EXECUTE FUNCTION resources.count_replays_row();
+
+CREATE OR REPLACE FUNCTION resources.count_jobs_row() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$ DECLARE old_active boolean:=false; new_active boolean:=false; BEGIN IF TG_OP IN ('UPDATE','DELETE') THEN old_active:=OLD.state IN ('pending','working'); END IF; IF TG_OP IN ('INSERT','UPDATE') THEN new_active:=NEW.state IN ('pending','working'); END IF; IF new_active AND NOT old_active THEN PERFORM resources.bump_counter('active_jobs',NEW.id,1); ELSIF old_active AND NOT new_active THEN PERFORM resources.bump_counter('active_jobs',COALESCE(NEW.id,OLD.id),-1); END IF; RETURN NULL; END $$;
+REVOKE ALL ON FUNCTION resources.count_jobs_row() FROM PUBLIC;
+DROP TRIGGER IF EXISTS resources_jobs_counter_row ON resources.jobs;
+CREATE TRIGGER resources_jobs_counter_row AFTER INSERT OR UPDATE OF state OR DELETE ON resources.jobs FOR EACH ROW EXECUTE FUNCTION resources.count_jobs_row();
+
+CREATE OR REPLACE FUNCTION resources.reset_counter() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN DELETE FROM resources.counter_shards WHERE name=TG_ARGV[0]; INSERT INTO resources.counter_shards(name,shard,delta) VALUES(TG_ARGV[0],0,0); RETURN NULL; END $$;
+REVOKE ALL ON FUNCTION resources.reset_counter() FROM PUBLIC;
+DROP TRIGGER IF EXISTS resources_records_counter_truncate ON resources.records;
+CREATE TRIGGER resources_records_counter_truncate AFTER TRUNCATE ON resources.records FOR EACH STATEMENT EXECUTE FUNCTION resources.reset_counter('records');
+DROP TRIGGER IF EXISTS resources_replays_counter_truncate ON resources.replays;
+CREATE TRIGGER resources_replays_counter_truncate AFTER TRUNCATE ON resources.replays FOR EACH STATEMENT EXECUTE FUNCTION resources.reset_counter('replays');
+DROP TRIGGER IF EXISTS resources_jobs_counter_truncate ON resources.jobs;
+CREATE TRIGGER resources_jobs_counter_truncate AFTER TRUNCATE ON resources.jobs FOR EACH STATEMENT EXECUTE FUNCTION resources.reset_counter('active_jobs');

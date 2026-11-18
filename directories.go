@@ -8,16 +8,28 @@ import (
 
 func (s *Service) PutDirectory(ctx context.Context, p Principal, id, key string, in DirectoryWrite) (Directory, error) {
 	var out Directory
-	if !validID(id) || !validID(in.SchoolID) || !optionalID(in.CourseID) || !optionalID(in.ParentID) || in.ParentID == id || in.Revision < 0 || !names(in.Names) {
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || !validID(in.SchoolID) || !optionalID(in.CourseID) || !optionalID(in.ParentID) || in.ParentID == id || in.Revision < 0 || !names(in.Names) {
 		return out, ErrInput
 	}
 	if e := s.auth(ctx, p, "directories.manage", in.SchoolID); e != nil {
 		return out, e
 	}
+	if hit, e := s.precheckReplay(ctx, p, "directories.manage", id, key, in, &out); e != nil || hit {
+		return out, e
+	}
 	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
 	defer cancel()
 	if e := s.deps.Catalog.Validate(work, Associations{SchoolID: in.SchoolID, CourseID: in.CourseID}); e != nil {
-		return out, e
+		if ctx.Err() != nil {
+			return out, ctx.Err()
+		}
+		if errors.Is(e, ErrInput) || errors.Is(e, ErrNotFound) {
+			return out, ErrInput
+		}
+		return out, ErrUnavailable
 	}
 	e := s.mutation(ctx, p, "directories.manage", in.SchoolID, key, id, in, func(tx Transaction) (any, error) {
 		if e := tx.Lock("directories:" + in.SchoolID); e != nil {
@@ -104,6 +116,37 @@ type CourseTreeTransaction interface {
 	CourseDirectories(school, course string, limit int) ([]Directory, error)
 }
 
+// School-wide ancestors can be outside the course result. Resolve each at
+// most once, and only expose course children connected to an enabled root.
+func visibleSchoolParent(tx Transaction, school, id string, depth int, cache map[string]bool) (bool, error) {
+	if id == "" {
+		return true, nil
+	}
+	if v, ok := cache[id]; ok {
+		return v, nil
+	}
+	if depth == 0 {
+		return false, nil
+	}
+	parent, err := tx.Directory(id)
+	if errors.Is(err, ErrNotFound) {
+		cache[id] = false
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !parent.Enabled || parent.SchoolID != school || parent.CourseID != "" {
+		cache[id] = false
+		return false, nil
+	}
+	visible, err := visibleSchoolParent(tx, school, parent.ParentID, depth-1, cache)
+	if err == nil {
+		cache[id] = visible
+	}
+	return visible, err
+}
+
 func (s *Service) CourseDirectoryTree(ctx context.Context, p Principal, school, course string) (DirectoryPage, error) {
 	out := DirectoryPage{Items: []Directory{}}
 	if !validID(school) || !validID(course) {
@@ -118,26 +161,41 @@ func (s *Service) CourseDirectoryTree(ctx context.Context, p Principal, school, 
 		return out, e
 	}
 	var all []Directory
-	e := s.repo.Transaction(ctx, func(tx Transaction) error {
+	byID := map[string]Directory{}
+	visibleParents := map[string]bool{}
+	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+	defer cancel()
+	e := s.repo.Transaction(work, func(tx Transaction) error {
 		port, ok := tx.(CourseTreeTransaction)
 		if !ok {
 			return ErrUnavailable
 		}
 		var err error
 		all, err = port.CourseDirectories(school, course, 501)
-		return err
+		if err != nil {
+			return err
+		}
+		if len(all) > 500 {
+			return ErrCapacity
+		}
+		for _, d := range all {
+			byID[d.ID] = d
+		}
+		if !isManager {
+			for _, d := range all {
+				if _, local := byID[d.ParentID]; d.Enabled && d.ParentID != "" && !local {
+					if _, err := visibleSchoolParent(tx, school, d.ParentID, s.cfg.MaxDirectoryDepth, visibleParents); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
 	})
 	if e != nil {
 		return out, e
 	}
-	if len(all) > 500 {
-		return out, ErrCapacity
-	}
-	byID := make(map[string]Directory, len(all))
 	children := make(map[string][]Directory, len(all))
-	for _, d := range all {
-		byID[d.ID] = d
-	}
 	var roots []Directory
 	for _, d := range all {
 		if !isManager && !d.Enabled {
@@ -149,7 +207,7 @@ func (s *Service) CourseDirectoryTree(ctx context.Context, p Principal, school, 
 		}
 		parent, inCourse := byID[d.ParentID]
 		if !inCourse {
-			if isManager {
+			if isManager || visibleParents[d.ParentID] {
 				roots = append(roots, d)
 			}
 			continue
@@ -176,24 +234,76 @@ func (s *Service) CourseDirectoryTree(ctx context.Context, p Principal, school, 
 
 func (s *Service) Directories(ctx context.Context, p Principal, school, course, parent string, n int, after string) (DirectoryPage, error) {
 	out := DirectoryPage{Items: []Directory{}}
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
 	if !validID(school) || !optionalID(course) || !optionalID(parent) || !optionalID(after) || n < 1 || n > 100 {
 		return out, ErrInput
 	}
-	if e := s.auth(ctx, p, "discover", school); e != nil {
-		return out, e
+	includeDisabled := true
+	if e := s.auth(ctx, p, "directories.manage", school); e != nil {
+		if !denied(e) {
+			return out, e
+		}
+		includeDisabled = false
+		if e = s.auth(ctx, p, "discover", school); e != nil {
+			return out, e
+		}
 	}
-	e := s.repo.Transaction(ctx, func(tx Transaction) error {
-		var e error
-		out.Items, e = tx.Directories(school, course, parent, n, after)
-		return e
+	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+	defer cancel()
+	e := s.repo.Transaction(work, func(tx Transaction) error {
+		if port, ok := tx.(interface {
+			DirectoriesFiltered(string, string, string, int, string, bool) ([]Directory, error)
+		}); ok {
+			var err error
+			out.Items, err = port.DirectoriesFiltered(school, course, parent, n, after, includeDisabled)
+			return err
+		}
+		if includeDisabled {
+			var err error
+			out.Items, err = tx.Directories(school, course, parent, n, after)
+			return err
+		}
+		// Legacy repositories return disabled entries too. Advance by the last
+		// scanned ID while collecting the requested number of visible entries.
+		const batchSize = 100
+		cursor := after
+		for len(out.Items) < n {
+			if err := work.Err(); err != nil {
+				return err
+			}
+			items, err := tx.Directories(school, course, parent, batchSize, cursor)
+			if err != nil {
+				return err
+			}
+			for _, item := range items {
+				if item.Enabled {
+					out.Items = append(out.Items, item)
+					if len(out.Items) == n {
+						return nil
+					}
+				}
+			}
+			if len(items) < batchSize {
+				break
+			}
+			next := items[len(items)-1].ID
+			if next <= cursor {
+				return ErrUnavailable
+			}
+			cursor = next
+		}
+		return nil
 	})
 	if len(out.Items) == n {
 		out.NextCursor = out.Items[n-1].ID
 	}
 	return out, e
 }
-func (s *Service) directoryResources(ctx context.Context, id string) ([]string, error) {
+func (s *Service) directoryResources(ctx context.Context, id string) ([]string, string, error) {
 	ids := []string{}
+	school := ""
 	e := s.repo.Transaction(ctx, func(tx Transaction) error {
 		root, e := tx.Directory(id)
 		if e != nil {
@@ -202,6 +312,7 @@ func (s *Service) directoryResources(ctx context.Context, id string) ([]string, 
 		if !root.Enabled {
 			return ErrNotFound
 		}
+		school = root.SchoolID
 		queue := []string{id}
 		seen := map[string]bool{}
 		maxFiles := s.cfg.MaxPackageFiles * s.cfg.MaxPackageParts
@@ -247,7 +358,7 @@ func (s *Service) directoryResources(ctx context.Context, id string) ([]string, 
 		}
 		return nil
 	})
-	return ids, e
+	return ids, school, e
 }
 func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in PackageRequest) (Package, error) {
 	var out Package
@@ -257,31 +368,58 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 	if !validID(key) || in.DirectoryID == "" && len(in.ResourceIDs) == 0 || in.DirectoryID != "" && len(in.ResourceIDs) > 0 || !optionalID(in.DirectoryID) || len(in.ResourceIDs) > s.cfg.MaxPackageFiles*s.cfg.MaxPackageParts {
 		return out, ErrInput
 	}
+	s = s.withRequestAuthority()
 	if e := s.auth(ctx, p, "package", ""); e != nil {
 		return out, e
 	}
+	if hit, e := s.precheckReplay(ctx, p, "package", "", key, in, &out); e != nil {
+		return Package{}, e
+	} else if hit {
+		checked, e := s.GetPackage(ctx, p, out.ID)
+		if e != nil {
+			return Package{}, e
+		}
+		return checked.Package, nil
+	}
 	ids := in.ResourceIDs
+	schools := map[string]bool{}
 	if in.DirectoryID != "" {
 		var e error
-		ids, e = s.directoryResources(ctx, in.DirectoryID)
+		var dirSchool string
+		ids, dirSchool, e = s.directoryResources(ctx, in.DirectoryID)
 		if e != nil {
 			return out, e
 		}
+		if dirSchool != "" {
+			if e = s.auth(ctx, p, "package", dirSchool); e != nil {
+				return out, e
+			}
+			schools[dirSchool] = true
+		}
 	}
-	selected := [][]Selection{}
-	parts := []PackagePart{}
 	seen := map[string]bool{}
 	for _, id := range ids {
 		if !validID(id) || seen[id] {
 			return out, ErrInput
 		}
 		seen[id] = true
-		file, e := s.selection(ctx, p, id)
-		if denied(e) || errors.Is(e, ErrNotFound) {
-			continue
-		}
-		if e != nil {
+	}
+	selections, itemErrs, e := s.selectBatch(ctx, p, ids)
+	if e != nil {
+		return out, e
+	}
+	selected := [][]Selection{}
+	parts := []PackagePart{}
+	for _, id := range ids {
+		if e := itemErrs[id]; e != nil {
+			if denied(e) || errors.Is(e, ErrNotFound) {
+				continue
+			}
 			return out, e
+		}
+		file := selections[id].Selection
+		if schoolID := selections[id].schoolID; schoolID != "" {
+			schools[schoolID] = true
 		}
 		if file.File.Size > s.cfg.MaxPackageBytes {
 			return out, ErrCapacity
@@ -301,7 +439,13 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 	if len(parts) == 0 {
 		return out, ErrNotFound
 	}
-	e := s.mutation(ctx, p, "package", "", key, "", in, func(tx Transaction) (any, error) {
+	auditSchool := ""
+	if len(schools) == 1 {
+		for sc := range schools {
+			auditSchool = sc
+		}
+	}
+	replayed, e := s.mutationWithReplay(ctx, p, "package", "", auditSchool, key, "", in, &mutationBudget{}, func(tx Transaction) (any, error) {
 		out = Package{ID: newID(), Parts: parts, ExpiresAt: s.now().Add(s.cfg.PackageTTL)}
 		if e := tx.SavePackage(PackageRecord{Package: out, Owner: p, Selections: selected}); e != nil {
 			return nil, e
@@ -311,11 +455,42 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 	if e != nil {
 		return Package{}, e
 	}
-	checked, e := s.GetPackage(ctx, p, out.ID)
-	if e != nil {
-		return Package{}, e
+	if replayed {
+		checked, e := s.GetPackage(ctx, p, out.ID)
+		if e != nil {
+			return Package{}, e
+		}
+		return checked.Package, nil
 	}
-	return checked.Package, nil
+	return out, nil
+}
+func (s *Service) verifyPackageSelections(ctx context.Context, p Principal, groups [][]Selection) error {
+	ids := []string{}
+	seen := map[string]bool{}
+	for _, part := range groups {
+		for _, old := range part {
+			if !seen[old.ResourceID] {
+				seen[old.ResourceID] = true
+				ids = append(ids, old.ResourceID)
+			}
+		}
+	}
+	selections, itemErrs, err := s.selectBatch(ctx, p, ids)
+	if err != nil {
+		return err
+	}
+	for _, part := range groups {
+		for _, old := range part {
+			if e := itemErrs[old.ResourceID]; e != nil {
+				return e
+			}
+			current := selections[old.ResourceID]
+			if current.VersionID != old.VersionID || current.ReferenceID != old.ReferenceID {
+				return ErrConflict
+			}
+		}
+	}
+	return nil
 }
 func (s *Service) GetPackage(ctx context.Context, p Principal, id string) (PackageRecord, error) {
 	var out PackageRecord
@@ -325,6 +500,7 @@ func (s *Service) GetPackage(ctx context.Context, p Principal, id string) (Packa
 	if !validID(id) {
 		return out, ErrInput
 	}
+	s = s.withRequestAuthority()
 	e := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = tx.Package(id); return e })
 	if e != nil {
 		return PackageRecord{}, e
@@ -336,28 +512,37 @@ func (s *Service) GetPackage(ctx context.Context, p Principal, id string) (Packa
 		return PackageRecord{}, ErrConflict
 	}
 	// Recheck before exposing the manifest as well as before delivering bytes.
-	for _, part := range out.Selections {
-		for _, old := range part {
-			current, e := s.selection(ctx, p, old.ResourceID)
-			if e != nil {
-				return PackageRecord{}, e
-			}
-			if current.VersionID != old.VersionID || current.ReferenceID != old.ReferenceID {
-				return PackageRecord{}, ErrConflict
-			}
-		}
+	if e = s.verifyPackageSelections(ctx, p, out.Selections); e != nil {
+		return PackageRecord{}, e
 	}
 	return out, nil
 }
 func (s *Service) DownloadPackage(ctx context.Context, p Principal, id string, part int, w io.Writer) error {
-	bundle, e := s.GetPackage(ctx, p, id)
+	if !p.Valid() {
+		return ErrUnauthenticated
+	}
+	if !validID(id) {
+		return ErrInput
+	}
+	s = s.withRequestAuthority()
+	var bundle PackageRecord
+	e := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; bundle, e = tx.Package(id); return e })
 	if e != nil {
 		return e
+	}
+	if bundle.Owner != p {
+		return ErrNotFound
+	}
+	if !s.now().Before(bundle.Package.ExpiresAt) {
+		return ErrConflict
 	}
 	if part < 1 || part > len(bundle.Selections) {
 		return ErrInput
 	}
-	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
-	defer cancel()
-	return s.deps.Files.Archive(work, p, bundle.Selections[part-1], w)
+	if e = s.verifyPackageSelections(ctx, p, [][]Selection{bundle.Selections[part-1]}); e != nil {
+		return e
+	}
+	return s.withStreamIdleTimeout(ctx, w, func(streamCtx context.Context, out io.Writer) error {
+		return s.deps.Files.Archive(streamCtx, p, bundle.Selections[part-1], out)
+	})
 }

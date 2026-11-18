@@ -100,6 +100,21 @@ func TestManagedResourceStateFailedJobFiltersCoverageListAndCourseDirectoryTree(
 		t.Fatalf("expected pending operation_state after retry, got %+v", retried)
 	}
 
+	t.Run("old review failure", func(t *testing.T) {
+		result, err := h.admin.Exec(`UPDATE resources.jobs SET state='failed',data=jsonb_set(data,'{State}','"failed"') WHERE data->>'ResourceID'=$1 AND data->>'Kind'='review'`, failedItem.ID)
+		must(t, err)
+		n, err := result.RowsAffected()
+		must(t, err)
+		if n != 1 {
+			t.Fatalf("updated %d review jobs", n)
+		}
+		page, err := h.s.List(h.ctx, manager, r.Filter{SchoolID: "school", FailedOnly: true, Limit: 10}, false, true)
+		must(t, err)
+		if page.Total != 0 || len(page.Items) != 0 {
+			t.Fatalf("stale review job matched: total=%d", page.Total)
+		}
+	})
+
 	// 2. Coverage paginated list (requires coverage.manage).
 	for _, plan := range []string{"plan-b", "plan-a"} {
 		_, err := h.s.PutCoverage(h.ctx, global, plan, "seed-"+plan, r.Coverage{PlanID: plan, Rules: []r.CoverageRule{{SchoolID: "school"}}})
@@ -168,4 +183,35 @@ func TestManagedResourceStateFailedJobFiltersCoverageListAndCourseDirectoryTree(
 	if adminTree.StatusCode() != 200 || adminTree.JSON200 == nil || len(adminTree.JSON200.Items) != 3 {
 		t.Fatalf("admin directory tree should include disabled nodes: status=%d body=%s", adminTree.StatusCode(), adminTree.Body)
 	}
+	t.Run("school parent visibility", func(t *testing.T) {
+		parent := r.DirectoryWrite{SchoolID: "school", Names: r.Names{"zh-CN": "共享目录"}, Enabled: true}
+		shared, err := h.s.PutDirectory(h.ctx, manager, "shared-parent", "make-shared", parent)
+		must(t, err)
+		child := r.DirectoryWrite{SchoolID: "school", CourseID: "course", ParentID: shared.ID, Names: r.Names{"zh-CN": "作业"}, Enabled: true}
+		_, err = h.s.PutDirectory(h.ctx, manager, "course-under-shared", "make-child", child)
+		must(t, err)
+		for _, enabled := range []bool{true, false} {
+			if !enabled {
+				parent.Revision = shared.Revision
+				parent.Enabled = false
+				_, err = h.s.PutDirectory(h.ctx, manager, shared.ID, "disable-shared", parent)
+				must(t, err)
+			}
+			tree, err := h.s.CourseDirectoryTree(h.ctx, reader, "school", "course")
+			must(t, err)
+			has := false
+			for _, d := range tree.Items {
+				if d.ID == "course-under-shared" {
+					has = true
+				}
+				if d.ID == shared.ID {
+					t.Fatal("school parent in course-only result")
+				}
+			}
+			if has != enabled {
+				t.Fatalf("visible course child=%t parent enabled=%t", has, enabled)
+			}
+		}
+	})
+
 }

@@ -45,3 +45,24 @@ func (t *transaction) Rights(owner, id, school, directory, category string, now 
  AND rule->>'school_id'=$3 AND (COALESCE(rule->>'directory_id','')='' OR rule->>'directory_id'=$4) AND (COALESCE(rule->>'category_id','')='' OR rule->>'category_id'=$5))`, owner, id, school, directory, category, now).Scan(&out.Purchased, &out.Member)
 	return out, safe(e)
 }
+
+func (t *transaction) EntitledSchools(owner string, now time.Time) ([]string, error) {
+	rows, e := t.tx.QueryContext(t.ctx, `SELECT r.school_id FROM resources.records r WHERE r.active_id<>'' AND (
+ (r.state IN ('published','unlisted') AND EXISTS(SELECT 1 FROM resources.purchases p WHERE p.owner_key=$1 AND p.resource_id=r.id AND p.data->>'revoked'='false'))
+ OR
+ (r.state='published' AND EXISTS(SELECT 1 FROM resources.grants g WHERE g.subject_key=$1 AND g.resource_id=r.id AND COALESCE(g.data->'Grant'->>'revoked','false')<>'true' AND (g.data->'Grant'->>'expires_at' IS NULL OR (g.data->'Grant'->>'expires_at')::timestamptz>$2)))
+ ) GROUP BY r.school_id ORDER BY r.school_id COLLATE "C"`, owner, now)
+	if e != nil {
+		return nil, safe(e)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var s string
+		if e = rows.Scan(&s); e != nil {
+			return nil, safe(e)
+		}
+		out = append(out, s)
+	}
+	return out, safe(rows.Err())
+}
