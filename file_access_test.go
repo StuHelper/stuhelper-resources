@@ -215,6 +215,11 @@ func TestPreviewAndDownloadETagConditionalAndByteRangeDelivery(t *testing.T) {
 		t.Fatalf("mismatched If-Range expected 200 full body, got %d len=%d", respIfRange.StatusCode, len(bodyIfRange))
 	}
 
+	respMixed, bodyMixed := doDirect(map[string]string{"Range": "bytes=0-9,60-70"})
+	if respMixed.StatusCode != 200 || bodyMixed != fullBody {
+		t.Fatalf("mixed multi-range fallback: status=%d bytes=%d", respMixed.StatusCode, len(bodyMixed))
+	}
+
 	// Unsatisfiable / invalid Range returns 416 with Content-Range: bytes */60.
 	for _, bad := range []string{"bytes=60-70", "bytes=20-10", "bytes=-0", "bytes=invalid"} {
 		resp416, _ := doDirect(map[string]string{"Range": bad})
@@ -230,5 +235,70 @@ func TestPreviewAndDownloadETagConditionalAndByteRangeDelivery(t *testing.T) {
 	respDenied206, _ := doDirect(map[string]string{"Range": "bytes=0-9"})
 	if respDenied304.StatusCode != 403 || respDenied206.StatusCode != 403 {
 		t.Fatalf("revoked user got %d / %d on conditional/range request", respDenied304.StatusCode, respDenied206.StatusCode)
+	}
+}
+
+type publishDuringDownload struct {
+	*authority
+	publish func()
+}
+
+func (a *publishDuringDownload) Check(ctx context.Context, p r.Principal, action, scope string) error {
+	if action == "download.public" && a.publish != nil {
+		publish := a.publish
+		a.publish = nil
+		publish()
+	}
+	return a.authority.Check(ctx, p, action, scope)
+}
+
+func TestDownloadPinsResponseToAuthorizedVersion(t *testing.T) {
+	for _, partial := range []bool{false, true} {
+		h := newFixture(t)
+		old := h.publish(t, h.draft(t, "first-body", "public"))
+		var oldRef string
+		must(t, h.repo.Transaction(h.ctx, func(tx r.Transaction) error {
+			v, err := tx.Version(old.Current.ID)
+			oldRef = v.ReferenceID
+			return err
+		}))
+		d, err := h.s.UpdateDraft(h.ctx, uploader, old.ID, "edit-for-replacement", r.DraftWrite{Revision: old.Revision, Metadata: metadata("public")})
+		must(t, err)
+		newFile := *old.Current.File
+		newFile.VersionID = "second-body"
+		newFile.SHA256 = strings.Repeat("c", 64)
+		h.files.items[newFile.VersionID] = r.FileEvidence{File: newFile, Owner: uploader, Module: "resources", SchoolID: "school", State: "awaiting_approval", Access: "public"}
+		d, err = h.s.AttachFile(h.ctx, uploader, d.ID, "attach-replacement", r.FileLink{Revision: d.Revision, MediaVersionID: newFile.VersionID})
+		must(t, err)
+		d, err = h.s.Submit(h.ctx, uploader, d.ID, "submit-replacement", r.Command{Revision: d.Revision})
+		must(t, err)
+		h.drain(t)
+		_, err = h.s.ApplyDecision(h.ctx, manager, d.ID, "accept-replacement", r.Decision{ID: "decision-replacement", Revision: d.Revision, VersionID: d.Proposal.ID, Action: "approve"})
+		must(t, err)
+		auth := &publishDuringDownload{authority: h.auth, publish: func() {
+			ran, err := h.s.ProcessOne(h.ctx, "switch-version")
+			must(t, err)
+			if !ran {
+				t.Fatal("replacement did not publish")
+			}
+		}}
+		svc, err := r.New(h.repo, r.Dependencies{Authority: auth, Catalog: h.catalog, Files: h.files, Moderation: h.moderation}, h.cfg)
+		must(t, err)
+		handler, err := httpapi.New(svc, authenticator{})
+		must(t, err)
+		req := httptest.NewRequest("GET", "/api/v1/resources/items/"+old.ID+"/download", nil)
+		req.Header.Set("Authorization", "Bearer reader")
+		want := h.files.payload(oldRef)
+		status := 200
+		if partial {
+			req.Header.Set("Range", "bytes=0-23")
+			status = 206
+			want = want[:24]
+		}
+		out := httptest.NewRecorder()
+		handler.ServeHTTP(out, req)
+		if auth.publish != nil || out.Code != status || out.Header().Get("ETag") != strconv.Quote(old.Current.File.SHA256) || out.Body.String() != want {
+			t.Fatalf("response mixed versions: status=%d body=%q want=%q", out.Code, out.Body.String(), want)
+		}
 	}
 }
