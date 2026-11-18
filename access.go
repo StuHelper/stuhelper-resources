@@ -310,6 +310,15 @@ func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in 
 		}
 		r.State = in.State
 		r.Revision++
+		if in.State == "blocked" && r.ProposalID != "" && r.ProposalID != r.ActiveID {
+			prop, err := tx.Version(r.ProposalID)
+			if err != nil {
+				return nil, err
+			}
+			if err = s.releaseVersionRefs(tx, r.ID, &prop, ""); err != nil {
+				return nil, err
+			}
+		}
 		if e = tx.SaveRecord(r); e != nil {
 			return nil, e
 		}

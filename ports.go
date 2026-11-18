@@ -68,7 +68,7 @@ func (s *Service) AuthorizeFile(ctx context.Context, p Principal, versionID, med
 		if e = s.auth(ctx, p, "media.release", r.SchoolID); e != nil {
 			return e
 		}
-		if r.ActiveID == versionID || r.ProposalID == versionID {
+		if r.ActiveID == versionID || (r.ProposalID == versionID && r.State != "blocked" && v.Version.State == "preparing") {
 			return ErrDenied
 		}
 		return nil
@@ -134,6 +134,15 @@ func (s *Service) ApplyContentDecision(ctx context.Context, p Principal, in Deci
 			switch in.Action {
 			case "hide":
 				latest.State = "blocked"
+				if latest.ProposalID != "" && latest.ProposalID != latest.ActiveID {
+					prop, err := tx.Version(latest.ProposalID)
+					if err != nil {
+						return nil, err
+					}
+					if err = s.releaseVersionRefs(tx, latest.ID, &prop, ""); err != nil {
+						return nil, err
+					}
+				}
 			case "delete":
 				latest.State = "unlisted"
 			case "restore", "publish":

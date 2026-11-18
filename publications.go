@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"time"
 )
 
 func (s *Service) validateDraft(ctx context.Context, m Metadata) error {
@@ -359,8 +360,15 @@ func (s *Service) queue(tx Transaction, kind, resource, version, request, refere
 	id := hash([]string{kind, resource, version, request, reference})
 	old, e := tx.Job(id)
 	if e == nil {
-		if old.State == "done" {
-			return nil
+		if old.State == "failed" {
+			old.State = "pending"
+			old.Attempts = 0
+			old.ErrorCode = ""
+			old.Owner = ""
+			old.LeaseUntil = time.Time{}
+			old.AvailableAt = s.now()
+			old.Generation++
+			return tx.SaveJob(old)
 		}
 		return nil
 	}

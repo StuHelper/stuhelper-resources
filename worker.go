@@ -3,12 +3,35 @@ package resources
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 )
 
 type jobResult struct {
 	reference, externalID string
 	ready, obsolete       bool
+}
+
+func (s *Service) releaseVersionRefs(tx Transaction, resourceID string, v *VersionRecord, extraRef string) error {
+	refs := []string{}
+	if v.ReferenceID != "" {
+		refs = append(refs, v.ReferenceID)
+	}
+	if extraRef != "" && !slices.Contains(refs, extraRef) {
+		refs = append(refs, extraRef)
+	}
+	for _, ref := range refs {
+		if e := s.queue(tx, "release", resourceID, v.Version.ID, "", ref); e != nil {
+			return e
+		}
+	}
+	if v.ReferenceID != "" {
+		v.ReferenceID = ""
+		if e := tx.SaveVersion(*v); e != nil {
+			return e
+		}
+	}
+	return nil
 }
 
 // ProcessOne claims one recoverable operation. The host owns concurrency and
@@ -30,7 +53,9 @@ func (s *Service) ProcessOne(ctx context.Context, worker string) (bool, error) {
 	if ctx.Err() != nil {
 		return true, ctx.Err()
 	}
+	var postCommitErr error
 	e = s.repo.Transaction(ctx, func(tx Transaction) error {
+		postCommitErr = nil
 		if e := tx.Lock("job:" + job.ID); e != nil {
 			return e
 		}
@@ -66,8 +91,28 @@ func (s *Service) ProcessOne(ctx context.Context, worker string) (bool, error) {
 			}
 			return tx.SaveJob(latest)
 		}
-		if !result.obsolete {
-			if e = s.completeJob(tx, job, result); e != nil {
+		if result.obsolete {
+			if job.Kind == "publish" && job.ResourceID != "" && job.VersionID != "" {
+				if e = tx.Lock("resource:" + job.ResourceID); e != nil {
+					return e
+				}
+				r, e := tx.Record(job.ResourceID)
+				if e != nil {
+					return e
+				}
+				v, e := tx.Version(job.VersionID)
+				if e != nil {
+					return e
+				}
+				if r.ActiveID != v.Version.ID && (r.ProposalID != v.Version.ID || r.State == "blocked" || v.Version.State != "preparing") {
+					if e = s.releaseVersionRefs(tx, r.ID, &v, result.reference); e != nil {
+						return e
+					}
+				}
+			}
+		} else {
+			postCommitErr, e = s.completeJob(tx, job, result)
+			if e != nil {
 				return e
 			}
 		}
@@ -80,6 +125,9 @@ func (s *Service) ProcessOne(ctx context.Context, worker string) (bool, error) {
 	})
 	if e != nil {
 		return true, e
+	}
+	if postCommitErr != nil {
+		return true, postCommitErr
 	}
 	return true, operationErr
 }
@@ -95,12 +143,9 @@ func (s *Service) executeJob(ctx context.Context, job Job) (jobResult, error) {
 		if e != nil {
 			return result, e
 		}
-		if r.ProposalID != v.Version.ID {
+		if r.ProposalID != v.Version.ID || r.State == "blocked" {
 			result.obsolete = true
 			return result, nil
-		}
-		if r.State == "blocked" {
-			return result, ErrConflict
 		}
 		if job.Kind == "review" {
 			if v.Version.State != "pending" {
@@ -148,48 +193,63 @@ func (s *Service) executeJob(ctx context.Context, job Job) (jobResult, error) {
 		return result, ErrInput
 	}
 }
-func (s *Service) completeJob(tx Transaction, job Job, result jobResult) error {
+func (s *Service) completeJob(tx Transaction, job Job, result jobResult) (error, error) {
 	switch job.Kind {
 	case "review", "publish":
 		if e := tx.Lock("resource:" + job.ResourceID); e != nil {
-			return e
+			return nil, e
 		}
 		r, e := tx.Record(job.ResourceID)
 		if e != nil {
-			return e
+			return nil, e
 		}
 		v, e := tx.Version(job.VersionID)
 		if e != nil {
-			return e
+			return nil, e
 		}
 		if r.ProposalID != v.Version.ID || r.State == "blocked" {
-			if result.reference != "" {
-				return s.queue(tx, "release", r.ID, v.Version.ID, "", result.reference)
+			if r.ActiveID != v.Version.ID {
+				return nil, s.releaseVersionRefs(tx, r.ID, &v, result.reference)
 			}
-			return nil
+			return nil, nil
 		}
 		if job.Kind == "review" {
 			v.ModerationTaskID = result.externalID
-			return tx.SaveVersion(v)
+			return nil, tx.SaveVersion(v)
 		}
 		if v.Version.State != "preparing" {
-			return ErrConflict
+			if r.ActiveID != v.Version.ID {
+				if e = s.releaseVersionRefs(tx, r.ID, &v, result.reference); e != nil {
+					return nil, e
+				}
+			}
+			return ErrConflict, nil
 		}
 		if _, e = currentCategory(tx, v.Version.Metadata); e != nil {
-			return e
+			if errors.Is(e, ErrConflict) {
+				v.Version.State = "rejected"
+				if err := s.releaseVersionRefs(tx, r.ID, &v, result.reference); err != nil {
+					return nil, err
+				}
+				if err := tx.SaveVersion(v); err != nil {
+					return nil, err
+				}
+				return ErrConflict, nil
+			}
+			return nil, e
 		}
 		if r.ActiveID != "" {
 			old, e := tx.Version(r.ActiveID)
 			if e != nil {
-				return e
+				return nil, e
 			}
 			old.Version.State = "superseded"
 			if e = tx.SaveVersion(old); e != nil {
-				return e
+				return nil, e
 			}
 			if old.ReferenceID != "" {
 				if e = s.queue(tx, "release", r.ID, old.Version.ID, "", old.ReferenceID); e != nil {
-					return e
+					return nil, e
 				}
 			}
 		}
@@ -202,21 +262,21 @@ func (s *Service) completeJob(tx Transaction, job Job, result jobResult) error {
 			r.State = "published"
 		}
 		if e = tx.SaveVersion(v); e != nil {
-			return e
+			return nil, e
 		}
-		return tx.SaveRecord(r)
+		return nil, tx.SaveRecord(r)
 	case "request":
 		request, e := tx.Request(job.RequestID)
 		if e != nil {
-			return e
+			return nil, e
 		}
 		request.ExternalID = result.externalID
 		request.Receipt.State = "submitted"
-		return tx.SaveRequest(request)
+		return nil, tx.SaveRequest(request)
 	case "release":
-		return nil
+		return nil, nil
 	default:
-		return ErrInput
+		return nil, ErrInput
 	}
 }
 

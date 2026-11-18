@@ -64,6 +64,7 @@ scenario_tests:
     - integration_test.go#TestInitialCategoriesMigrationPreservesOperatorChanges
   RES-02:
     - integration_test.go#TestPublicationContinuityAndStaleReview
+    - publish_release_test.go#TestPublishMediaReferenceReleasedOnConcurrentTaxonomyChangeBlockAndFailedReleaseRequeue
   RES-03:
     - integration_test.go#TestIndependentRightsCampusRevocationAndUnlisting
   RES-04:
