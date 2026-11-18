@@ -630,6 +630,54 @@
         "summary": "ListOwnResources",
         "parameters": [
           {
+            "name": "school_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
+            "name": "course_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
+            "name": "category_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
+            "name": "directory_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
+            "name": "attributes",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
             "name": "after",
             "in": "query",
             "schema": {
@@ -2413,6 +2461,12 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
@@ -3428,6 +3482,18 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
@@ -3769,7 +3835,9 @@
             "required": false,
             "schema": {
               "type": "string",
-              "maxLength": 200
+              "pattern": "^[a-z0-9]{1,12}$",
+              "maxLength": 12,
+              "description": "Lowercase filename extension without the dot."
             }
           }
         ],
@@ -4638,7 +4706,7 @@
           },
           "next_cursor": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 2000
           },
           "total": {
             "type": "integer",
@@ -4840,7 +4908,8 @@
           },
           "subject_key": {
             "type": "string",
-            "maxLength": 1024
+            "minLength": 3,
+            "maxLength": 1100
           },
           "expires_at": {
             "type": "string",
@@ -5031,7 +5100,7 @@
               "type": "string",
               "maxLength": 128
             },
-            "maxItems": 100
+            "maxItems": 10000
           },
           "directory_id": {
             "type": "string",

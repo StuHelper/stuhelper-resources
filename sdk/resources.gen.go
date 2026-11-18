@@ -997,10 +997,16 @@ type ListManagedResourcesParamsSort string
 
 // ListOwnResourcesParams defines parameters for ListOwnResources.
 type ListOwnResourcesParams struct {
-	After    *string                     `form:"after,omitempty" json:"after,omitempty"`
-	Limit    *string                     `form:"limit,omitempty" json:"limit,omitempty"`
-	Sort     *ListOwnResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
-	FileType *string                     `form:"file_type,omitempty" json:"file_type,omitempty"`
+	SchoolId    *string                     `form:"school_id,omitempty" json:"school_id,omitempty"`
+	CourseId    *string                     `form:"course_id,omitempty" json:"course_id,omitempty"`
+	CategoryId  *string                     `form:"category_id,omitempty" json:"category_id,omitempty"`
+	DirectoryId *string                     `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Query       *string                     `form:"query,omitempty" json:"query,omitempty"`
+	Attributes  *string                     `form:"attributes,omitempty" json:"attributes,omitempty"`
+	After       *string                     `form:"after,omitempty" json:"after,omitempty"`
+	Limit       *string                     `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort        *ListOwnResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType    *string                     `form:"file_type,omitempty" json:"file_type,omitempty"`
 }
 
 // ListOwnResourcesParamsSort defines parameters for ListOwnResources.
@@ -3837,6 +3843,78 @@ func NewListOwnResourcesRequest(server string, params *ListOwnResourcesParams) (
 		// styled parameters, preserving literal commas as delimiters
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
+
+		if params.SchoolId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "school_id", *params.SchoolId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.CourseId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "course_id", *params.CourseId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.CategoryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "category_id", *params.CategoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.DirectoryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "directory_id", *params.DirectoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Query != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "query", *params.Query, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Attributes != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "attributes", *params.Attributes, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
 
 		if params.After != nil {
 

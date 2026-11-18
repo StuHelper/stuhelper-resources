@@ -302,7 +302,12 @@ func filter(r *http.Request) (resources.Filter, error) {
 		return out, e
 	}
 	if raw := q.Get("attributes"); raw != "" {
-		if len(raw) > 16000 || json.Unmarshal([]byte(raw), &out.Attributes) != nil {
+		if len(raw) > 2000 {
+			return out, resources.ErrInput
+		}
+		d := json.NewDecoder(strings.NewReader(raw))
+		d.DisallowUnknownFields()
+		if d.Decode(&out.Attributes) != nil || d.Decode(new(any)) != io.EOF || out.Attributes == nil {
 			return out, resources.ErrInput
 		}
 	}
