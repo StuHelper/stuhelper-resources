@@ -70,6 +70,21 @@ func TestUTF8CollationDatabasePreservesByteOrderForReferencesAndPagination(t *te
 	repo := &rp.Repository{DB: db}
 	ctx := context.Background()
 	must(t, repo.CheckRuntime(ctx))
+	// Verify that an ICU database can serve the reporter's keyset page in
+	// index order. Disable sequential scans to check index compatibility
+	// independently of the small fixture size.
+	tx, err := db.BeginTx(ctx, nil)
+	must(t, err)
+	defer tx.Rollback()
+	_, err = tx.Exec("SET LOCAL enable_seqscan = off")
+	must(t, err)
+	var plan string
+	err = tx.QueryRow(`EXPLAIN (FORMAT JSON) SELECT data FROM resources.requests WHERE data->'Reporter'='{}'::jsonb AND id COLLATE "C">'after' ORDER BY id COLLATE "C" LIMIT 20`).Scan(&plan)
+	must(t, err)
+	if strings.Contains(plan, `"Node Type": "Sort"`) || !strings.Contains(plan, `"Index Name": "resources_requests_reporter_c"`) {
+		t.Fatalf("reporter page lacks ordered index scan: %s", plan)
+	}
+	must(t, tx.Rollback())
 	clock := &testClock{t: time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC)}
 	auth := &authority{deny: map[string]bool{}}
 	f := &files{items: map[string]r.FileEvidence{}, refs: map[string]string{}, released: map[string]bool{}}
