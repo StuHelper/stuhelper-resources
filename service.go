@@ -46,6 +46,40 @@ func (s *Service) OperationTimeout() time.Duration { return s.cfg.OperationTimeo
 func (s *Service) Capabilities() Capabilities {
 	return Capabilities{UploadProfiles: append([]UploadProfile{}, s.cfg.UploadProfiles...), Terms: s.cfg.Terms, AllowedTypes: append([]string{}, s.cfg.AllowedTypes...), MaxFileSize: s.cfg.MaxFileSize, MaxPackageBytes: s.cfg.MaxPackageBytes, MaxPackageFiles: s.cfg.MaxPackageFiles, PurchaseAvailable: true}
 }
+func (s *Service) Ready(ctx context.Context) error {
+	port, ok := s.repo.(OperationalReader)
+	if !ok {
+		return ErrUnavailable
+	}
+	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+	defer cancel()
+	return port.Ready(work)
+}
+func (s *Service) OperationalStats(ctx context.Context) (OperationalStats, error) {
+	port, ok := s.repo.(OperationalReader)
+	if !ok {
+		return OperationalStats{}, ErrUnavailable
+	}
+	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+	defer cancel()
+	stats, err := port.OperationalStats(work, s.now())
+	if err != nil {
+		return OperationalStats{}, err
+	}
+	stats.MaxRecords = s.cfg.MaxRecords
+	stats.MaxOperations = s.cfg.MaxOperations
+	stats.MaxJobs = s.cfg.MaxJobs
+	if s.cfg.MaxRecords > 0 {
+		stats.RecordUtilization = float64(stats.Records) / float64(s.cfg.MaxRecords)
+	}
+	if s.cfg.MaxOperations > 0 {
+		stats.OperationUtilization = float64(stats.Operations) / float64(s.cfg.MaxOperations)
+	}
+	if s.cfg.MaxJobs > 0 {
+		stats.JobUtilization = float64(stats.ActiveJobs) / float64(s.cfg.MaxJobs)
+	}
+	return stats, nil
+}
 func (s *Service) auth(ctx context.Context, p Principal, action, scope string) error {
 	if !p.Valid() && action != "discover" {
 		return ErrUnauthenticated

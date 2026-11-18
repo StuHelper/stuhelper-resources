@@ -116,6 +116,9 @@ scenario_tests:
     - performance_test.go#TestBatchQueriesRequestAuthReuseAndVersionIndexes
   RES-17:
     - integration_test.go#TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting
+  RES-23:
+    - observability_prune_test.go#TestPruningUsesCompletionTimeAndSkipsRenewingWindows
+    - observability_prune_test.go#TestRequestIDCorrelationOperationalReadinessStatsAndBoundedPruning
   RES-21:
     - dedup_instructor_test.go#TestCourseDuplicateDigestCheckAndVerifiedInstructorAttribution
   RES-18:

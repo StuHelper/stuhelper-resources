@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS resources.packages (id text PRIMARY KEY, expires_at t
 CREATE INDEX IF NOT EXISTS resources_packages_expiry ON resources.packages(expires_at);
 CREATE TABLE IF NOT EXISTS resources.requests (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), data jsonb NOT NULL);
 CREATE TABLE IF NOT EXISTS resources.jobs (id text PRIMARY KEY, state text NOT NULL, available_at timestamptz NOT NULL, lease_until timestamptz NOT NULL, data jsonb NOT NULL);
+ALTER TABLE resources.jobs ADD COLUMN IF NOT EXISTS completed_at timestamptz;
+UPDATE resources.jobs SET completed_at=transaction_timestamp() WHERE state='done' AND completed_at IS NULL;
+CREATE INDEX IF NOT EXISTS resources_jobs_completed ON resources.jobs(completed_at,id) WHERE state='done';
 CREATE INDEX IF NOT EXISTS resources_jobs_claim ON resources.jobs(state,available_at,lease_until);
 CREATE INDEX IF NOT EXISTS resources_jobs_resource ON resources.jobs((data->>'ResourceID'),state);
 CREATE TABLE IF NOT EXISTS resources.replays (key text PRIMARY KEY, data jsonb NOT NULL);
@@ -26,6 +29,7 @@ CREATE TABLE IF NOT EXISTS resources.audit (id text PRIMARY KEY, data jsonb NOT 
 CREATE TABLE IF NOT EXISTS resources.outbox(id text PRIMARY KEY, data jsonb NOT NULL, seq bigint GENERATED ALWAYS AS IDENTITY UNIQUE, sent_at timestamptz);
 DROP INDEX IF EXISTS resources.resources_outbox_pending;
 CREATE INDEX IF NOT EXISTS resources_outbox_pending_seq ON resources.outbox(seq) WHERE sent_at IS NULL;
+CREATE INDEX IF NOT EXISTS resources_outbox_sent ON resources.outbox(sent_at) WHERE sent_at IS NOT NULL;
 REVOKE ALL ON SCHEMA resources FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA resources FROM PUBLIC;
 
@@ -35,6 +39,7 @@ DROP INDEX IF EXISTS resources.resources_requests_reporter;
 CREATE TABLE IF NOT EXISTS resources.closed_owners(owner_key text PRIMARY KEY,closure_id text NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
 
 CREATE TABLE IF NOT EXISTS resources.submission_limits(owner_key text PRIMARY KEY, started_at timestamptz NOT NULL, used integer NOT NULL CHECK(used>0));
+CREATE INDEX IF NOT EXISTS resources_submission_limits_started ON resources.submission_limits(started_at);
 
 
 CREATE TABLE IF NOT EXISTS resources.audit_retention(singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton), revision bigint NOT NULL DEFAULT 0);

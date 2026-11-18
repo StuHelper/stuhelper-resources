@@ -72,6 +72,8 @@ func (s *Service) ProcessOne(ctx context.Context, worker string) (bool, error) {
 			}
 		}
 		latest.State = "done"
+		completedAt := s.now()
+		latest.CompletedAt = &completedAt
 		latest.ErrorCode = ""
 		if e = tx.SaveJob(latest); e != nil {
 			return e
