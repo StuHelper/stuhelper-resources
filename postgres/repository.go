@@ -183,6 +183,9 @@ func (t *transaction) Directories(school, course, parent string, n int, after st
 func (t *transaction) DirectoriesFiltered(school, course, parent string, n int, after string, includeDisabled bool) ([]resources.Directory, error) {
 	return list[resources.Directory](t, `SELECT data FROM resources.directories WHERE school_id=$1 AND ($2='' OR course_id=$2) AND parent_id=$3 AND ($6 OR COALESCE((data->>'enabled')::boolean,false)) AND id COLLATE "C">$4 ORDER BY id COLLATE "C" LIMIT $5`, school, course, parent, after, n, includeDisabled)
 }
+func (t *transaction) CourseDirectories(school, course string, limit int) ([]resources.Directory, error) {
+	return list[resources.Directory](t, `SELECT data FROM resources.directories WHERE school_id=$1 AND course_id=$2 ORDER BY id COLLATE "C" LIMIT $3`, school, course, limit)
+}
 func (t *transaction) Package(id string) (resources.PackageRecord, error) {
 	return read[resources.PackageRecord](t, `SELECT data FROM resources.packages WHERE id=$1`, id)
 }

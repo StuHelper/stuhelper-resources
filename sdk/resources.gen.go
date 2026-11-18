@@ -299,6 +299,45 @@ func (e ResourceMissingConditions) Valid() bool {
 	}
 }
 
+// Defines values for ResourceOperationErrorCode.
+const (
+	ResourcesDependencyFailed  ResourceOperationErrorCode = "resources_dependency_failed"
+	ResourcesDependencyPending ResourceOperationErrorCode = "resources_dependency_pending"
+)
+
+// Valid indicates whether the value is a known member of the ResourceOperationErrorCode enum.
+func (e ResourceOperationErrorCode) Valid() bool {
+	switch e {
+	case ResourcesDependencyFailed:
+		return true
+	case ResourcesDependencyPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResourceOperationState.
+const (
+	ResourceOperationStateFailed  ResourceOperationState = "failed"
+	ResourceOperationStatePending ResourceOperationState = "pending"
+	ResourceOperationStateWorking ResourceOperationState = "working"
+)
+
+// Valid indicates whether the value is a known member of the ResourceOperationState enum.
+func (e ResourceOperationState) Valid() bool {
+	switch e {
+	case ResourceOperationStateFailed:
+		return true
+	case ResourceOperationStatePending:
+		return true
+	case ResourceOperationStateWorking:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ResourceState.
 const (
 	ResourceStateBlocked   ResourceState = "blocked"
@@ -500,6 +539,54 @@ func (e ListManagedResourcesParamsSort) Valid() bool {
 	}
 }
 
+// Defines values for ListManagedResourcesParamsState.
+const (
+	ListManagedResourcesParamsStateBlocked   ListManagedResourcesParamsState = "blocked"
+	ListManagedResourcesParamsStateDraft     ListManagedResourcesParamsState = "draft"
+	ListManagedResourcesParamsStatePublished ListManagedResourcesParamsState = "published"
+	ListManagedResourcesParamsStateUnlisted  ListManagedResourcesParamsState = "unlisted"
+)
+
+// Valid indicates whether the value is a known member of the ListManagedResourcesParamsState enum.
+func (e ListManagedResourcesParamsState) Valid() bool {
+	switch e {
+	case ListManagedResourcesParamsStateBlocked:
+		return true
+	case ListManagedResourcesParamsStateDraft:
+		return true
+	case ListManagedResourcesParamsStatePublished:
+		return true
+	case ListManagedResourcesParamsStateUnlisted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListManagedResourcesParamsProposalState.
+const (
+	ListManagedResourcesParamsProposalStateDraft     ListManagedResourcesParamsProposalState = "draft"
+	ListManagedResourcesParamsProposalStatePending   ListManagedResourcesParamsProposalState = "pending"
+	ListManagedResourcesParamsProposalStatePreparing ListManagedResourcesParamsProposalState = "preparing"
+	ListManagedResourcesParamsProposalStateRejected  ListManagedResourcesParamsProposalState = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the ListManagedResourcesParamsProposalState enum.
+func (e ListManagedResourcesParamsProposalState) Valid() bool {
+	switch e {
+	case ListManagedResourcesParamsProposalStateDraft:
+		return true
+	case ListManagedResourcesParamsProposalStatePending:
+		return true
+	case ListManagedResourcesParamsProposalStatePreparing:
+		return true
+	case ListManagedResourcesParamsProposalStateRejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListManagedResourcesParamsAccess.
 const (
 	ListManagedResourcesParamsAccessPublic     ListManagedResourcesParamsAccess = "public"
@@ -644,6 +731,12 @@ type Coverage struct {
 	PlanId   string         `json:"plan_id"`
 	Revision int64          `json:"revision"`
 	Rules    []CoverageRule `json:"rules"`
+}
+
+// CoveragePage defines model for CoveragePage.
+type CoveragePage struct {
+	Items      []Coverage `json:"items"`
+	NextCursor string     `json:"next_cursor"`
 }
 
 // CoverageRule defines model for CoverageRule.
@@ -920,12 +1013,18 @@ type RequestReceiptState string
 // Resource defines model for Resource.
 type Resource struct {
 	// AccessReason allowed, requirements_missing, purchase_unavailable, resource_unavailable, permission_denied or service_unavailable. Owned metadata remains readable if file eligibility is unavailable. Use missing_conditions and unavailable_conditions rather than assuming that every failure requires a purchase.
-	AccessReason          string                           `json:"access_reason"`
-	AvailableMethods      *[]ResourceAvailableMethods      `json:"available_methods,omitempty"`
-	Current               *Version                         `json:"current,omitempty"`
-	DownloadAllowed       bool                             `json:"download_allowed"`
-	Id                    string                           `json:"id"`
-	MissingConditions     *[]ResourceMissingConditions     `json:"missing_conditions,omitempty"`
+	AccessReason      string                       `json:"access_reason"`
+	AvailableMethods  *[]ResourceAvailableMethods  `json:"available_methods,omitempty"`
+	Current           *Version                     `json:"current,omitempty"`
+	DownloadAllowed   bool                         `json:"download_allowed"`
+	Id                string                       `json:"id"`
+	MissingConditions *[]ResourceMissingConditions `json:"missing_conditions,omitempty"`
+
+	// OperationErrorCode Scoped administrator view only: sanitized error code of the active proposal background job.
+	OperationErrorCode *ResourceOperationErrorCode `json:"operation_error_code,omitempty"`
+
+	// OperationState Scoped administrator view only: current background review or publication job state for the active proposal.
+	OperationState        *ResourceOperationState          `json:"operation_state,omitempty"`
 	Owned                 bool                             `json:"owned"`
 	Proposal              *Version                         `json:"proposal,omitempty"`
 	Revision              int64                            `json:"revision"`
@@ -940,6 +1039,12 @@ type ResourceAvailableMethods string
 
 // ResourceMissingConditions defines model for Resource.MissingConditions.
 type ResourceMissingConditions string
+
+// ResourceOperationErrorCode Scoped administrator view only: sanitized error code of the active proposal background job.
+type ResourceOperationErrorCode string
+
+// ResourceOperationState Scoped administrator view only: current background review or publication job state for the active proposal.
+type ResourceOperationState string
 
 // ResourceState defines model for Resource.State.
 type ResourceState string
@@ -1085,6 +1190,12 @@ type GetResourceCountsParams struct {
 // GetResourceCountsParamsAccess defines parameters for GetResourceCounts.
 type GetResourceCountsParamsAccess string
 
+// ListCoverageParams defines parameters for ListCoverage.
+type ListCoverageParams struct {
+	After *string `form:"after,omitempty" json:"after,omitempty"`
+	Limit *string `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // PutCoverageParams defines parameters for PutCoverage.
 type PutCoverageParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -1097,6 +1208,9 @@ type ListDirectoriesParams struct {
 	ParentId *string `form:"parent_id,omitempty" json:"parent_id,omitempty"`
 	After    *string `form:"after,omitempty" json:"after,omitempty"`
 	Limit    *string `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Tree When true (requires course_id and empty parent_id/after), returns the full course directory tree up to 500 nodes.
+	Tree *bool `form:"tree,omitempty" json:"tree,omitempty"`
 }
 
 // PutDirectoryParams defines parameters for PutDirectory.
@@ -1184,24 +1298,33 @@ type WithdrawProposalParams struct {
 
 // ListManagedResourcesParams defines parameters for ListManagedResources.
 type ListManagedResourcesParams struct {
-	SchoolId    *string                           `form:"school_id,omitempty" json:"school_id,omitempty"`
-	CourseId    *string                           `form:"course_id,omitempty" json:"course_id,omitempty"`
-	CategoryId  *string                           `form:"category_id,omitempty" json:"category_id,omitempty"`
-	DirectoryId *string                           `form:"directory_id,omitempty" json:"directory_id,omitempty"`
-	Query       *string                           `form:"query,omitempty" json:"query,omitempty"`
-	Attributes  *string                           `form:"attributes,omitempty" json:"attributes,omitempty"`
-	After       *string                           `form:"after,omitempty" json:"after,omitempty"`
-	Limit       *string                           `form:"limit,omitempty" json:"limit,omitempty"`
-	Sort        *ListManagedResourcesParamsSort   `form:"sort,omitempty" json:"sort,omitempty"`
-	FileType    *string                           `form:"file_type,omitempty" json:"file_type,omitempty"`
-	TeacherId   *string                           `form:"teacher_id,omitempty" json:"teacher_id,omitempty"`
-	TermId      *string                           `form:"term_id,omitempty" json:"term_id,omitempty"`
-	Tag         *string                           `form:"tag,omitempty" json:"tag,omitempty"`
-	Access      *ListManagedResourcesParamsAccess `form:"access,omitempty" json:"access,omitempty"`
+	SchoolId      *string                                  `form:"school_id,omitempty" json:"school_id,omitempty"`
+	CourseId      *string                                  `form:"course_id,omitempty" json:"course_id,omitempty"`
+	CategoryId    *string                                  `form:"category_id,omitempty" json:"category_id,omitempty"`
+	DirectoryId   *string                                  `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Query         *string                                  `form:"query,omitempty" json:"query,omitempty"`
+	Attributes    *string                                  `form:"attributes,omitempty" json:"attributes,omitempty"`
+	After         *string                                  `form:"after,omitempty" json:"after,omitempty"`
+	Limit         *string                                  `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort          *ListManagedResourcesParamsSort          `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType      *string                                  `form:"file_type,omitempty" json:"file_type,omitempty"`
+	State         *ListManagedResourcesParamsState         `form:"state,omitempty" json:"state,omitempty"`
+	ProposalState *ListManagedResourcesParamsProposalState `form:"proposal_state,omitempty" json:"proposal_state,omitempty"`
+	FailedOnly    *bool                                    `form:"failed_only,omitempty" json:"failed_only,omitempty"`
+	TeacherId     *string                                  `form:"teacher_id,omitempty" json:"teacher_id,omitempty"`
+	TermId        *string                                  `form:"term_id,omitempty" json:"term_id,omitempty"`
+	Tag           *string                                  `form:"tag,omitempty" json:"tag,omitempty"`
+	Access        *ListManagedResourcesParamsAccess        `form:"access,omitempty" json:"access,omitempty"`
 }
 
 // ListManagedResourcesParamsSort defines parameters for ListManagedResources.
 type ListManagedResourcesParamsSort string
+
+// ListManagedResourcesParamsState defines parameters for ListManagedResources.
+type ListManagedResourcesParamsState string
+
+// ListManagedResourcesParamsProposalState defines parameters for ListManagedResources.
+type ListManagedResourcesParamsProposalState string
 
 // ListManagedResourcesParamsAccess defines parameters for ListManagedResources.
 type ListManagedResourcesParamsAccess string
@@ -1444,6 +1567,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/resources/counts (the `GetResourceCounts` operationId).
 	GetResourceCounts(ctx context.Context, params *GetResourceCountsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListCoverage List billing plan coverage configurations
+	//
+	// Requires global coverage.manage permission.
+	//
+	// Corresponds with GET /api/v1/resources/coverage (the `ListCoverage` operationId).
+	ListCoverage(ctx context.Context, params *ListCoverageParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCoverage Read actual coverage for a billing plan ID
 	//
@@ -1863,6 +1993,23 @@ func (c *Client) PutCategory(ctx context.Context, id string, params *PutCategory
 // Corresponds with GET /api/v1/resources/counts (the `GetResourceCounts` operationId).
 func (c *Client) GetResourceCounts(ctx context.Context, params *GetResourceCountsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetResourceCountsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListCoverage List billing plan coverage configurations
+//
+// Requires global coverage.manage permission.
+//
+// Corresponds with GET /api/v1/resources/coverage (the `ListCoverage` operationId).
+func (c *Client) ListCoverage(ctx context.Context, params *ListCoverageParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCoverageRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3226,6 +3373,72 @@ func NewGetResourceCountsRequest(server string, params *GetResourceCountsParams)
 	return req, nil
 }
 
+// NewListCoverageRequest constructs an http.Request for the ListCoverage method
+func NewListCoverageRequest(server string, params *ListCoverageParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/coverage")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.After != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetCoverageRequest constructs an http.Request for the GetCoverage method
 func NewGetCoverageRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -3399,6 +3612,18 @@ func NewListDirectoriesRequest(server string, params *ListDirectoriesParams) (*h
 		if params.Limit != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Tree != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tree", *params.Tree, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -4566,6 +4791,42 @@ func NewListManagedResourcesRequest(server string, params *ListManagedResourcesP
 
 		}
 
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.ProposalState != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "proposal_state", *params.ProposalState, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.FailedOnly != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "failed_only", *params.FailedOnly, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if params.TeacherId != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "teacher_id", *params.TeacherId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
@@ -5539,6 +5800,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/resources/counts (the `GetResourceCounts` operationId).
 	GetResourceCountsWithResponse(ctx context.Context, params *GetResourceCountsParams, reqEditors ...RequestEditorFn) (*GetResourceCountsResponse, error)
 
+	// ListCoverageWithResponse List billing plan coverage configurations
+	//
+	// Requires global coverage.manage permission.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/coverage (the `ListCoverage` operationId).
+	ListCoverageWithResponse(ctx context.Context, params *ListCoverageParams, reqEditors ...RequestEditorFn) (*ListCoverageResponse, error)
+
 	// GetCoverageWithResponse Read actual coverage for a billing plan ID
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -6405,6 +6675,96 @@ func (r GetResourceCountsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetResourceCountsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListCoverageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CoveragePage
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListCoverageResponse) GetJSON200() *CoveragePage {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r ListCoverageResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ListCoverageResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ListCoverageResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ListCoverageResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r ListCoverageResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r ListCoverageResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r ListCoverageResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r ListCoverageResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCoverageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCoverageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListCoverageResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -9467,6 +9827,21 @@ func (c *ClientWithResponses) GetResourceCountsWithResponse(ctx context.Context,
 	return ParseGetResourceCountsResponse(rsp)
 }
 
+// ListCoverageWithResponse List billing plan coverage configurations
+//
+// Requires global coverage.manage permission.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/coverage (the `ListCoverage` operationId).
+func (c *ClientWithResponses) ListCoverageWithResponse(ctx context.Context, params *ListCoverageParams, reqEditors ...RequestEditorFn) (*ListCoverageResponse, error) {
+	rsp, err := c.ListCoverage(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCoverageResponse(rsp)
+}
+
 // GetCoverageWithResponse Read actual coverage for a billing plan ID
 //
 // Returns a wrapper object for the known response body format(s).
@@ -10459,6 +10834,81 @@ func ParseGetResourceCountsResponse(rsp *http.Response) (*GetResourceCountsRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest ResourceCounts
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCoverageResponse parses an HTTP response from a ListCoverageWithResponse call
+func ParseListCoverageResponse(rsp *http.Response) (*ListCoverageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCoverageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CoveragePage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

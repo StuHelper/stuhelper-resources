@@ -38,6 +38,15 @@ func resourceBrowseBase(f r.Filter, projection string) (string, []any) {
 	if f.SchoolID != "" {
 		conditions = append(conditions, "r.school_id="+bind(f.SchoolID))
 	}
+	if f.State != "" {
+		conditions = append(conditions, "r.state="+bind(f.State))
+	}
+	if f.ProposalState != "" {
+		conditions = append(conditions, "r.proposal_id<>'' AND EXISTS(SELECT 1 FROM resources.versions pv WHERE pv.id=r.proposal_id AND pv.data->'Version'->>'state'="+bind(f.ProposalState)+")")
+	}
+	if f.FailedOnly {
+		conditions = append(conditions, "r.proposal_id<>'' AND EXISTS(SELECT 1 FROM resources.jobs j JOIN resources.versions pv ON pv.id=r.proposal_id WHERE j.state='failed' AND j.data->>'ResourceID'=r.id AND j.data->>'VersionID'=r.proposal_id AND j.data->>'Kind'=CASE pv.data->'Version'->>'state' WHEN 'pending' THEN 'review' WHEN 'preparing' THEN 'publish' END)")
+	}
 	if f.OwnerKey != "" {
 		conditions = append(conditions, "r.owner_key="+bind(f.OwnerKey))
 	}

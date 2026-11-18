@@ -281,7 +281,11 @@ func (s *Service) RetryPending(ctx context.Context, p Principal, id, key string,
 		if e = tx.SaveJob(job); e != nil {
 			return nil, e
 		}
-		return ownerView(tx, r, p)
+		view, e := ownerView(tx, r, p)
+		if e == nil {
+			populateAdminOperation(tx, r, &view)
+		}
+		return view, e
 	}, &out)
 	return out, e
 }

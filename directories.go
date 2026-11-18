@@ -111,6 +111,127 @@ func directoryDepth(tx Transaction, school, id string, seen map[string]bool, bud
 	}
 	return deepest, nil
 }
+
+type CourseTreeTransaction interface {
+	CourseDirectories(school, course string, limit int) ([]Directory, error)
+}
+
+// School-wide ancestors can be outside the course result. Resolve each at
+// most once, and only expose course children connected to an enabled root.
+func visibleSchoolParent(tx Transaction, school, id string, depth int, cache map[string]bool) (bool, error) {
+	if id == "" {
+		return true, nil
+	}
+	if v, ok := cache[id]; ok {
+		return v, nil
+	}
+	if depth == 0 {
+		return false, nil
+	}
+	parent, err := tx.Directory(id)
+	if errors.Is(err, ErrNotFound) {
+		cache[id] = false
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !parent.Enabled || parent.SchoolID != school || parent.CourseID != "" {
+		cache[id] = false
+		return false, nil
+	}
+	visible, err := visibleSchoolParent(tx, school, parent.ParentID, depth-1, cache)
+	if err == nil {
+		cache[id] = visible
+	}
+	return visible, err
+}
+
+func (s *Service) CourseDirectoryTree(ctx context.Context, p Principal, school, course string) (DirectoryPage, error) {
+	out := DirectoryPage{Items: []Directory{}}
+	if !validID(school) || !validID(course) {
+		return out, ErrInput
+	}
+	isManager := false
+	if e := s.auth(ctx, p, "directories.manage", school); e == nil {
+		isManager = true
+	} else if !denied(e) {
+		return out, e
+	} else if e = s.auth(ctx, p, "discover", school); e != nil {
+		return out, e
+	}
+	var all []Directory
+	byID := map[string]Directory{}
+	visibleParents := map[string]bool{}
+	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+	defer cancel()
+	e := s.repo.Transaction(work, func(tx Transaction) error {
+		port, ok := tx.(CourseTreeTransaction)
+		if !ok {
+			return ErrUnavailable
+		}
+		var err error
+		all, err = port.CourseDirectories(school, course, 501)
+		if err != nil {
+			return err
+		}
+		if len(all) > 500 {
+			return ErrCapacity
+		}
+		for _, d := range all {
+			byID[d.ID] = d
+		}
+		if !isManager {
+			for _, d := range all {
+				if _, local := byID[d.ParentID]; d.Enabled && d.ParentID != "" && !local {
+					if _, err := visibleSchoolParent(tx, school, d.ParentID, s.cfg.MaxDirectoryDepth, visibleParents); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	})
+	if e != nil {
+		return out, e
+	}
+	children := make(map[string][]Directory, len(all))
+	var roots []Directory
+	for _, d := range all {
+		if !isManager && !d.Enabled {
+			continue
+		}
+		if d.ParentID == "" {
+			roots = append(roots, d)
+			continue
+		}
+		parent, inCourse := byID[d.ParentID]
+		if !inCourse {
+			if isManager || visibleParents[d.ParentID] {
+				roots = append(roots, d)
+			}
+			continue
+		}
+		if !isManager && !parent.Enabled {
+			continue
+		}
+		children[d.ParentID] = append(children[d.ParentID], d)
+	}
+	queue := roots
+	seen := make(map[string]bool, len(all))
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+		if seen[curr.ID] {
+			continue
+		}
+		seen[curr.ID] = true
+		out.Items = append(out.Items, curr)
+		queue = append(queue, children[curr.ID]...)
+	}
+	return out, nil
+}
+
 func (s *Service) Directories(ctx context.Context, p Principal, school, course, parent string, n int, after string) (DirectoryPage, error) {
 	out := DirectoryPage{Items: []Directory{}}
 	if !p.Valid() {

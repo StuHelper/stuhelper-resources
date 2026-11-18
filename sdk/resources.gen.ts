@@ -562,6 +562,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/resources/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List billing plan coverage configurations
+         * @description Requires global coverage.manage permission.
+         */
+        get: operations["ListCoverage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/resources/duplicates": {
         parameters: {
             query?: never;
@@ -783,6 +803,16 @@ export interface components {
             rule_version?: string;
             available_methods?: ("download" | "purchase")[];
             unlock_reason?: string;
+            /**
+             * @description Scoped administrator view only: current background review or publication job state for the active proposal.
+             * @enum {string}
+             */
+            operation_state?: "pending" | "working" | "failed";
+            /**
+             * @description Scoped administrator view only: sanitized error code of the active proposal background job.
+             * @enum {string}
+             */
+            operation_error_code?: "resources_dependency_pending" | "resources_dependency_failed";
         };
         ResourcePage: {
             items: components["schemas"]["Resource"][];
@@ -962,6 +992,10 @@ export interface components {
         OwnResourceSummary: {
             resource_count: number;
             published_count: number;
+        };
+        CoveragePage: {
+            items: components["schemas"]["Coverage"][];
+            next_cursor: string;
         };
         DuplicateResource: {
             id: string;
@@ -2463,6 +2497,8 @@ export interface operations {
                 parent_id?: string;
                 after?: string;
                 limit?: string;
+                /** @description When true (requires course_id and empty parent_id/after), returns the full course directory tree up to 500 nodes. */
+                tree?: boolean;
             };
             header?: never;
             path?: never;
@@ -3128,6 +3164,9 @@ export interface operations {
                 limit?: string;
                 sort?: "id" | "newest";
                 file_type?: string;
+                state?: "draft" | "published" | "unlisted" | "blocked";
+                proposal_state?: "draft" | "pending" | "preparing" | "rejected";
+                failed_only?: boolean;
                 teacher_id?: string;
                 term_id?: string;
                 tag?: string;
@@ -4142,6 +4181,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OwnResourceSummary"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not permitted */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Revision, policy or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Configured resource limit exceeded */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ListCoverage: {
+        parameters: {
+            query?: {
+                after?: string;
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoveragePage"];
                 };
             };
             /** @description Invalid request */

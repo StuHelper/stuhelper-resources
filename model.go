@@ -210,6 +210,8 @@ type Resource struct {
 	MissingConditions     []string `json:"missing_conditions,omitempty"`
 	UnavailableConditions []string `json:"unavailable_conditions,omitempty"`
 	RuleVersion           string   `json:"rule_version,omitempty"`
+	OperationState        string   `json:"operation_state,omitempty"`
+	OperationErrorCode    string   `json:"operation_error_code,omitempty"`
 	ID                    string   `json:"id"`
 	Revision              int64    `json:"revision"`
 	State                 string   `json:"state"`
@@ -226,13 +228,13 @@ type Page struct {
 }
 type Filter struct {
 	SchoolID, CourseID, CategoryID, DirectoryID, Query, After, OwnerKey string
-	TeacherID, TermID, Tag, Access                                      string
+	State, ProposalState, TeacherID, TermID, Tag, Access                string
 	EntitledKey, Sort, FileType, CursorID                               string
 	CursorTime, EntitledNow                                             *time.Time
 	CourseIDs, AllowedSchools                                           []string
 	Attributes                                                          map[string]Value
 	Limit                                                               int
-	IncludeUnpublished                                                  bool
+	IncludeUnpublished, FailedOnly                                      bool
 }
 type Decision struct {
 	ID        string `json:"id"`

@@ -60,9 +60,25 @@ func browseScope(f Filter) string {
 	if f.EntitledKey != "" {
 		fields = append(fields, f.EntitledKey)
 	}
+	if f.State != "" || f.ProposalState != "" || f.FailedOnly {
+		fields = append(fields, f.State, f.ProposalState, f.FailedOnly)
+	}
 	data, _ := json.Marshal(fields)
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+func validAdminFilters(f Filter, admin bool) error {
+	if !admin && (f.State != "" || f.ProposalState != "" || f.FailedOnly) {
+		return ErrInput
+	}
+	if f.State != "" && !slices.Contains([]string{"draft", "published", "unlisted", "blocked"}, f.State) {
+		return ErrInput
+	}
+	if f.ProposalState != "" && !slices.Contains([]string{"draft", "pending", "preparing", "rejected"}, f.ProposalState) {
+		return ErrInput
+	}
+	return nil
 }
 
 func validBrowseFilters(f Filter) error {

@@ -172,6 +172,29 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 	}
 	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil, false)
 }
+func populateAdminOperation(tx Transaction, r Record, out *Resource) error {
+	if out.Proposal == nil || (out.Proposal.State != "pending" && out.Proposal.State != "preparing") {
+		return nil
+	}
+	kind := "review"
+	if out.Proposal.State == "preparing" {
+		kind = "publish"
+	}
+	job, err := tx.Job(hash([]string{kind, r.ID, out.Proposal.ID, "", ""}))
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if job.State == "pending" || job.State == "working" || job.State == "failed" {
+		out.OperationState = job.State
+		if job.ErrorCode == "resources_dependency_pending" || job.ErrorCode == "resources_dependency_failed" {
+			out.OperationErrorCode = job.ErrorCode
+		}
+	}
+	return nil
+}
 
 func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resource, error) {
 	return s.getRecordWithEntitlement(ctx, p, r, false)
@@ -209,12 +232,18 @@ func (s *Service) getRecordWithEntitlement(ctx context.Context, p Principal, r R
 func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Record, activeV, proposalV *VersionRecord, facts *AccessFacts, entitledPurchaser bool) (Resource, error) {
 	var out Resource
 	var e error
+	isManager := false
 	privileged := r.Owner == p && p.Valid()
 	if !privileged {
 		e = s.auth(ctx, p, "manage", r.SchoolID)
-		privileged = e == nil
+		isManager = e == nil
+		privileged = isManager
 		if e != nil && !denied(e) {
 			return out, e
+		}
+	} else {
+		if s.auth(ctx, p, "manage", r.SchoolID) == nil {
+			isManager = true
 		}
 	}
 	if !privileged {
@@ -233,8 +262,16 @@ func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Re
 		ver := proposalV.Version
 		out.Proposal = &ver
 	}
-	if hasInstructor(&out) {
-		if err := s.repo.Transaction(ctx, func(tx Transaction) error { return redactClosedInstructor(tx, r.Owner, &out) }); err != nil {
+	needJob := isManager && out.Proposal != nil && (out.Proposal.State == "pending" || out.Proposal.State == "preparing")
+	if hasInstructor(&out) || needJob {
+		if err := s.repo.Transaction(ctx, func(tx Transaction) error {
+			if needJob {
+				if err := populateAdminOperation(tx, r, &out); err != nil {
+					return err
+				}
+			}
+			return redactClosedInstructor(tx, r.Owner, &out)
+		}); err != nil {
 			return Resource{}, err
 		}
 	}
@@ -291,7 +328,7 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 	// starts with current facts; per-resource grants and state remain independent.
 	s = s.withRequestAuthority()
 	out := Page{Items: []Resource{}}
-	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) || validBrowseFilters(f) != nil {
+	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) || validBrowseFilters(f) != nil || validAdminFilters(f, admin) != nil {
 		return out, ErrInput
 	}
 	if mine && admin {
