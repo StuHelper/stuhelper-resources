@@ -173,7 +173,18 @@ func TestCourseDuplicateDigestCheckAndVerifiedInstructorAttribution(t *testing.T
 	}
 
 	// Closing uploader account strips VerifiedInstructor disclosure while preserving published content.
+	edit := r.StateChange{Revision: instPub.Revision, State: "published", Reason: "确认发布"}
+	original, err := h.s.SetState(h.ctx, manager, instPub.ID, "confirm-instructor", edit)
+	must(t, err)
+	if original.Current == nil || !original.Current.VerifiedInstructor {
+		t.Fatal("initial response lacks instructor snapshot")
+	}
 	must(t, h.s.AnonymizeOwner(h.ctx, uploader, "33333333-3333-4333-8333-333333333333"))
+	replayed, err := h.s.SetState(h.ctx, manager, instPub.ID, "confirm-instructor", edit)
+	must(t, err)
+	if replayed.Revision != original.Revision || replayed.Current == nil || replayed.Current.VerifiedInstructor || replayed.Current.Metadata.Origin.VerifiedInstructor {
+		t.Fatal("replay exposed instructor after closure")
+	}
 	afterClosure, err := h.s.Get(h.ctx, reader, instPub.ID)
 	must(t, err)
 	if afterClosure.Current == nil || afterClosure.Current.VerifiedInstructor || afterClosure.Current.Metadata.Origin.VerifiedInstructor {

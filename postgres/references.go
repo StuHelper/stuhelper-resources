@@ -8,7 +8,7 @@ func (t *transaction) OwnedReferences(p r.Principal, ids []string) ([]string, er
  WHERE r.owner_key=$1 AND requested.id IN(v.data->'Version'->'metadata'->'associations'->>'school_id',
  v.data->'Version'->'metadata'->'associations'->>'course_id',v.data->'Version'->'metadata'->'associations'->>'term_id',
  v.data->'Version'->'metadata'->'associations'->>'offering_id',v.data->'Version'->'metadata'->'associations'->>'teacher_id'))
- ORDER BY requested.id`, p.Key(), ids)
+ ORDER BY requested.id COLLATE "C"`, p.Key(), ids)
 	if e != nil {
 		return nil, safe(e)
 	}
