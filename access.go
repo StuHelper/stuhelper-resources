@@ -5,8 +5,37 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"time"
 )
+
+type AccessFactTarget struct {
+	ResourceID  string `json:"resource_id"`
+	SchoolID    string `json:"school_id"`
+	DirectoryID string `json:"directory_id"`
+	CategoryID  string `json:"category_id"`
+}
+
+type AccessFacts struct {
+	Granted   bool
+	Purchased bool
+	Member    bool
+}
+
+type BatchReadTransaction interface {
+	RecordsByIDs([]string) (map[string]Record, error)
+	VersionsByIDs([]string) (map[string]VersionRecord, error)
+	AccessFactsBatch(string, time.Time, []AccessFactTarget) (map[string]AccessFacts, error)
+}
+
+func (s *Service) withRequestAuthority() *Service {
+	if _, ok := s.deps.Authority.(*requestAuthority); ok {
+		return s
+	}
+	copy := *s
+	copy.deps.Authority = &requestAuthority{source: s.deps.Authority, results: map[authorizationKey]error{}}
+	return &copy
+}
 
 func (s *Service) version(ctx context.Context, id string) (VersionRecord, error) {
 	var v VersionRecord
@@ -15,9 +44,44 @@ func (s *Service) version(ctx context.Context, id string) (VersionRecord, error)
 }
 func denied(e error) bool { return errors.Is(e, ErrDenied) || errors.Is(e, ErrUnauthenticated) }
 
+func loadSingleAccessFacts(tx Transaction, ownerKey string, r Record, v VersionRecord, now time.Time) (AccessFacts, error) {
+	var out AccessFacts
+	if ownerKey == "" {
+		return out, nil
+	}
+	if port, ok := tx.(BatchReadTransaction); ok {
+		m, err := port.AccessFactsBatch(ownerKey, now, []AccessFactTarget{{
+			ResourceID:  r.ID,
+			SchoolID:    r.SchoolID,
+			DirectoryID: v.Version.Metadata.DirectoryID,
+			CategoryID:  v.Version.Metadata.CategoryID,
+		}})
+		return m[r.ID], err
+	}
+	if r.State == "published" {
+		grant, err := tx.Grant(r.ID, ownerKey)
+		if err == nil && !grant.Grant.Revoked && (grant.Grant.ExpiresAt == nil || now.Before(*grant.Grant.ExpiresAt)) {
+			out.Granted = true
+		} else if err != nil && !errors.Is(err, ErrNotFound) {
+			return out, err
+		}
+	}
+	rights, err := tx.Rights(ownerKey, r.ID, r.SchoolID, v.Version.Metadata.DirectoryID, v.Version.Metadata.CategoryID, now)
+	if err != nil {
+		return out, err
+	}
+	out.Purchased = rights.Purchased
+	out.Member = rights.Member
+	return out, nil
+}
+
 // access evaluates current identity facts and each independent source of rights.
 // Ordinary unlisting retains purchased delivery only; a safety block denies all.
 func (s *Service) access(ctx context.Context, p Principal, r Record, v VersionRecord) error {
+	return s.accessWithFacts(ctx, p, r, v, nil)
+}
+
+func (s *Service) accessWithFacts(ctx context.Context, p Principal, r Record, v VersionRecord, preloaded *AccessFacts) error {
 	if r.State == "blocked" || v.Version.State == "blocked" {
 		return &AccessFailure{Reason: "resource_unavailable"}
 	}
@@ -44,38 +108,102 @@ func (s *Service) access(ctx context.Context, p Principal, r Record, v VersionRe
 	if e = s.auth(ctx, p, action, r.SchoolID); e != nil {
 		return e
 	}
-	if r.State == "published" {
-		if v.Version.Metadata.Access == "public" {
-			return nil
-		}
-		var grant GrantRecord
-		err := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; grant, e = tx.Grant(r.ID, p.Key()); return e })
-		if err == nil && !grant.Grant.Revoked && (grant.Grant.ExpiresAt == nil || s.now().Before(*grant.Grant.ExpiresAt)) {
-			return nil
-		}
-		if err != nil && !errors.Is(err, ErrNotFound) {
+	if r.State == "published" && v.Version.Metadata.Access == "public" {
+		return nil
+	}
+	var facts AccessFacts
+	if preloaded != nil {
+		facts = *preloaded
+	} else {
+		err := s.repo.Transaction(ctx, func(tx Transaction) error {
+			var e error
+			facts, e = loadSingleAccessFacts(tx, p.Key(), r, v, s.now())
+			return e
+		})
+		if err != nil {
 			return err
 		}
 	}
-	rights, err := s.localRights(ctx, p, r, v)
-	if err != nil {
-		return err
-	}
-	if rights.Purchased || r.State == "published" && rights.Member {
+	if r.State == "published" && facts.Granted {
 		return nil
 	}
-
+	if facts.Purchased || r.State == "published" && facts.Member {
+		return nil
+	}
 	return &AccessFailure{Reason: "requirements_missing", Missing: []string{"resource_entitlement"}}
 }
+
 func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, error) {
-	var out Resource
-	r, e := s.record(ctx, id)
-	if e != nil {
-		return out, e
+	if !validID(id) {
+		return Resource{}, ErrInput
 	}
-	return s.getRecord(ctx, p, r)
+	s = s.withRequestAuthority()
+	var r Record
+	var activeV, proposalV *VersionRecord
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
+		var e error
+		r, e = tx.Record(id)
+		if e != nil {
+			return e
+		}
+		if r.ActiveID != "" {
+			v, e := tx.Version(r.ActiveID)
+			if e != nil {
+				return e
+			}
+			activeV = &v
+		}
+		if r.ProposalID != "" {
+			if activeV != nil && r.ProposalID == activeV.Version.ID {
+				cp := *activeV
+				proposalV = &cp
+			} else {
+				v, e := tx.Version(r.ProposalID)
+				if e != nil {
+					return e
+				}
+				proposalV = &v
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return Resource{}, err
+	}
+	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil)
 }
+
 func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resource, error) {
+	var activeV, proposalV *VersionRecord
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
+		if r.ActiveID != "" {
+			v, e := tx.Version(r.ActiveID)
+			if e != nil {
+				return e
+			}
+			activeV = &v
+		}
+		if r.ProposalID != "" {
+			if activeV != nil && r.ProposalID == activeV.Version.ID {
+				cp := *activeV
+				proposalV = &cp
+			} else {
+				v, e := tx.Version(r.ProposalID)
+				if e != nil {
+					return e
+				}
+				proposalV = &v
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return Resource{}, err
+	}
+	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil)
+}
+
+func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Record, activeV, proposalV *VersionRecord, facts *AccessFacts) (Resource, error) {
 	var out Resource
 	var e error
 	privileged := r.Owner == p && p.Valid()
@@ -94,21 +222,19 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 			return out, ErrNotFound
 		}
 	}
-	e = s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = ownerView(tx, r, p); return e })
-	if e != nil {
-		return out, e
+	out = Resource{ID: r.ID, Revision: r.Revision, State: r.State, Owned: r.Owner == p, AccessReason: "not_checked"}
+	if activeV != nil {
+		ver := activeV.Version
+		out.Current = &ver
 	}
-	if !privileged {
-		out.Proposal = nil
+	if privileged && proposalV != nil {
+		ver := proposalV.Version
+		out.Proposal = &ver
 	}
-	if out.Current == nil {
+	if activeV == nil {
 		return out, nil
 	}
-	v, e := s.version(ctx, out.Current.ID)
-	if e != nil {
-		return out, e
-	}
-	e = s.access(ctx, p, r, v)
+	e = s.accessWithFacts(ctx, p, r, *activeV, facts)
 	if e == nil {
 		out.DownloadAllowed = true
 		out.AccessReason = "allowed"
@@ -137,7 +263,7 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 		out.AvailableMethods = []string{"download"}
 		out.UnlockReason = "already_accessible"
 	} else {
-		decision, err := s.unlockEligibilityFor(ctx, p, r, v, e)
+		decision, err := s.unlockEligibilityFor(ctx, p, r, *activeV, e)
 		if err == nil {
 			out.UnlockReason = decision.Reason
 			if decision.Eligible {
@@ -156,9 +282,7 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin bool) (Page, error) {
 	// Reuse only this request's school/action decisions. Every subsequent request
 	// starts with current facts; per-resource grants and state remain independent.
-	copy := *s
-	copy.deps.Authority = &requestAuthority{source: s.deps.Authority, results: map[authorizationKey]error{}}
-	s = &copy
+	s = s.withRequestAuthority()
 	out := Page{Items: []Resource{}}
 	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) {
 		return out, ErrInput
@@ -236,15 +360,12 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 	if more {
 		records = records[:f.Limit]
 	}
-	for _, record := range records {
-		v, e := s.getRecord(ctx, p, record)
-		if errors.Is(e, ErrNotFound) || denied(e) {
-			continue
+	if len(records) > 0 {
+		items, err := s.hydrateRecords(ctx, p, records)
+		if err != nil {
+			return Page{}, err
 		}
-		if e != nil {
-			return Page{}, e
-		}
-		out.Items = append(out.Items, v)
+		out.Items = items
 	}
 	if more {
 		out.NextCursor, e = encodeBrowseCursor(f, records[len(records)-1])
@@ -254,24 +375,246 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 	}
 	return out, nil
 }
+
+func (s *Service) hydrateRecords(ctx context.Context, p Principal, records []Record) ([]Resource, error) {
+	var versions map[string]VersionRecord
+	var factsMap map[string]AccessFacts
+	batched := false
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
+		port, ok := tx.(BatchReadTransaction)
+		if !ok {
+			return nil
+		}
+		batched = true
+		verIDs := make([]string, 0, len(records)*2)
+		seenVer := map[string]bool{}
+		for _, r := range records {
+			for _, vid := range []string{r.ActiveID, r.ProposalID} {
+				if vid != "" && !seenVer[vid] {
+					seenVer[vid] = true
+					verIDs = append(verIDs, vid)
+				}
+			}
+		}
+		var e error
+		versions, e = port.VersionsByIDs(verIDs)
+		if e != nil {
+			return e
+		}
+		if p.Valid() {
+			targets := make([]AccessFactTarget, 0, len(records))
+			for _, r := range records {
+				if r.ActiveID == "" {
+					continue
+				}
+				v, ok := versions[r.ActiveID]
+				if !ok {
+					continue
+				}
+				if r.State == "published" && v.Version.Metadata.Access == "public" {
+					continue
+				}
+				targets = append(targets, AccessFactTarget{
+					ResourceID:  r.ID,
+					SchoolID:    r.SchoolID,
+					DirectoryID: v.Version.Metadata.DirectoryID,
+					CategoryID:  v.Version.Metadata.CategoryID,
+				})
+			}
+			factsMap, e = port.AccessFactsBatch(p.Key(), s.now(), targets)
+			if e != nil {
+				return e
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Resource, 0, len(records))
+	for _, record := range records {
+		var v Resource
+		var e error
+		if !batched {
+			v, e = s.getRecord(ctx, p, record)
+		} else {
+			var activePtr, proposalPtr *VersionRecord
+			var factsPtr *AccessFacts
+			if record.ActiveID != "" {
+				av, ok := versions[record.ActiveID]
+				if !ok {
+					return nil, ErrNotFound
+				}
+				activePtr = &av
+				f := factsMap[record.ID]
+				factsPtr = &f
+			}
+			if record.ProposalID != "" {
+				pv, ok := versions[record.ProposalID]
+				if !ok {
+					return nil, ErrNotFound
+				}
+				proposalPtr = &pv
+			}
+			v, e = s.evaluatePreloadedRecord(ctx, p, record, activePtr, proposalPtr, factsPtr)
+		}
+		if errors.Is(e, ErrNotFound) || denied(e) {
+			continue
+		}
+		if e != nil {
+			return nil, e
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+type schoolSelection struct {
+	Selection
+	schoolID string
+}
+
+func (s *Service) selectBatch(ctx context.Context, p Principal, ids []string) (map[string]schoolSelection, map[string]error, error) {
+	s = s.withRequestAuthority()
+	selections := make(map[string]schoolSelection, len(ids))
+	itemErrs := make(map[string]error, len(ids))
+	const chunkSize = 200
+	for start := 0; start < len(ids); start += chunkSize {
+		end := min(start+chunkSize, len(ids))
+		chunk := ids[start:end]
+		var records map[string]Record
+		var versions map[string]VersionRecord
+		var factsMap map[string]AccessFacts
+		batched := false
+		err := s.repo.Transaction(ctx, func(tx Transaction) error {
+			port, ok := tx.(BatchReadTransaction)
+			if !ok {
+				return nil
+			}
+			batched = true
+			var e error
+			records, e = port.RecordsByIDs(chunk)
+			if e != nil {
+				return e
+			}
+			verIDs := make([]string, 0, len(records))
+			seenVer := map[string]bool{}
+			for _, rec := range records {
+				if rec.ActiveID != "" && !seenVer[rec.ActiveID] {
+					seenVer[rec.ActiveID] = true
+					verIDs = append(verIDs, rec.ActiveID)
+				}
+			}
+			versions, e = port.VersionsByIDs(verIDs)
+			if e != nil {
+				return e
+			}
+			if p.Valid() {
+				targets := make([]AccessFactTarget, 0, len(records))
+				for _, rec := range records {
+					if rec.ActiveID == "" {
+						continue
+					}
+					v, ok := versions[rec.ActiveID]
+					if !ok || (rec.State == "published" && v.Version.Metadata.Access == "public") {
+						continue
+					}
+					targets = append(targets, AccessFactTarget{
+						ResourceID:  rec.ID,
+						SchoolID:    rec.SchoolID,
+						DirectoryID: v.Version.Metadata.DirectoryID,
+						CategoryID:  v.Version.Metadata.CategoryID,
+					})
+				}
+				factsMap, e = port.AccessFactsBatch(p.Key(), s.now(), targets)
+				if e != nil {
+					return e
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, id := range chunk {
+			if !batched {
+				sel, school, e := s.selectionWithSchool(ctx, p, id)
+				if e != nil {
+					itemErrs[id] = e
+				} else {
+					selections[id] = schoolSelection{Selection: sel, schoolID: school}
+				}
+				continue
+			}
+			rec, ok := records[id]
+			if !ok {
+				itemErrs[id] = ErrNotFound
+				continue
+			}
+			if rec.ActiveID == "" {
+				itemErrs[id] = ErrDenied
+				continue
+			}
+			ver, ok := versions[rec.ActiveID]
+			if !ok {
+				itemErrs[id] = ErrNotFound
+				continue
+			}
+			f := factsMap[rec.ID]
+			if e := s.accessWithFacts(ctx, p, rec, ver, &f); e != nil {
+				itemErrs[id] = e
+				continue
+			}
+			if ver.Version.File == nil {
+				itemErrs[id] = ErrUnavailable
+				continue
+			}
+			selections[id] = schoolSelection{Selection: Selection{ResourceID: rec.ID, VersionID: ver.Version.ID, ReferenceID: ver.ReferenceID, File: *ver.Version.File}, schoolID: rec.SchoolID}
+		}
+	}
+	return selections, itemErrs, nil
+}
+
 func (s *Service) selection(ctx context.Context, p Principal, id string) (Selection, error) {
 	sel, _, err := s.selectionWithSchool(ctx, p, id)
 	return sel, err
 }
 func (s *Service) selectionWithSchool(ctx context.Context, p Principal, id string) (Selection, string, error) {
 	var out Selection
-	r, e := s.record(ctx, id)
-	if e != nil {
-		return out, "", e
+	if !validID(id) {
+		return out, "", ErrInput
+	}
+	var r Record
+	var v VersionRecord
+	var facts AccessFacts
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
+		var e error
+		r, e = tx.Record(id)
+		if e != nil {
+			return e
+		}
+		if r.ActiveID == "" {
+			return nil
+		}
+		v, e = tx.Version(r.ActiveID)
+		if e != nil {
+			return e
+		}
+		if p.Valid() && !(r.State == "published" && v.Version.Metadata.Access == "public") {
+			facts, e = loadSingleAccessFacts(tx, p.Key(), r, v, s.now())
+			if e != nil {
+				return e
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return out, "", err
 	}
 	if r.ActiveID == "" {
 		return out, "", ErrDenied
 	}
-	v, e := s.version(ctx, r.ActiveID)
-	if e != nil {
-		return out, "", e
-	}
-	if e = s.access(ctx, p, r, v); e != nil {
+	if e := s.accessWithFacts(ctx, p, r, v, &facts); e != nil {
 		return out, "", e
 	}
 	if v.Version.File == nil {
@@ -279,7 +622,68 @@ func (s *Service) selectionWithSchool(ctx context.Context, p Principal, id strin
 	}
 	return Selection{ResourceID: r.ID, VersionID: v.Version.ID, ReferenceID: v.ReferenceID, File: *v.Version.File}, r.SchoolID, nil
 }
+
+func (s *Service) StreamDownload(ctx context.Context, p Principal, id string, open func(File) io.Writer) error {
+	if !validID(id) {
+		return ErrInput
+	}
+	s = s.withRequestAuthority()
+	var r Record
+	var activeV *VersionRecord
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
+		var e error
+		r, e = tx.Record(id)
+		if e != nil {
+			return e
+		}
+		if r.ActiveID != "" {
+			v, e := tx.Version(r.ActiveID)
+			if e != nil {
+				return e
+			}
+			activeV = &v
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	privileged := r.Owner == p && p.Valid()
+	if !privileged {
+		e := s.auth(ctx, p, "manage", r.SchoolID)
+		privileged = e == nil
+		if e != nil && !denied(e) {
+			return e
+		}
+	}
+	if !privileged {
+		if e := s.auth(ctx, p, "discover", r.SchoolID); e != nil {
+			return e
+		}
+		if r.State != "published" && r.State != "unlisted" {
+			return ErrNotFound
+		}
+	}
+	if activeV == nil || activeV.Version.File == nil {
+		return &AccessFailure{Reason: "resource_unavailable"}
+	}
+	if e := s.accessWithFacts(ctx, p, r, *activeV, nil); e != nil {
+		if r.State == "unlisted" && !privileged && denied(e) {
+			return ErrNotFound
+		}
+		var detail *AccessFailure
+		if denied(e) && !errors.As(e, &detail) {
+			return &AccessFailure{Reason: "permission_denied"}
+		}
+		return e
+	}
+	return s.withStreamIdleTimeout(ctx, open(*activeV.Version.File), func(streamCtx context.Context, out io.Writer) error {
+		return s.deps.Files.Download(streamCtx, p, activeV.ReferenceID, out)
+	})
+}
+
 func (s *Service) Download(ctx context.Context, p Principal, id string, w io.Writer) (File, error) {
+	s = s.withRequestAuthority()
 	selected, e := s.selection(ctx, p, id)
 	if e != nil {
 		return File{}, e
@@ -484,6 +888,7 @@ type authorizationKey struct {
 	Action, Scope string
 }
 type requestAuthority struct {
+	mu      sync.Mutex
 	source  Authority
 	results map[authorizationKey]error
 }
@@ -493,10 +898,15 @@ func (a *requestAuthority) Check(ctx context.Context, p Principal, action, scope
 		return err
 	}
 	key := authorizationKey{p, action, scope}
+	a.mu.Lock()
 	if err, ok := a.results[key]; ok {
+		a.mu.Unlock()
 		return err
 	}
+	a.mu.Unlock()
 	err := a.source.Check(ctx, p, action, scope)
+	a.mu.Lock()
 	a.results[key] = err
+	a.mu.Unlock()
 	return err
 }

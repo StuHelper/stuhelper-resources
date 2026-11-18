@@ -103,6 +103,7 @@ scenario_tests:
     - closure_test.go#TestClosedUploaderKeepsFilesAndCopyrightWithoutPublicAccountLink
   RES-16:
     - integration_test.go#TestListReusesRequestAuthorizationButRechecksNextRequest
+    - performance_test.go#TestBatchQueriesRequestAuthReuseAndVersionIndexes
   RES-17:
     - integration_test.go#TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting
   RS-05:

@@ -145,22 +145,24 @@ func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key,
 }
 
 func (s *Service) mutationWithBudget(ctx context.Context, p Principal, action, scope, key, id string, input any, budget *mutationBudget, apply func(Transaction) (any, error), out any) error {
-	return s.mutationWithAuditSchool(ctx, p, action, scope, scope, key, id, input, budget, apply, out)
+	_, err := s.mutationWithReplay(ctx, p, action, scope, scope, key, id, input, budget, apply, out)
+	return err
 }
 
-func (s *Service) mutationWithAuditSchool(ctx context.Context, p Principal, action, scope, auditSchool, key, id string, input any, budget *mutationBudget, apply func(Transaction) (any, error), out any) error {
+func (s *Service) mutationWithReplay(ctx context.Context, p Principal, action, scope, auditSchool, key, id string, input any, budget *mutationBudget, apply func(Transaction) (any, error), out any) (bool, error) {
 	if !p.Valid() {
-		return ErrUnauthenticated
+		return false, ErrUnauthenticated
 	}
 	if !validID(key) {
-		return ErrInput
+		return false, ErrInput
 	}
 	if e := s.auth(ctx, p, action, scope); e != nil {
-		return e
+		return false, e
 	}
 	operation := hash([]string{p.Key(), action, id, key})
 	digest := hash(input)
-	return s.repo.Transaction(ctx, func(tx Transaction) error {
+	replayed := false
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
 		if e := tx.Lock("operation:" + operation); e != nil {
 			return e
 		}
@@ -172,6 +174,7 @@ func (s *Service) mutationWithAuditSchool(ctx context.Context, p Principal, acti
 			if json.Unmarshal(prior.Result, out) != nil {
 				return ErrUnavailable
 			}
+			replayed = true
 			return nil
 		}
 		if !errors.Is(e, ErrNotFound) {
@@ -209,6 +212,7 @@ func (s *Service) mutationWithAuditSchool(ctx context.Context, p Principal, acti
 		}
 		return nil
 	})
+	return replayed, err
 }
 func (s *Service) PutCategory(ctx context.Context, p Principal, id, key string, input CategoryWrite) (Category, error) {
 	var out Category
