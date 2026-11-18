@@ -48,17 +48,32 @@ func (s *Service) GetCoverage(ctx context.Context, p Principal, id string) (Cove
 	if !p.Valid() {
 		return out, ErrUnauthenticated
 	}
+	admin := true
 	e := s.auth(ctx, p, "coverage.manage", "")
 	if e != nil {
 		if !denied(e) {
 			return out, e
 		}
+		admin = false
 		if e = s.auth(ctx, p, "discover", ""); e != nil {
 			return out, e
 		}
 	}
 	e = s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = tx.Coverage(id); return e })
-	return out, e
+	if e != nil || admin {
+		return out, e
+	}
+	seenSchools := map[string]bool{}
+	for _, rule := range out.Rules {
+		if rule.SchoolID == "" || seenSchools[rule.SchoolID] {
+			continue
+		}
+		seenSchools[rule.SchoolID] = true
+		if err := s.auth(ctx, p, "discover", rule.SchoolID); err != nil {
+			return Coverage{}, err
+		}
+	}
+	return out, nil
 }
 func (s *Service) PutCoverage(ctx context.Context, p Principal, id, key string, in Coverage) (Coverage, error) {
 	var out Coverage

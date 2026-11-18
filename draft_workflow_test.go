@@ -132,6 +132,21 @@ func TestDraftOneStepSubmitRejectionReasonWithdrawAndDelete(t *testing.T) {
 		t.Fatalf("foreign user deleted draft: %v", err)
 	}
 	rev := rejected.Revision
+	// Cleanup for a superseded version can still be waiting when the
+	// never-published draft becomes eligible for deletion.
+	must(t, h.repo.Transaction(h.ctx, func(tx r.Transaction) error {
+		return tx.SaveJob(r.Job{ID: "cleanup-before-delete", Kind: "release", ResourceID: itemID, VersionID: updated.Proposal.ID, ReferenceID: "superseded-ref", State: "pending", Generation: 1, AvailableAt: h.clock.Now()})
+	}))
+	if _, err := h.s.DeleteDraft(h.ctx, uploader, itemID, "sdk-del-1", rev); !errors.Is(err, r.ErrConflict) {
+		t.Fatalf("expected deletion to wait for release, got %v", err)
+	}
+	_, err = h.s.Get(h.ctx, uploader, itemID)
+	must(t, err)
+	h.drain(t)
+	if !h.files.released["superseded-ref"] {
+		t.Fatal("release job lost before provider confirmation")
+	}
+
 	delResp, err := client.DeleteDraftWithResponse(h.ctx, itemID, &sdk.DeleteDraftParams{IdempotencyKey: "sdk-del-1", Revision: &rev}, func(_ context.Context, req *http.Request) error {
 		req.Header.Set("Authorization", "Bearer owner")
 		return nil

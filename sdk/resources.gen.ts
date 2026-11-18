@@ -386,7 +386,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GetResource */
+        /** Read own request status */
         get: operations["GetResourceRequest"];
         put?: never;
         post?: never;
@@ -405,7 +405,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** SubmitResource */
+        /** Retry a failed request delivery */
         post: operations["RetryResourceRequest"];
         delete?: never;
         options?: never;
@@ -471,7 +471,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required. */
+        /**
+         * List own uploaded reference names
+         * @description Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+         */
         get: operations["myResourcesReferences"];
         put?: never;
         post?: never;
@@ -527,7 +530,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * ListResources
+         * Count current-visible published resources
          * @description Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
          */
         get: operations["GetResourceCounts"];
@@ -547,7 +550,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * ListOwnResources
+         * Read own resource summary counts
          * @description Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
          */
         get: operations["GetOwnResourceSummary"];
@@ -908,6 +911,9 @@ export interface components {
         ResourceCounts: {
             total: number;
             courses: components["schemas"]["CourseResourceCount"][];
+            group_by?: string;
+            groups?: components["schemas"]["ResourceGroupCount"][];
+            ungrouped_count?: number;
         };
         OwnResourceSummary: {
             resource_count: number;
@@ -916,6 +922,11 @@ export interface components {
         DeleteReceipt: {
             id: string;
             deleted: boolean;
+        };
+        ResourceGroupCount: {
+            key: string;
+            value: components["schemas"]["Value"];
+            count: number;
         };
     };
     responses: never;
@@ -1200,6 +1211,10 @@ export interface operations {
                 limit?: string;
                 sort?: "id" | "newest";
                 file_type?: string;
+                teacher_id?: string;
+                term_id?: string;
+                tag?: string;
+                access?: "public" | "restricted";
             };
             header?: never;
             path?: never;
@@ -1373,10 +1388,20 @@ export interface operations {
     ListOwnResources: {
         parameters: {
             query?: {
+                school_id?: string;
+                course_id?: string;
+                category_id?: string;
+                directory_id?: string;
+                query?: string;
+                attributes?: string;
                 after?: string;
                 limit?: string;
                 sort?: "id" | "newest";
                 file_type?: string;
+                teacher_id?: string;
+                term_id?: string;
+                tag?: string;
+                access?: "public" | "restricted";
             };
             header?: never;
             path?: never;
@@ -2827,6 +2852,7 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": string;
+                    "application/zip": string;
                 };
             };
             /** @description Invalid request */
@@ -2998,6 +3024,10 @@ export interface operations {
                 limit?: string;
                 sort?: "id" | "newest";
                 file_type?: string;
+                teacher_id?: string;
+                term_id?: string;
+                tag?: string;
+                access?: "public" | "restricted";
             };
             header?: never;
             path?: never;
@@ -3606,6 +3636,8 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": string;
+                    "application/pdf": string;
+                    "*/*": string;
                 };
             };
             /** @description Invalid request */
@@ -3857,6 +3889,13 @@ export interface operations {
                 query?: string;
                 category_id?: string;
                 file_type?: string;
+                course_id?: string;
+                directory_id?: string;
+                attributes?: string;
+                teacher_id?: string;
+                term_id?: string;
+                tag?: string;
+                access?: "public" | "restricted";
             };
             header?: never;
             path?: never;
