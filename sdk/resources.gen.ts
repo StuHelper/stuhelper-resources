@@ -385,7 +385,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GetResource */
+        /** Read own request status */
         get: operations["GetResourceRequest"];
         put?: never;
         post?: never;
@@ -404,7 +404,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** SubmitResource */
+        /** Retry a failed request delivery */
         post: operations["RetryResourceRequest"];
         delete?: never;
         options?: never;
@@ -470,7 +470,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required. */
+        /**
+         * List own uploaded reference names
+         * @description Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+         */
         get: operations["myResourcesReferences"];
         put?: never;
         post?: never;
@@ -526,7 +529,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * ListResources
+         * Count current-visible published resources
          * @description Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
          */
         get: operations["GetResourceCounts"];
@@ -546,7 +549,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * ListOwnResources
+         * Read own resource summary counts
          * @description Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
          */
         get: operations["GetOwnResourceSummary"];

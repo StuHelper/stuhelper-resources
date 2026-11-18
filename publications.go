@@ -76,6 +76,44 @@ func (s *Service) CreateDraft(ctx context.Context, p Principal, key string, in D
 	}, &out)
 	return out, e
 }
+func (s *Service) authorizeDraftEdit(ctx context.Context, p Principal, r Record, schoolMatches bool) (string, error) {
+	if r.Owner != p {
+		if e := s.auth(ctx, p, "manage", r.SchoolID); e != nil {
+			return "", e
+		}
+		if !schoolMatches {
+			return "", ErrInput
+		}
+		return "manage", nil
+	}
+	if !schoolMatches {
+		return "", ErrInput
+	}
+	if e := s.auth(ctx, p, "upload", r.SchoolID); e != nil {
+		return "", e
+	}
+	return "upload", nil
+}
+
+func (s *Service) applyProposalDecision(tx Transaction, r Record, v *VersionRecord, in Decision, approve bool) error {
+	if v.ResourceID != r.ID || r.ProposalID != in.VersionID || r.Revision != in.Revision || v.Version.State != "pending" || r.State == "blocked" {
+		return ErrConflict
+	}
+	if _, e := currentCategory(tx, v.Version.Metadata); e != nil {
+		return e
+	}
+	v.DecisionID = in.ID
+	v.DecisionRevision = in.Revision
+	v.Version.State = "rejected"
+	if approve {
+		v.Version.State = "preparing"
+		if e := s.queue(tx, "publish", r.ID, v.Version.ID, "", ""); e != nil {
+			return e
+		}
+	}
+	return tx.SaveVersion(*v)
+}
+
 func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, in DraftWrite) (Resource, error) {
 	var out Resource
 	if !p.Valid() {
@@ -88,25 +126,12 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 	if e != nil {
 		return out, e
 	}
-	if r.Owner != p {
-		if e = s.auth(ctx, p, "manage", r.SchoolID); e != nil {
-			return out, e
-		}
-	}
-	if in.Metadata.Associations.SchoolID != r.SchoolID {
-		return out, ErrInput
-	}
-	if r.Owner == p {
-		if e = s.auth(ctx, p, "upload", r.SchoolID); e != nil {
-			return out, e
-		}
+	action, e := s.authorizeDraftEdit(ctx, p, r, in.Metadata.Associations.SchoolID == r.SchoolID)
+	if e != nil {
+		return out, e
 	}
 	if e = s.checkOwnerActive(ctx, p); e != nil {
 		return out, e
-	}
-	action := "upload"
-	if r.Owner != p {
-		action = "manage"
 	}
 	if hit, e := s.precheckReplay(ctx, p, action, id, key, in, &out); e != nil || hit {
 		return out, e
@@ -206,22 +231,12 @@ func (s *Service) AttachFile(ctx context.Context, p Principal, id, key string, i
 	if e != nil {
 		return out, e
 	}
-	if r.Owner != p {
-		if e = s.auth(ctx, p, "manage", r.SchoolID); e != nil {
-			return out, e
-		}
-	}
-	if r.Owner == p {
-		if e = s.auth(ctx, p, "upload", r.SchoolID); e != nil {
-			return out, e
-		}
+	action, e := s.authorizeDraftEdit(ctx, p, r, true)
+	if e != nil {
+		return out, e
 	}
 	if e = s.checkOwnerActive(ctx, p); e != nil {
 		return out, e
-	}
-	action := "upload"
-	if r.Owner != p {
-		action = "manage"
 	}
 	if hit, e := s.precheckReplay(ctx, p, action, id, key, in, &out); e != nil || hit {
 		return out, e
@@ -374,25 +389,10 @@ func (s *Service) ApplyDecision(ctx context.Context, p Principal, id, key string
 		if e != nil {
 			return nil, e
 		}
-		if v.ResourceID != id || r.ProposalID != in.VersionID || r.Revision != in.Revision || v.Version.State != "pending" || r.State == "blocked" {
-			return nil, ErrConflict
-		}
-		if _, e = currentCategory(tx, v.Version.Metadata); e != nil {
+		if e = s.applyProposalDecision(tx, r, &v, in, in.Action == "approve"); e != nil {
 			return nil, e
-		}
-		v.DecisionID = in.ID
-		v.DecisionRevision = in.Revision
-		v.Version.State = "rejected"
-		if in.Action == "approve" {
-			v.Version.State = "preparing"
-			if e = s.queue(tx, "publish", r.ID, v.Version.ID, "", ""); e != nil {
-				return nil, e
-			}
 		}
 		r.Revision++
-		if e = tx.SaveVersion(v); e != nil {
-			return nil, e
-		}
 		if e = tx.SaveRecord(r); e != nil {
 			return nil, e
 		}

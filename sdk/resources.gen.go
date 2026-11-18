@@ -1200,7 +1200,7 @@ type ClientInterface interface {
 	// Corresponds with PUT /api/v1/resources/categories/{id} (the `PutCategory` operationId).
 	PutCategory(ctx context.Context, id string, params *PutCategoryParams, body PutCategoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetResourceCounts ListResources
+	// GetResourceCounts Count current-visible published resources
 	//
 	// Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
 	//
@@ -1395,12 +1395,14 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 	ListOwnResources(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// MyResourcesReferences performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+	// MyResourcesReferences List own uploaded reference names
 	//
 	// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+	//
+	// Corresponds with GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId).
 	MyResourcesReferences(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetOwnResourceSummary ListOwnResources
+	// GetOwnResourceSummary Read own resource summary counts
 	//
 	// Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
 	//
@@ -1436,19 +1438,19 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/resources/requests (the `ListRequests` operationId).
 	ListRequests(ctx context.Context, params *ListRequestsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetResourceRequest GetResource
+	// GetResourceRequest Read own request status
 	//
 	// Corresponds with GET /api/v1/resources/requests/{id} (the `GetResourceRequest` operationId).
 	GetResourceRequest(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RetryResourceRequestWithBody SubmitResource
+	// RetryResourceRequestWithBody Retry a failed request delivery
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/resources/requests/{id}/retry (the `RetryResourceRequest` operationId).
 	RetryResourceRequestWithBody(ctx context.Context, id string, params *RetryResourceRequestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RetryResourceRequest SubmitResource
+	// RetryResourceRequest Retry a failed request delivery
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -1583,7 +1585,7 @@ func (c *Client) PutCategory(ctx context.Context, id string, params *PutCategory
 	return c.Client.Do(req)
 }
 
-// GetResourceCounts ListResources
+// GetResourceCounts Count current-visible published resources
 //
 // Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
 //
@@ -2068,9 +2070,11 @@ func (c *Client) ListOwnResources(ctx context.Context, params *ListOwnResourcesP
 	return c.Client.Do(req)
 }
 
-// MyResourcesReferences performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+// MyResourcesReferences List own uploaded reference names
 //
 // Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+//
+// Corresponds with GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId).
 func (c *Client) MyResourcesReferences(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewMyResourcesReferencesRequest(c.Server, params)
 	if err != nil {
@@ -2083,7 +2087,7 @@ func (c *Client) MyResourcesReferences(ctx context.Context, params *MyResourcesR
 	return c.Client.Do(req)
 }
 
-// GetOwnResourceSummary ListOwnResources
+// GetOwnResourceSummary Read own resource summary counts
 //
 // Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
 //
@@ -2179,7 +2183,7 @@ func (c *Client) ListRequests(ctx context.Context, params *ListRequestsParams, r
 	return c.Client.Do(req)
 }
 
-// GetResourceRequest GetResource
+// GetResourceRequest Read own request status
 //
 // Corresponds with GET /api/v1/resources/requests/{id} (the `GetResourceRequest` operationId).
 func (c *Client) GetResourceRequest(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -2194,7 +2198,7 @@ func (c *Client) GetResourceRequest(ctx context.Context, id string, reqEditors .
 	return c.Client.Do(req)
 }
 
-// RetryResourceRequestWithBody SubmitResource
+// RetryResourceRequestWithBody Retry a failed request delivery
 //
 // Takes any type of body and a specified content type.
 //
@@ -2211,7 +2215,7 @@ func (c *Client) RetryResourceRequestWithBody(ctx context.Context, id string, pa
 	return c.Client.Do(req)
 }
 
-// RetryResourceRequest SubmitResource
+// RetryResourceRequest Retry a failed request delivery
 //
 // Takes a body of the `application/json` content type.
 //
@@ -4508,7 +4512,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /api/v1/resources/categories/{id} (the `PutCategory` operationId).
 	PutCategoryWithResponse(ctx context.Context, id string, params *PutCategoryParams, body PutCategoryJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCategoryResponse, error)
 
-	// GetResourceCountsWithResponse ListResources
+	// GetResourceCountsWithResponse Count current-visible published resources
 	//
 	// Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
 	//
@@ -4721,14 +4725,16 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 	ListOwnResourcesWithResponse(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*ListOwnResourcesResponse, error)
 
-	// MyResourcesReferencesWithResponse performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+	// MyResourcesReferencesWithResponse List own uploaded reference names
 	//
 	// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
 	//
 	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId).
 	MyResourcesReferencesWithResponse(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*MyResourcesReferencesResponse, error)
 
-	// GetOwnResourceSummaryWithResponse ListOwnResources
+	// GetOwnResourceSummaryWithResponse Read own resource summary counts
 	//
 	// Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
 	//
@@ -4772,21 +4778,21 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/resources/requests (the `ListRequests` operationId).
 	ListRequestsWithResponse(ctx context.Context, params *ListRequestsParams, reqEditors ...RequestEditorFn) (*ListRequestsResponse, error)
 
-	// GetResourceRequestWithResponse GetResource
+	// GetResourceRequestWithResponse Read own request status
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/resources/requests/{id} (the `GetResourceRequest` operationId).
 	GetResourceRequestWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetResourceRequestResponse, error)
 
-	// RetryResourceRequestWithBodyWithResponse SubmitResource
+	// RetryResourceRequestWithBodyWithResponse Retry a failed request delivery
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/resources/requests/{id}/retry (the `RetryResourceRequest` operationId).
 	RetryResourceRequestWithBodyWithResponse(ctx context.Context, id string, params *RetryResourceRequestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RetryResourceRequestResponse, error)
 
-	// RetryResourceRequestWithResponse SubmitResource
+	// RetryResourceRequestWithResponse Retry a failed request delivery
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -7939,7 +7945,7 @@ func (c *ClientWithResponses) PutCategoryWithResponse(ctx context.Context, id st
 	return ParsePutCategoryResponse(rsp)
 }
 
-// GetResourceCountsWithResponse ListResources
+// GetResourceCountsWithResponse Count current-visible published resources
 //
 // Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
 //
@@ -8326,11 +8332,13 @@ func (c *ClientWithResponses) ListOwnResourcesWithResponse(ctx context.Context, 
 	return ParseListOwnResourcesResponse(rsp)
 }
 
-// MyResourcesReferencesWithResponse performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+// MyResourcesReferencesWithResponse List own uploaded reference names
 //
 // Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
 //
 // Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId).
 func (c *ClientWithResponses) MyResourcesReferencesWithResponse(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*MyResourcesReferencesResponse, error) {
 	rsp, err := c.MyResourcesReferences(ctx, params, reqEditors...)
 	if err != nil {
@@ -8339,7 +8347,7 @@ func (c *ClientWithResponses) MyResourcesReferencesWithResponse(ctx context.Cont
 	return ParseMyResourcesReferencesResponse(rsp)
 }
 
-// GetOwnResourceSummaryWithResponse ListOwnResources
+// GetOwnResourceSummaryWithResponse Read own resource summary counts
 //
 // Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
 //
@@ -8419,7 +8427,7 @@ func (c *ClientWithResponses) ListRequestsWithResponse(ctx context.Context, para
 	return ParseListRequestsResponse(rsp)
 }
 
-// GetResourceRequestWithResponse GetResource
+// GetResourceRequestWithResponse Read own request status
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -8432,7 +8440,7 @@ func (c *ClientWithResponses) GetResourceRequestWithResponse(ctx context.Context
 	return ParseGetResourceRequestResponse(rsp)
 }
 
-// RetryResourceRequestWithBodyWithResponse SubmitResource
+// RetryResourceRequestWithBodyWithResponse Retry a failed request delivery
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -8445,7 +8453,7 @@ func (c *ClientWithResponses) RetryResourceRequestWithBodyWithResponse(ctx conte
 	return ParseRetryResourceRequestResponse(rsp)
 }
 
-// RetryResourceRequestWithResponse SubmitResource
+// RetryResourceRequestWithResponse Retry a failed request delivery
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //

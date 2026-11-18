@@ -89,6 +89,9 @@ scenario_tests:
   RES-10:
     - http_test.go#TestHTTPContractSDKAndUnknownInput
     - contract_validation_test.go#TestContractAndInputBoundaries
+  RES-24:
+    - http_test.go#TestCoverageHTTPAndAccessMethods
+    - collation_test.go#TestUTF8CollationPaginationAndOwnedReferences
   RES-11:
     - integration_test.go#TestReviewInspectionIsScopedAndGrantListsIdentifySubjects
   RES-12:

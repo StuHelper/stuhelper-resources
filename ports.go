@@ -110,26 +110,16 @@ func (s *Service) ApplyContentDecision(ctx context.Context, p Principal, in Deci
 			return nil, ErrConflict
 		}
 		if latest.ProposalID == in.VersionID && current.Version.State == "pending" {
-			if in.Action == "restore" || latest.State == "blocked" {
+			if in.Action == "restore" {
 				return nil, ErrConflict
 			}
-			if _, e = currentCategory(tx, current.Version.Metadata); e != nil {
-				return nil, e
-			}
-			current.DecisionID = in.ID
-			current.DecisionRevision = in.Revision
-			current.Version.State = "rejected"
 			if in.Action == "publish" {
 				budget.addJob = true
 				if e = s.checkBudget(tx, budget, 1); e != nil {
 					return nil, e
 				}
-				current.Version.State = "preparing"
-				if e = s.queue(tx, "publish", r.ID, in.VersionID, "", ""); e != nil {
-					return nil, e
-				}
 			}
-			if e = tx.SaveVersion(current); e != nil {
+			if e = s.applyProposalDecision(tx, latest, &current, in, in.Action == "publish"); e != nil {
 				return nil, e
 			}
 		} else {
