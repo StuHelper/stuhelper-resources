@@ -280,9 +280,9 @@ func (s *Service) Download(ctx context.Context, p Principal, id string, w io.Wri
 	if e != nil {
 		return File{}, e
 	}
-	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
-	defer cancel()
-	e = s.deps.Files.Download(work, p, selected.ReferenceID, w)
+	e = s.withStreamIdleTimeout(ctx, w, func(streamCtx context.Context, out io.Writer) error {
+		return s.deps.Files.Download(streamCtx, p, selected.ReferenceID, out)
+	})
 	return selected.File, e
 }
 func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in StateChange) (Resource, error) {

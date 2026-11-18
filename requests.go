@@ -28,9 +28,11 @@ func (s *Service) RequestStatus(ctx context.Context, p Principal, id string) (Re
 	out := rec.Receipt
 	out.TaskID = rec.ExternalID
 	if rec.ExternalID != "" {
-		status, e := s.deps.Moderation.Status(ctx, p, rec.ExternalID)
+		work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+		defer cancel()
+		status, e := s.deps.Moderation.Status(work, p, rec.ExternalID)
 		if e != nil {
-			return RequestReceipt{}, e
+			return RequestReceipt{}, normalizeDepError(ctx, e)
 		}
 		out.State = status.State
 		out.DecisionReason = status.Reason

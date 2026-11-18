@@ -181,7 +181,9 @@ func (s *Service) DownloadReviewFile(ctx context.Context, p Principal, versionID
 	if v.Version.File == nil {
 		return ErrNotFound
 	}
-	return s.deps.Files.ReviewDownload(ctx, p, versionID, v.Version.File.VersionID, w)
+	return s.withStreamIdleTimeout(ctx, w, func(streamCtx context.Context, out io.Writer) error {
+		return s.deps.Files.ReviewDownload(streamCtx, p, versionID, v.Version.File.VersionID, out)
+	})
 }
 
 // InspectComplaint returns only target routing metadata. The caller must have
