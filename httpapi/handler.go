@@ -370,23 +370,16 @@ func (h *handler) preview(w http.ResponseWriter, r *http.Request, p resources.Pr
 	return h.file(w, r, p, true)
 }
 func (h *handler) file(w http.ResponseWriter, r *http.Request, p resources.Principal, inline bool) (any, error) {
-	resource, e := h.s.Get(r.Context(), p, r.PathValue("id"))
-	if e != nil {
-		return nil, e
-	}
-	if !resource.DownloadAllowed || resource.Current == nil || resource.Current.File == nil {
-		if resource.AccessReason == "" {
-			return nil, resources.ErrDenied
+	var out *stream
+	e := h.s.StreamDownload(r.Context(), p, r.PathValue("id"), func(f resources.File) io.Writer {
+		kind := "application/octet-stream"
+		if inline {
+			kind = f.ContentType
 		}
-		return nil, &resources.AccessFailure{Reason: resource.AccessReason, Missing: resource.MissingConditions, Unavailable: resource.UnavailableConditions, RuleVersion: resource.RuleVersion}
-	}
-	kind := "application/octet-stream"
-	if inline {
-		kind = resource.Current.File.ContentType
-	}
-	out := &stream{w: w, kind: kind, name: resource.Current.File.Filename, inline: inline}
-	_, e = h.s.Download(r.Context(), p, resource.ID, out)
-	if e != nil && out.written {
+		out = &stream{w: w, kind: kind, name: f.Filename, inline: inline}
+		return out
+	})
+	if e != nil && out != nil && out.written {
 		panic(http.ErrAbortHandler)
 	}
 	return nil, e

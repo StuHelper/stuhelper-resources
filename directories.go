@@ -182,6 +182,7 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 	if !validID(key) || in.DirectoryID == "" && len(in.ResourceIDs) == 0 || in.DirectoryID != "" && len(in.ResourceIDs) > 0 || !optionalID(in.DirectoryID) || len(in.ResourceIDs) > s.cfg.MaxPackageFiles*s.cfg.MaxPackageParts {
 		return out, ErrInput
 	}
+	s = s.withRequestAuthority()
 	if e := s.auth(ctx, p, "package", ""); e != nil {
 		return out, e
 	}
@@ -193,21 +194,27 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 			return out, e
 		}
 	}
-	selected := [][]Selection{}
-	parts := []PackagePart{}
 	seen := map[string]bool{}
 	for _, id := range ids {
 		if !validID(id) || seen[id] {
 			return out, ErrInput
 		}
 		seen[id] = true
-		file, e := s.selection(ctx, p, id)
-		if denied(e) || errors.Is(e, ErrNotFound) {
-			continue
-		}
-		if e != nil {
+	}
+	selections, itemErrs, e := s.selectBatch(ctx, p, ids)
+	if e != nil {
+		return out, e
+	}
+	selected := [][]Selection{}
+	parts := []PackagePart{}
+	for _, id := range ids {
+		if e := itemErrs[id]; e != nil {
+			if denied(e) || errors.Is(e, ErrNotFound) {
+				continue
+			}
 			return out, e
 		}
+		file := selections[id]
 		if file.File.Size > s.cfg.MaxPackageBytes {
 			return out, ErrCapacity
 		}
@@ -226,7 +233,7 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 	if len(parts) == 0 {
 		return out, ErrNotFound
 	}
-	e := s.mutation(ctx, p, "package", "", key, "", in, func(tx Transaction) (any, error) {
+	replayed, e := s.mutationWithReplay(ctx, p, "package", "", key, "", in, func(tx Transaction) (any, error) {
 		out = Package{ID: newID(), Parts: parts, ExpiresAt: s.now().Add(s.cfg.PackageTTL)}
 		if e := tx.SavePackage(PackageRecord{Package: out, Owner: p, Selections: selected}); e != nil {
 			return nil, e
@@ -236,11 +243,42 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 	if e != nil {
 		return Package{}, e
 	}
-	checked, e := s.GetPackage(ctx, p, out.ID)
-	if e != nil {
-		return Package{}, e
+	if replayed {
+		checked, e := s.GetPackage(ctx, p, out.ID)
+		if e != nil {
+			return Package{}, e
+		}
+		return checked.Package, nil
 	}
-	return checked.Package, nil
+	return out, nil
+}
+func (s *Service) verifyPackageSelections(ctx context.Context, p Principal, groups [][]Selection) error {
+	ids := []string{}
+	seen := map[string]bool{}
+	for _, part := range groups {
+		for _, old := range part {
+			if !seen[old.ResourceID] {
+				seen[old.ResourceID] = true
+				ids = append(ids, old.ResourceID)
+			}
+		}
+	}
+	selections, itemErrs, err := s.selectBatch(ctx, p, ids)
+	if err != nil {
+		return err
+	}
+	for _, part := range groups {
+		for _, old := range part {
+			if e := itemErrs[old.ResourceID]; e != nil {
+				return e
+			}
+			current := selections[old.ResourceID]
+			if current.VersionID != old.VersionID || current.ReferenceID != old.ReferenceID {
+				return ErrConflict
+			}
+		}
+	}
+	return nil
 }
 func (s *Service) GetPackage(ctx context.Context, p Principal, id string) (PackageRecord, error) {
 	var out PackageRecord
@@ -250,6 +288,7 @@ func (s *Service) GetPackage(ctx context.Context, p Principal, id string) (Packa
 	if !validID(id) {
 		return out, ErrInput
 	}
+	s = s.withRequestAuthority()
 	e := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = tx.Package(id); return e })
 	if e != nil {
 		return PackageRecord{}, e
@@ -261,26 +300,35 @@ func (s *Service) GetPackage(ctx context.Context, p Principal, id string) (Packa
 		return PackageRecord{}, ErrConflict
 	}
 	// Recheck before exposing the manifest as well as before delivering bytes.
-	for _, part := range out.Selections {
-		for _, old := range part {
-			current, e := s.selection(ctx, p, old.ResourceID)
-			if e != nil {
-				return PackageRecord{}, e
-			}
-			if current.VersionID != old.VersionID || current.ReferenceID != old.ReferenceID {
-				return PackageRecord{}, ErrConflict
-			}
-		}
+	if e = s.verifyPackageSelections(ctx, p, out.Selections); e != nil {
+		return PackageRecord{}, e
 	}
 	return out, nil
 }
 func (s *Service) DownloadPackage(ctx context.Context, p Principal, id string, part int, w io.Writer) error {
-	bundle, e := s.GetPackage(ctx, p, id)
+	if !p.Valid() {
+		return ErrUnauthenticated
+	}
+	if !validID(id) {
+		return ErrInput
+	}
+	s = s.withRequestAuthority()
+	var bundle PackageRecord
+	e := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; bundle, e = tx.Package(id); return e })
 	if e != nil {
 		return e
 	}
+	if bundle.Owner != p {
+		return ErrNotFound
+	}
+	if !s.now().Before(bundle.Package.ExpiresAt) {
+		return ErrConflict
+	}
 	if part < 1 || part > len(bundle.Selections) {
 		return ErrInput
+	}
+	if e = s.verifyPackageSelections(ctx, p, [][]Selection{bundle.Selections[part-1]}); e != nil {
+		return e
 	}
 	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
 	defer cancel()

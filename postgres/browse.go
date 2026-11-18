@@ -58,18 +58,19 @@ func resourceBrowseBase(f r.Filter, projection string) (string, []any) {
 }
 
 func (t *transaction) Browse(f r.Filter) ([]r.Record, int64, error) {
-	base, args := resourceBrowseBase(f, "r.id,r.data,(v.data->'Version'->>'created_at')::timestamptz AS at")
+	base, args := resourceBrowseBase(f, "r.id,(v.data->'Version'->>'created_at')::timestamptz AS at")
 	bind := func(value any) string { args = append(args, value); return fmt.Sprintf("$%d", len(args)) }
-	cursor, order := "id>"+bind(f.After), "id"
+	cursor, order, pageOrder := "id>"+bind(f.After), "id", "page.id"
 	if f.Sort == "newest" {
 		// Replace the unused ID parameter instead of leaving an untyped bind.
 		args = args[:len(args)-1]
 		at := bind(f.CursorTime)
 		cursor = "(" + at + "::timestamptz IS NULL OR (at,id)<(" + at + "," + bind(f.CursorID) + "))"
 		order = "at DESC,id DESC"
+		pageOrder = "page.at DESC,page.id DESC"
 	}
-	query := "WITH matched AS MATERIALIZED (" + base + "), page AS (SELECT * FROM matched WHERE " + cursor + " ORDER BY " + order + " LIMIT " + bind(f.Limit+1) + ") " +
-		"SELECT COALESCE((SELECT jsonb_agg(jsonb_build_object('record',data,'at',at) ORDER BY " + order + ") FROM page),'[]'::jsonb),(SELECT count(*) FROM matched)"
+	query := "WITH matched AS MATERIALIZED (" + base + "), page AS (SELECT id,at FROM matched WHERE " + cursor + " ORDER BY " + order + " LIMIT " + bind(f.Limit+1) + ") " +
+		"SELECT COALESCE((SELECT jsonb_agg(jsonb_build_object('record',rec.data,'at',page.at) ORDER BY " + pageOrder + ") FROM page JOIN resources.records rec ON rec.id=page.id),'[]'::jsonb),(SELECT count(*) FROM matched)"
 	var raw []byte
 	var total int64
 	if err := t.tx.QueryRowContext(t.ctx, query, args...).Scan(&raw, &total); err != nil {
