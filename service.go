@@ -29,6 +29,10 @@ func New(repo Repository, deps Dependencies, cfg Config) (*Service, error) {
 	}
 	return &Service{repo: repo, deps: deps, cfg: cfg, now: func() time.Time { return clock().UTC() }}, nil
 }
+
+// OperationTimeout bounds stream preflight and a single stalled transfer operation.
+func (s *Service) OperationTimeout() time.Duration { return s.cfg.OperationTimeout }
+
 func (s *Service) Capabilities() Capabilities {
 	return Capabilities{UploadProfiles: append([]UploadProfile{}, s.cfg.UploadProfiles...), Terms: s.cfg.Terms, AllowedTypes: append([]string{}, s.cfg.AllowedTypes...), MaxFileSize: s.cfg.MaxFileSize, MaxPackageBytes: s.cfg.MaxPackageBytes, MaxPackageFiles: s.cfg.MaxPackageFiles, PurchaseAvailable: true}
 }

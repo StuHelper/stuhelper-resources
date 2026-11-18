@@ -187,3 +187,65 @@ func TestStreamProgressAndMetadataRPCTimeouts(t *testing.T) {
 		t.Fatalf("AttachFile expected ErrUnavailable on raw error, got %v", e)
 	}
 }
+
+type stalledPreflight struct {
+	r.Repository
+	cancelled bool
+}
+
+func (s *stalledPreflight) Transaction(ctx context.Context, _ func(r.Transaction) error) error {
+	select {
+	case <-ctx.Done():
+		s.cancelled = true
+	case <-time.After(1500 * time.Millisecond):
+	}
+	return r.ErrUnavailable
+}
+
+type deadlineRecorder struct {
+	*httptest.ResponseRecorder
+	deadline time.Time
+	atWrite  time.Duration
+}
+
+func (w *deadlineRecorder) SetWriteDeadline(d time.Time) error {
+	w.deadline = d
+	return nil
+}
+func (w *deadlineRecorder) Write(b []byte) (int, error) {
+	w.atWrite = time.Until(w.deadline)
+	return w.ResponseRecorder.Write(b)
+}
+
+func TestDownloadPreflightAndHTTPWriteAreBounded(t *testing.T) {
+	h := newFixture(t)
+	item := h.publish(t, h.draft(t, "http-bounds", "public"))
+	deps := r.Dependencies{Authority: h.auth, Catalog: h.catalog, Files: h.files, Moderation: h.moderation}
+	cfg := h.cfg
+	cfg.OperationTimeout = time.Second
+	req := httptest.NewRequest("GET", "/api/v1/resources/items/"+item.ID+"/download", nil)
+	req.Header.Set("Authorization", "Bearer reader")
+	t.Run("preflight", func(t *testing.T) {
+		db := &stalledPreflight{Repository: h.repo}
+		svc, err := r.New(db, deps, cfg)
+		must(t, err)
+		handler, err := httpapi.New(svc, authenticator{})
+		must(t, err)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if !db.cancelled || rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("cancelled=%t status=%d", db.cancelled, rec.Code)
+		}
+	})
+	t.Run("write deadline", func(t *testing.T) {
+		svc, err := r.New(h.repo, deps, cfg)
+		must(t, err)
+		handler, err := httpapi.New(svc, authenticator{})
+		must(t, err)
+		rec := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || rec.Body.Len() == 0 || rec.atWrite <= 0 || rec.atWrite > cfg.OperationTimeout {
+			t.Fatalf("status=%d bytes=%d write deadline=%v", rec.Code, rec.Body.Len(), rec.atWrite)
+		}
+	})
+}

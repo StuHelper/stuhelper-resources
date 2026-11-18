@@ -195,23 +195,34 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 func (h *handler) mountStream(m *http.ServeMux, path string, run endpoint) {
 	h.mountWithMode(m, path, true, run)
 }
+
+// Streaming preflight has a fixed deadline. Once bytes start flowing, each
+// socket write gets its own idle deadline and the service monitors upstream progress.
+type streamResponseWriter struct {
+	http.ResponseWriter
+	preflight *time.Timer
+	timeout   time.Duration
+}
+
+func (w *streamResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w *streamResponseWriter) Write(p []byte) (int, error) {
+	w.preflight.Stop()
+	_ = http.NewResponseController(w.ResponseWriter).SetWriteDeadline(time.Now().Add(w.timeout))
+	return w.ResponseWriter.Write(p)
+}
+
 func (h *handler) mountWithMode(m *http.ServeMux, path string, streaming bool, run endpoint) {
 	m.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		p, e := h.auth.Authenticate(r)
-		if e != nil || !p.Valid() {
-			if errors.Is(e, resources.ErrUnavailable) {
-				failure(w, e)
-			} else {
-				failure(w, resources.ErrUnauthenticated)
-			}
-			return
-		}
 		var ctx context.Context
 		var cancel context.CancelFunc
 		if streaming {
 			ctx, cancel = context.WithCancel(r.Context())
+			timeout := h.s.OperationTimeout()
+			preflight := time.AfterFunc(timeout, cancel)
+			defer preflight.Stop()
+			w = &streamResponseWriter{ResponseWriter: w, preflight: preflight, timeout: timeout}
 		} else {
 			ctx, cancel = context.WithTimeout(r.Context(), 2*time.Minute)
 		}
@@ -224,8 +235,31 @@ func (h *handler) mountWithMode(m *http.ServeMux, path string, streaming bool, r
 		}
 		_ = controller.SetReadDeadline(initialDeadline)
 		_ = controller.SetWriteDeadline(initialDeadline)
-		stop := context.AfterFunc(ctx, func() { _ = controller.SetReadDeadline(time.Now()); _ = controller.SetWriteDeadline(time.Now()) })
-		defer stop()
+		stopped := make(chan struct{})
+		stop := context.AfterFunc(ctx, func() {
+			_ = controller.SetReadDeadline(time.Now())
+			if !streaming {
+				_ = controller.SetWriteDeadline(time.Now())
+			}
+			close(stopped)
+		})
+		defer func() {
+			if !stop() {
+				<-stopped
+			}
+			_ = controller.SetReadDeadline(time.Time{})
+			_ = controller.SetWriteDeadline(time.Time{})
+		}()
+		p, e := h.auth.Authenticate(r)
+		if e != nil || !p.Valid() {
+			if errors.Is(e, resources.ErrUnavailable) {
+				failure(w, e)
+			} else {
+				failure(w, resources.ErrUnauthenticated)
+			}
+			return
+		}
+
 		r.Body = http.MaxBytesReader(w, r.Body, 128<<10)
 		if len(r.Header.Values("Idempotency-Key")) > 1 {
 			failure(w, resources.ErrInput)
@@ -360,16 +394,12 @@ func failure(w http.ResponseWriter, e error) {
 
 type stream struct {
 	w          http.ResponseWriter
-	controller *http.ResponseController
 	kind, name string
 	inline     bool
 	written    bool
 }
 
 func (s *stream) Write(b []byte) (int, error) {
-	if s.controller != nil {
-		_ = s.controller.SetWriteDeadline(time.Now().Add(2 * time.Minute))
-	}
 	if !s.written {
 		s.w.Header().Set("Content-Type", s.kind)
 		disposition := "attachment"
@@ -380,11 +410,7 @@ func (s *stream) Write(b []byte) (int, error) {
 		s.w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": s.name}))
 		s.written = true
 	}
-	n, err := s.w.Write(b)
-	if s.controller != nil {
-		_ = s.controller.SetWriteDeadline(time.Now().Add(2 * time.Minute))
-	}
-	return n, err
+	return s.w.Write(b)
 }
 func (h *handler) download(w http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 	return h.file(w, r, p, false)
@@ -407,7 +433,7 @@ func (h *handler) file(w http.ResponseWriter, r *http.Request, p resources.Princ
 	if inline {
 		kind = resource.Current.File.ContentType
 	}
-	out := &stream{w: w, controller: http.NewResponseController(w), kind: kind, name: resource.Current.File.Filename, inline: inline}
+	out := &stream{w: w, kind: kind, name: resource.Current.File.Filename, inline: inline}
 	_, e = h.s.Download(r.Context(), p, resource.ID, out)
 	if e != nil && out.written {
 		panic(http.ErrAbortHandler)
@@ -419,7 +445,7 @@ func (h *handler) downloadPackage(w http.ResponseWriter, r *http.Request, p reso
 	if e != nil {
 		return nil, resources.ErrInput
 	}
-	out := &stream{w: w, controller: http.NewResponseController(w), kind: "application/zip", name: "resources-part-" + strconv.Itoa(part) + ".zip"}
+	out := &stream{w: w, kind: "application/zip", name: "resources-part-" + strconv.Itoa(part) + ".zip"}
 	e = h.s.DownloadPackage(r.Context(), p, r.PathValue("id"), part, out)
 	if e != nil && out.written {
 		panic(http.ErrAbortHandler)
@@ -439,7 +465,7 @@ func (h *handler) reviewDownload(w http.ResponseWriter, req *http.Request, p res
 	if version == nil || version.File == nil {
 		return nil, resources.ErrNotFound
 	}
-	writer := &stream{w: w, controller: http.NewResponseController(w), kind: "application/octet-stream", name: version.File.Filename}
+	writer := &stream{w: w, kind: "application/octet-stream", name: version.File.Filename}
 	e = h.s.DownloadReviewFile(req.Context(), p, version.ID, writer)
 	if e != nil && writer.written {
 		panic(http.ErrAbortHandler)

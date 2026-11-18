@@ -93,6 +93,7 @@ scenario_tests:
     - references_test.go#TestComplaintTitleSnapshotRequiresAdmissionAtSubmission
   RES-14:
     - file_access_test.go#TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions
+    - timeout_test.go#TestDownloadPreflightAndHTTPWriteAreBounded
     - timeout_test.go#TestStreamProgressAndMetadataRPCTimeouts
   RES-15:
     - closure_test.go#TestClosedUploaderKeepsFilesAndCopyrightWithoutPublicAccountLink
