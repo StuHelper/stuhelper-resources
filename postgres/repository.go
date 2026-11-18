@@ -39,7 +39,7 @@ func safe(e error) error {
 	return resources.ErrUnavailable
 }
 func (r *Repository) Transaction(ctx context.Context, run func(resources.Transaction) error) error {
-	tx, e := r.DB.BeginTx(ctx, nil)
+	tx, e := r.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if e != nil {
 		return safe(e)
 	}

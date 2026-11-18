@@ -1,6 +1,7 @@
 package resources_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	r "github.com/StuHelper/stuhelper-resources"
@@ -39,6 +40,15 @@ func TestQuotaIsolationKeepsSafetyActionsAvailableAndEnforcesExactCaps(t *testin
 	}
 	if _, e = tightSvc.PutGrant(h.ctx, manager, published.ID, "g2", "over-op-grant", r.GrantWrite{SubjectKey: uploader.Key()}); !errors.Is(e, r.ErrCapacity) {
 		t.Fatalf("expected ErrCapacity for new grant at MaxOperations, got %v", e)
+	}
+
+	if _, e = tightSvc.PutGrant(h.ctx, manager, published.ID, "unused", "new-revoked", r.GrantWrite{SubjectKey: uploader.Key(), Revoked: true}); !errors.Is(e, r.ErrCapacity) {
+		t.Fatalf("a new grant must consume operation capacity, got %v", e)
+	}
+	var newGrants, afterOperations int
+	must(t, h.admin.QueryRow(`SELECT (SELECT count(*) FROM resources.grants WHERE id='unused'), (SELECT count(*) FROM resources.replays)`).Scan(&newGrants, &afterOperations))
+	if newGrants != 0 || afterOperations != opCount {
+		t.Fatalf("denied write persisted: grants=%d operations=%d", newGrants, afterOperations)
 	}
 
 	// Emergency safety/containment actions must remain available even when all three quotas are full.
@@ -126,5 +136,53 @@ func TestQuotaIsolationKeepsSafetyActionsAvailableAndEnforcesExactCaps(t *testin
 	must(t, h2.admin.QueryRow(`SELECT (SELECT count(*) FROM resources.replays),(SELECT count(*) FROM resources.jobs WHERE state IN ('pending','working'))`).Scan(&rawOps, &rawJobs))
 	if txRec != actualRecords || txOps != rawOps || txJobs != rawJobs {
 		t.Fatalf("counter mismatch: counts=(%d,%d,%d) raw=(%d,%d,%d)", txRec, txOps, txJobs, actualRecords, rawOps, rawJobs)
+	}
+}
+
+// Interleave another committed batch between the optimistic read and this write.
+// One fixture transaction models the other commits without depending on scheduler timing.
+type quotaInterleaveRepo struct {
+	r.Repository
+	afterCount func() error
+}
+type quotaInterleaveTx struct {
+	r.Transaction
+	repo *quotaInterleaveRepo
+}
+
+func (repo *quotaInterleaveRepo) Transaction(ctx context.Context, f func(r.Transaction) error) error {
+	return repo.Repository.Transaction(ctx, func(tx r.Transaction) error {
+		return f(quotaInterleaveTx{tx, repo})
+	})
+}
+func (tx quotaInterleaveTx) Counts() (int, int, int, error) {
+	rec, ops, jobs, err := tx.Transaction.Counts()
+	if err == nil && tx.repo.afterCount != nil {
+		next := tx.repo.afterCount
+		tx.repo.afterCount = nil
+		err = next()
+	}
+	return rec, ops, jobs, err
+}
+func TestQuotaRechecksCommittedCapacityBeforeCommit(t *testing.T) {
+	h := newFixture(t)
+	var beforeOps, beforeRecords, beforeAudit int
+	must(t, h.admin.QueryRow(`SELECT (SELECT count(*) FROM resources.replays),(SELECT count(*) FROM resources.records),(SELECT count(*) FROM resources.audit)`).Scan(&beforeOps, &beforeRecords, &beforeAudit))
+	cfg := h.cfg
+	cfg.MaxOperations = beforeOps + 65
+	repo := &quotaInterleaveRepo{Repository: h.repo, afterCount: func() error {
+		_, err := h.admin.Exec(`INSERT INTO resources.replays(key,data) SELECT 'other-'||i,'{}'::jsonb FROM generate_series(1,65) AS i`)
+		return err
+	}}
+	svc, err := r.New(repo, r.Dependencies{Authority: h.auth, Catalog: h.catalog, Files: h.files, Moderation: h.moderation}, cfg)
+	must(t, err)
+	_, err = svc.CreateDraft(h.ctx, uploader, "last-slot", r.DraftWrite{Metadata: metadata("public")})
+	if !errors.Is(err, r.ErrCapacity) {
+		t.Fatalf("expected capacity refusal, got %v", err)
+	}
+	var ops, records, audit int
+	must(t, h.admin.QueryRow(`SELECT (SELECT count(*) FROM resources.replays),(SELECT count(*) FROM resources.records),(SELECT count(*) FROM resources.audit)`).Scan(&ops, &records, &audit))
+	if ops != cfg.MaxOperations || records != beforeRecords || audit != beforeAudit {
+		t.Fatalf("rejected write persisted: operations=%d records=%d audit=%d", ops, records, audit)
 	}
 }
