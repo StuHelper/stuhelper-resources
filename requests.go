@@ -67,7 +67,7 @@ func (s *Service) RetryRequest(ctx context.Context, p Principal, id, key string)
 	if e != nil {
 		return out, e
 	}
-	e = s.mutation(ctx, p, "request", r.SchoolID, key, id, struct{}{}, func(tx Transaction) (any, error) {
+	e = s.mutationWithBudget(ctx, p, "request", r.SchoolID, key, id, struct{}{}, mutationBudget{addJob: true}, func(tx Transaction) (any, error) {
 		jobID := hash([]string{"request", rec.ResourceID, "", id, ""})
 		if e := tx.Lock("job:" + jobID); e != nil {
 			return nil, e

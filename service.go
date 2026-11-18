@@ -59,7 +59,48 @@ func (s *Service) record(ctx context.Context, id string) (Record, error) {
 	err := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = tx.Record(id); return e })
 	return out, err
 }
+
+type mutationBudget struct {
+	exemptOps bool
+	addRecord bool
+	addJob    bool
+}
+
+func (s *Service) checkBudget(tx Transaction, b mutationBudget) error {
+	records, operations, jobs, e := tx.Counts()
+	if e != nil {
+		return e
+	}
+	const lockWindow = 64
+	needLock := (!b.exemptOps && operations >= s.cfg.MaxOperations-lockWindow) ||
+		(b.addRecord && records >= s.cfg.MaxRecords-lockWindow) ||
+		(b.addJob && jobs >= s.cfg.MaxJobs-lockWindow)
+	if needLock {
+		if e = tx.Lock("budget"); e != nil {
+			return e
+		}
+		records, operations, jobs, e = tx.Counts()
+		if e != nil {
+			return e
+		}
+	}
+	if !b.exemptOps && operations >= s.cfg.MaxOperations {
+		return ErrCapacity
+	}
+	if b.addRecord && records >= s.cfg.MaxRecords {
+		return ErrCapacity
+	}
+	if b.addJob && jobs >= s.cfg.MaxJobs {
+		return ErrCapacity
+	}
+	return nil
+}
+
 func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key, id string, input any, apply func(Transaction) (any, error), out any) error {
+	return s.mutationWithBudget(ctx, p, action, scope, key, id, input, mutationBudget{}, apply, out)
+}
+
+func (s *Service) mutationWithBudget(ctx context.Context, p Principal, action, scope, key, id string, input any, budget mutationBudget, apply func(Transaction) (any, error), out any) error {
 	if !p.Valid() {
 		return ErrUnauthenticated
 	}
@@ -88,15 +129,8 @@ func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key,
 		if !errors.Is(e, ErrNotFound) {
 			return e
 		}
-		if e = tx.Lock("budget"); e != nil {
+		if e = s.checkBudget(tx, budget); e != nil {
 			return e
-		}
-		records, operations, jobs, e := tx.Counts()
-		if e != nil {
-			return e
-		}
-		if records > s.cfg.MaxRecords || operations >= s.cfg.MaxOperations || jobs >= s.cfg.MaxJobs {
-			return ErrCapacity
 		}
 		value, e := apply(tx)
 		if e != nil {

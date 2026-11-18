@@ -93,7 +93,8 @@ func (s *Service) ApplyContentDecision(ctx context.Context, p Principal, in Deci
 	if e != nil {
 		return out, e
 	}
-	e = s.mutation(ctx, p, "moderation.execute", r.SchoolID, in.ID, r.ID, in, func(tx Transaction) (any, error) {
+	budget := mutationBudget{exemptOps: in.Action == "hide" || in.Action == "delete"}
+	e = s.mutationWithBudget(ctx, p, "moderation.execute", r.SchoolID, in.ID, r.ID, in, budget, func(tx Transaction) (any, error) {
 		if e := tx.Lock("resource:" + r.ID); e != nil {
 			return nil, e
 		}
@@ -119,6 +120,9 @@ func (s *Service) ApplyContentDecision(ctx context.Context, p Principal, in Deci
 			current.DecisionRevision = in.Revision
 			current.Version.State = "rejected"
 			if in.Action == "publish" {
+				if e = s.checkBudget(tx, mutationBudget{exemptOps: true, addJob: true}); e != nil {
+					return nil, e
+				}
 				current.Version.State = "preparing"
 				if e = s.queue(tx, "publish", r.ID, in.VersionID, "", ""); e != nil {
 					return nil, e

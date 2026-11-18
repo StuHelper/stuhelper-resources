@@ -66,6 +66,7 @@ scenario_tests:
     - integration_test.go#TestPublicationContinuityAndStaleReview
   RES-03:
     - integration_test.go#TestIndependentRightsCampusRevocationAndUnlisting
+    - quota_test.go#TestQuotaIsolationKeepsSafetyActionsAvailableAndEnforcesExactCaps
   RES-04:
     - integration_test.go#TestConcurrentIdempotencyAndChangedPayload
   RES-05:
