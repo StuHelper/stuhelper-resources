@@ -41,10 +41,16 @@ func (s *Service) CreateDraft(ctx context.Context, p Principal, key string, in D
 	if e := s.auth(ctx, p, "upload", in.Metadata.Associations.SchoolID); e != nil {
 		return out, e
 	}
+	if e := s.checkOwnerActive(ctx, p); e != nil {
+		return out, e
+	}
 	if e := s.validateDraft(ctx, in.Metadata); e != nil {
 		return out, e
 	}
 	e := s.mutation(ctx, p, "upload", in.Metadata.Associations.SchoolID, key, "", in, func(tx Transaction) (any, error) {
+		if e := checkTxOwnerActive(tx, p); e != nil {
+			return nil, e
+		}
 		count, _, _, e := tx.Counts()
 		if e != nil {
 			return nil, e
@@ -90,6 +96,9 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 			return out, e
 		}
 	}
+	if e = s.checkOwnerActive(ctx, p); e != nil {
+		return out, e
+	}
 	if e = s.validateDraft(ctx, in.Metadata); e != nil {
 		return out, e
 	}
@@ -98,6 +107,9 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 		action = "manage"
 	}
 	e = s.mutation(ctx, p, action, r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+		if e := checkTxOwnerActive(tx, p); e != nil {
+			return nil, e
+		}
 		if e := tx.Lock("resource:" + id); e != nil {
 			return nil, e
 		}
@@ -193,6 +205,9 @@ func (s *Service) AttachFile(ctx context.Context, p Principal, id, key string, i
 			return out, e
 		}
 	}
+	if e = s.checkOwnerActive(ctx, p); e != nil {
+		return out, e
+	}
 	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
 	defer cancel()
 	file, e := s.deps.Files.Inspect(work, p, in.MediaVersionID)
@@ -210,6 +225,9 @@ func (s *Service) AttachFile(ctx context.Context, p Principal, id, key string, i
 		action = "manage"
 	}
 	e = s.mutation(ctx, p, action, r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+		if e := checkTxOwnerActive(tx, p); e != nil {
+			return nil, e
+		}
 		if e := tx.Lock("resource:" + id); e != nil {
 			return nil, e
 		}
@@ -269,6 +287,9 @@ func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Co
 		action = "manage"
 	}
 	returnOut := func(tx Transaction) (any, error) {
+		if e := checkTxOwnerActive(tx, p); e != nil {
+			return nil, e
+		}
 		if e := tx.Lock("resource:" + id); e != nil {
 			return nil, e
 		}
