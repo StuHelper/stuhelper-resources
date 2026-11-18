@@ -101,24 +101,49 @@ func directoryDepth(tx Transaction, school, id string, seen map[string]bool, bud
 }
 func (s *Service) Directories(ctx context.Context, p Principal, school, course, parent string, n int, after string) (DirectoryPage, error) {
 	out := DirectoryPage{Items: []Directory{}}
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
 	if !validID(school) || !optionalID(course) || !optionalID(parent) || !optionalID(after) || n < 1 || n > 100 {
 		return out, ErrInput
 	}
-	if e := s.auth(ctx, p, "discover", school); e != nil {
-		return out, e
+	includeDisabled := true
+	if e := s.auth(ctx, p, "directories.manage", school); e != nil {
+		if !denied(e) {
+			return out, e
+		}
+		includeDisabled = false
+		if e = s.auth(ctx, p, "discover", school); e != nil {
+			return out, e
+		}
 	}
 	e := s.repo.Transaction(ctx, func(tx Transaction) error {
-		var e error
-		out.Items, e = tx.Directories(school, course, parent, n, after)
-		return e
+		if port, ok := tx.(interface {
+			DirectoriesFiltered(string, string, string, int, string, bool) ([]Directory, error)
+		}); ok {
+			var err error
+			out.Items, err = port.DirectoriesFiltered(school, course, parent, n, after, includeDisabled)
+			return err
+		}
+		items, err := tx.Directories(school, course, parent, n, after)
+		if err != nil {
+			return err
+		}
+		for _, item := range items {
+			if includeDisabled || item.Enabled {
+				out.Items = append(out.Items, item)
+			}
+		}
+		return nil
 	})
 	if len(out.Items) == n {
 		out.NextCursor = out.Items[n-1].ID
 	}
 	return out, e
 }
-func (s *Service) directoryResources(ctx context.Context, id string) ([]string, error) {
+func (s *Service) directoryResources(ctx context.Context, id string) ([]string, string, error) {
 	ids := []string{}
+	school := ""
 	e := s.repo.Transaction(ctx, func(tx Transaction) error {
 		root, e := tx.Directory(id)
 		if e != nil {
@@ -127,6 +152,7 @@ func (s *Service) directoryResources(ctx context.Context, id string) ([]string, 
 		if !root.Enabled {
 			return ErrNotFound
 		}
+		school = root.SchoolID
 		queue := []string{id}
 		seen := map[string]bool{}
 		maxFiles := s.cfg.MaxPackageFiles * s.cfg.MaxPackageParts
@@ -172,7 +198,7 @@ func (s *Service) directoryResources(ctx context.Context, id string) ([]string, 
 		}
 		return nil
 	})
-	return ids, e
+	return ids, school, e
 }
 func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in PackageRequest) (Package, error) {
 	var out Package
@@ -188,19 +214,44 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 	ids := in.ResourceIDs
 	if in.DirectoryID != "" {
 		var e error
-		ids, e = s.directoryResources(ctx, in.DirectoryID)
+		var dirSchool string
+		ids, dirSchool, e = s.directoryResources(ctx, in.DirectoryID)
 		if e != nil {
 			return out, e
+		}
+		if dirSchool != "" {
+			if e = s.auth(ctx, p, "package", dirSchool); e != nil {
+				return out, e
+			}
 		}
 	}
 	selected := [][]Selection{}
 	parts := []PackagePart{}
 	seen := map[string]bool{}
+	checkedSchool := map[string]error{}
 	for _, id := range ids {
 		if !validID(id) || seen[id] {
 			return out, ErrInput
 		}
 		seen[id] = true
+		rec, e := s.record(ctx, id)
+		if errors.Is(e, ErrNotFound) {
+			continue
+		}
+		if e != nil {
+			return out, e
+		}
+		pkgErr, ok := checkedSchool[rec.SchoolID]
+		if !ok {
+			pkgErr = s.auth(ctx, p, "package", rec.SchoolID)
+			checkedSchool[rec.SchoolID] = pkgErr
+		}
+		if denied(pkgErr) {
+			continue
+		}
+		if pkgErr != nil {
+			return out, pkgErr
+		}
 		file, e := s.selection(ctx, p, id)
 		if denied(e) || errors.Is(e, ErrNotFound) {
 			continue

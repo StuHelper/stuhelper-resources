@@ -86,6 +86,7 @@ scenario_tests:
     - integration_test.go#TestReviewInspectionIsScopedAndGrantListsIdentifySubjects
   RES-12:
     - integration_test.go#TestCategoryReadsRequireContentAdmissionAndKeepScopedAdministration
+    - taxonomy_directory_scope_test.go#TestCategoryOrderDirectoryAdminAndCoverageScope
   RES-13:
     - references_test.go#TestOwnResourceNamesRequireUploadOwnershipAndKeepContentPrivate
     - references_test.go#TestComplaintTitleSnapshotRequiresAdmissionAtSubmission
