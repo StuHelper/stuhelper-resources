@@ -67,6 +67,8 @@ scenario_tests:
     - publish_release_test.go#TestPublishMediaReferenceReleasedOnConcurrentTaxonomyChangeBlockAndFailedReleaseRequeue
   RES-03:
     - integration_test.go#TestIndependentRightsCampusRevocationAndUnlisting
+    - quota_test.go#TestQuotaRechecksCommittedCapacityBeforeCommit
+    - quota_test.go#TestQuotaIsolationKeepsSafetyActionsAvailableAndEnforcesExactCaps
   RES-04:
     - integration_test.go#TestConcurrentIdempotencyAndChangedPayload
   RES-05:
