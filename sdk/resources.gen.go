@@ -35,6 +35,24 @@ func (e DecisionAction) Valid() bool {
 	}
 }
 
+// Defines values for DuplicateResourceAccess.
+const (
+	DuplicateResourceAccessPublic     DuplicateResourceAccess = "public"
+	DuplicateResourceAccessRestricted DuplicateResourceAccess = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the DuplicateResourceAccess enum.
+func (e DuplicateResourceAccess) Valid() bool {
+	switch e {
+	case DuplicateResourceAccessPublic:
+		return true
+	case DuplicateResourceAccessRestricted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FieldKind.
 const (
 	Choice  FieldKind = "choice"
@@ -281,6 +299,45 @@ func (e ResourceMissingConditions) Valid() bool {
 	}
 }
 
+// Defines values for ResourceOperationErrorCode.
+const (
+	ResourcesDependencyFailed  ResourceOperationErrorCode = "resources_dependency_failed"
+	ResourcesDependencyPending ResourceOperationErrorCode = "resources_dependency_pending"
+)
+
+// Valid indicates whether the value is a known member of the ResourceOperationErrorCode enum.
+func (e ResourceOperationErrorCode) Valid() bool {
+	switch e {
+	case ResourcesDependencyFailed:
+		return true
+	case ResourcesDependencyPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResourceOperationState.
+const (
+	ResourceOperationStateFailed  ResourceOperationState = "failed"
+	ResourceOperationStatePending ResourceOperationState = "pending"
+	ResourceOperationStateWorking ResourceOperationState = "working"
+)
+
+// Valid indicates whether the value is a known member of the ResourceOperationState enum.
+func (e ResourceOperationState) Valid() bool {
+	switch e {
+	case ResourceOperationStateFailed:
+		return true
+	case ResourceOperationStatePending:
+		return true
+	case ResourceOperationStateWorking:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ResourceState.
 const (
 	ResourceStateBlocked   ResourceState = "blocked"
@@ -428,6 +485,42 @@ func (e ListResourcesParamsSort) Valid() bool {
 	}
 }
 
+// Defines values for ListResourcesParamsAccess.
+const (
+	ListResourcesParamsAccessPublic     ListResourcesParamsAccess = "public"
+	ListResourcesParamsAccessRestricted ListResourcesParamsAccess = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the ListResourcesParamsAccess enum.
+func (e ListResourcesParamsAccess) Valid() bool {
+	switch e {
+	case ListResourcesParamsAccessPublic:
+		return true
+	case ListResourcesParamsAccessRestricted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetResourceCountsParamsAccess.
+const (
+	GetResourceCountsParamsAccessPublic     GetResourceCountsParamsAccess = "public"
+	GetResourceCountsParamsAccessRestricted GetResourceCountsParamsAccess = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the GetResourceCountsParamsAccess enum.
+func (e GetResourceCountsParamsAccess) Valid() bool {
+	switch e {
+	case GetResourceCountsParamsAccessPublic:
+		return true
+	case GetResourceCountsParamsAccessRestricted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListManagedResourcesParamsSort.
 const (
 	ListManagedResourcesParamsSortId     ListManagedResourcesParamsSort = "id"
@@ -446,6 +539,72 @@ func (e ListManagedResourcesParamsSort) Valid() bool {
 	}
 }
 
+// Defines values for ListManagedResourcesParamsState.
+const (
+	ListManagedResourcesParamsStateBlocked   ListManagedResourcesParamsState = "blocked"
+	ListManagedResourcesParamsStateDraft     ListManagedResourcesParamsState = "draft"
+	ListManagedResourcesParamsStatePublished ListManagedResourcesParamsState = "published"
+	ListManagedResourcesParamsStateUnlisted  ListManagedResourcesParamsState = "unlisted"
+)
+
+// Valid indicates whether the value is a known member of the ListManagedResourcesParamsState enum.
+func (e ListManagedResourcesParamsState) Valid() bool {
+	switch e {
+	case ListManagedResourcesParamsStateBlocked:
+		return true
+	case ListManagedResourcesParamsStateDraft:
+		return true
+	case ListManagedResourcesParamsStatePublished:
+		return true
+	case ListManagedResourcesParamsStateUnlisted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListManagedResourcesParamsProposalState.
+const (
+	ListManagedResourcesParamsProposalStateDraft     ListManagedResourcesParamsProposalState = "draft"
+	ListManagedResourcesParamsProposalStatePending   ListManagedResourcesParamsProposalState = "pending"
+	ListManagedResourcesParamsProposalStatePreparing ListManagedResourcesParamsProposalState = "preparing"
+	ListManagedResourcesParamsProposalStateRejected  ListManagedResourcesParamsProposalState = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the ListManagedResourcesParamsProposalState enum.
+func (e ListManagedResourcesParamsProposalState) Valid() bool {
+	switch e {
+	case ListManagedResourcesParamsProposalStateDraft:
+		return true
+	case ListManagedResourcesParamsProposalStatePending:
+		return true
+	case ListManagedResourcesParamsProposalStatePreparing:
+		return true
+	case ListManagedResourcesParamsProposalStateRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListManagedResourcesParamsAccess.
+const (
+	ListManagedResourcesParamsAccessPublic     ListManagedResourcesParamsAccess = "public"
+	ListManagedResourcesParamsAccessRestricted ListManagedResourcesParamsAccess = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the ListManagedResourcesParamsAccess enum.
+func (e ListManagedResourcesParamsAccess) Valid() bool {
+	switch e {
+	case ListManagedResourcesParamsAccessPublic:
+		return true
+	case ListManagedResourcesParamsAccessRestricted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListOwnResourcesParamsSort.
 const (
 	ListOwnResourcesParamsSortId     ListOwnResourcesParamsSort = "id"
@@ -458,6 +617,42 @@ func (e ListOwnResourcesParamsSort) Valid() bool {
 	case ListOwnResourcesParamsSortId:
 		return true
 	case ListOwnResourcesParamsSortNewest:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListOwnResourcesParamsAccess.
+const (
+	ListOwnResourcesParamsAccessPublic     ListOwnResourcesParamsAccess = "public"
+	ListOwnResourcesParamsAccessRestricted ListOwnResourcesParamsAccess = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the ListOwnResourcesParamsAccess enum.
+func (e ListOwnResourcesParamsAccess) Valid() bool {
+	switch e {
+	case ListOwnResourcesParamsAccessPublic:
+		return true
+	case ListOwnResourcesParamsAccessRestricted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListEntitledResourcesParamsSort.
+const (
+	ListEntitledResourcesParamsSortId     ListEntitledResourcesParamsSort = "id"
+	ListEntitledResourcesParamsSortNewest ListEntitledResourcesParamsSort = "newest"
+)
+
+// Valid indicates whether the value is a known member of the ListEntitledResourcesParamsSort enum.
+func (e ListEntitledResourcesParamsSort) Valid() bool {
+	switch e {
+	case ListEntitledResourcesParamsSortId:
+		return true
+	case ListEntitledResourcesParamsSortNewest:
 		return true
 	default:
 		return false
@@ -538,6 +733,12 @@ type Coverage struct {
 	Rules    []CoverageRule `json:"rules"`
 }
 
+// CoveragePage defines model for CoveragePage.
+type CoveragePage struct {
+	Items      []Coverage `json:"items"`
+	NextCursor string     `json:"next_cursor"`
+}
+
 // CoverageRule defines model for CoverageRule.
 type CoverageRule struct {
 	CategoryId  *string `json:"category_id,omitempty"`
@@ -556,6 +757,12 @@ type Decision struct {
 
 // DecisionAction defines model for Decision.Action.
 type DecisionAction string
+
+// DeleteReceipt defines model for DeleteReceipt.
+type DeleteReceipt struct {
+	Deleted bool   `json:"deleted"`
+	Id      string `json:"id"`
+}
 
 // Directory defines model for Directory.
 type Directory struct {
@@ -586,8 +793,31 @@ type DirectoryWrite struct {
 
 // DraftWrite defines model for DraftWrite.
 type DraftWrite struct {
-	Metadata Metadata `json:"metadata"`
-	Revision int64    `json:"revision"`
+	MediaVersionId *string  `json:"media_version_id,omitempty"`
+	Metadata       Metadata `json:"metadata"`
+	Revision       int64    `json:"revision"`
+	Submit         *bool    `json:"submit,omitempty"`
+}
+
+// DuplicateResource defines model for DuplicateResource.
+type DuplicateResource struct {
+	Access     DuplicateResourceAccess `json:"access"`
+	CategoryId string                  `json:"category_id"`
+	CreatedAt  time.Time               `json:"created_at"`
+	Filename   string                  `json:"filename"`
+	Id         string                  `json:"id"`
+	Owned      bool                    `json:"owned"`
+	Size       int64                   `json:"size"`
+	Title      string                  `json:"title"`
+	VersionId  string                  `json:"version_id"`
+}
+
+// DuplicateResourceAccess defines model for DuplicateResource.Access.
+type DuplicateResourceAccess string
+
+// DuplicateResourceList defines model for DuplicateResourceList.
+type DuplicateResourceList struct {
+	Items []DuplicateResource `json:"items"`
 }
 
 // Field defines model for Field.
@@ -677,6 +907,9 @@ type Origin struct {
 	Kind    OriginKind `json:"kind"`
 	License *string    `json:"license,omitempty"`
 	Source  *string    `json:"source,omitempty"`
+
+	// VerifiedInstructor Optional opt-in for verified course instructors; server-verified against current Authority and Catalog facts.
+	VerifiedInstructor *bool `json:"verified_instructor,omitempty"`
 }
 
 // OriginKind defines model for Origin.Kind.
@@ -780,12 +1013,18 @@ type RequestReceiptState string
 // Resource defines model for Resource.
 type Resource struct {
 	// AccessReason allowed, requirements_missing, purchase_unavailable, resource_unavailable, permission_denied or service_unavailable. Owned metadata remains readable if file eligibility is unavailable. Use missing_conditions and unavailable_conditions rather than assuming that every failure requires a purchase.
-	AccessReason          string                           `json:"access_reason"`
-	AvailableMethods      *[]ResourceAvailableMethods      `json:"available_methods,omitempty"`
-	Current               *Version                         `json:"current,omitempty"`
-	DownloadAllowed       bool                             `json:"download_allowed"`
-	Id                    string                           `json:"id"`
-	MissingConditions     *[]ResourceMissingConditions     `json:"missing_conditions,omitempty"`
+	AccessReason      string                       `json:"access_reason"`
+	AvailableMethods  *[]ResourceAvailableMethods  `json:"available_methods,omitempty"`
+	Current           *Version                     `json:"current,omitempty"`
+	DownloadAllowed   bool                         `json:"download_allowed"`
+	Id                string                       `json:"id"`
+	MissingConditions *[]ResourceMissingConditions `json:"missing_conditions,omitempty"`
+
+	// OperationErrorCode Scoped administrator view only: sanitized error code of the active proposal background job.
+	OperationErrorCode *ResourceOperationErrorCode `json:"operation_error_code,omitempty"`
+
+	// OperationState Scoped administrator view only: current background review or publication job state for the active proposal.
+	OperationState        *ResourceOperationState          `json:"operation_state,omitempty"`
 	Owned                 bool                             `json:"owned"`
 	Proposal              *Version                         `json:"proposal,omitempty"`
 	Revision              int64                            `json:"revision"`
@@ -801,6 +1040,12 @@ type ResourceAvailableMethods string
 // ResourceMissingConditions defines model for Resource.MissingConditions.
 type ResourceMissingConditions string
 
+// ResourceOperationErrorCode Scoped administrator view only: sanitized error code of the active proposal background job.
+type ResourceOperationErrorCode string
+
+// ResourceOperationState Scoped administrator view only: current background review or publication job state for the active proposal.
+type ResourceOperationState string
+
 // ResourceState defines model for Resource.State.
 type ResourceState string
 
@@ -809,8 +1054,18 @@ type ResourceUnavailableConditions string
 
 // ResourceCounts defines model for ResourceCounts.
 type ResourceCounts struct {
-	Courses []CourseResourceCount `json:"courses"`
-	Total   int                   `json:"total"`
+	Courses        []CourseResourceCount `json:"courses"`
+	GroupBy        *string               `json:"group_by,omitempty"`
+	Groups         *[]ResourceGroupCount `json:"groups,omitempty"`
+	Total          int                   `json:"total"`
+	UngroupedCount *int                  `json:"ungrouped_count,omitempty"`
+}
+
+// ResourceGroupCount defines model for ResourceGroupCount.
+type ResourceGroupCount struct {
+	Count int    `json:"count"`
+	Key   string `json:"key"`
+	Value Value  `json:"value"`
 }
 
 // ResourcePage defines model for ResourcePage.
@@ -858,13 +1113,18 @@ type Value struct {
 
 // Version defines model for Version.
 type Version struct {
-	Category  Category     `json:"category"`
-	CreatedAt time.Time    `json:"created_at"`
-	File      *File        `json:"file,omitempty"`
-	Id        string       `json:"id"`
-	Metadata  Metadata     `json:"metadata"`
-	Number    int64        `json:"number"`
-	State     VersionState `json:"state"`
+	Category       Category     `json:"category"`
+	CreatedAt      time.Time    `json:"created_at"`
+	DecisionReason *string      `json:"decision_reason,omitempty"`
+	File           *File        `json:"file,omitempty"`
+	Id             string       `json:"id"`
+	Metadata       Metadata     `json:"metadata"`
+	Number         int64        `json:"number"`
+	State          VersionState `json:"state"`
+	SubmittedAt    *time.Time   `json:"submitted_at,omitempty"`
+
+	// VerifiedInstructor Server-verified snapshot indicating the version was submitted by a verified instructor of the course.
+	VerifiedInstructor *bool `json:"verified_instructor,omitempty"`
 }
 
 // VersionState defines model for Version.State.
@@ -872,20 +1132,27 @@ type VersionState string
 
 // ListResourcesParams defines parameters for ListResources.
 type ListResourcesParams struct {
-	SchoolId    *string                  `form:"school_id,omitempty" json:"school_id,omitempty"`
-	CourseId    *string                  `form:"course_id,omitempty" json:"course_id,omitempty"`
-	CategoryId  *string                  `form:"category_id,omitempty" json:"category_id,omitempty"`
-	DirectoryId *string                  `form:"directory_id,omitempty" json:"directory_id,omitempty"`
-	Query       *string                  `form:"query,omitempty" json:"query,omitempty"`
-	Attributes  *string                  `form:"attributes,omitempty" json:"attributes,omitempty"`
-	After       *string                  `form:"after,omitempty" json:"after,omitempty"`
-	Limit       *string                  `form:"limit,omitempty" json:"limit,omitempty"`
-	Sort        *ListResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
-	FileType    *string                  `form:"file_type,omitempty" json:"file_type,omitempty"`
+	SchoolId    *string                    `form:"school_id,omitempty" json:"school_id,omitempty"`
+	CourseId    *string                    `form:"course_id,omitempty" json:"course_id,omitempty"`
+	CategoryId  *string                    `form:"category_id,omitempty" json:"category_id,omitempty"`
+	DirectoryId *string                    `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Query       *string                    `form:"query,omitempty" json:"query,omitempty"`
+	Attributes  *string                    `form:"attributes,omitempty" json:"attributes,omitempty"`
+	After       *string                    `form:"after,omitempty" json:"after,omitempty"`
+	Limit       *string                    `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort        *ListResourcesParamsSort   `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType    *string                    `form:"file_type,omitempty" json:"file_type,omitempty"`
+	TeacherId   *string                    `form:"teacher_id,omitempty" json:"teacher_id,omitempty"`
+	TermId      *string                    `form:"term_id,omitempty" json:"term_id,omitempty"`
+	Tag         *string                    `form:"tag,omitempty" json:"tag,omitempty"`
+	Access      *ListResourcesParamsAccess `form:"access,omitempty" json:"access,omitempty"`
 }
 
 // ListResourcesParamsSort defines parameters for ListResources.
 type ListResourcesParamsSort string
+
+// ListResourcesParamsAccess defines parameters for ListResources.
+type ListResourcesParamsAccess string
 
 // CreateDraftParams defines parameters for CreateDraft.
 type CreateDraftParams struct {
@@ -906,11 +1173,27 @@ type PutCategoryParams struct {
 
 // GetResourceCountsParams defines parameters for GetResourceCounts.
 type GetResourceCountsParams struct {
-	SchoolId   string  `form:"school_id" json:"school_id"`
-	CourseIds  *string `form:"course_ids,omitempty" json:"course_ids,omitempty"`
-	Query      *string `form:"query,omitempty" json:"query,omitempty"`
-	CategoryId *string `form:"category_id,omitempty" json:"category_id,omitempty"`
-	FileType   *string `form:"file_type,omitempty" json:"file_type,omitempty"`
+	SchoolId    string                         `form:"school_id" json:"school_id"`
+	CourseIds   *string                        `form:"course_ids,omitempty" json:"course_ids,omitempty"`
+	Query       *string                        `form:"query,omitempty" json:"query,omitempty"`
+	CategoryId  *string                        `form:"category_id,omitempty" json:"category_id,omitempty"`
+	FileType    *string                        `form:"file_type,omitempty" json:"file_type,omitempty"`
+	CourseId    *string                        `form:"course_id,omitempty" json:"course_id,omitempty"`
+	DirectoryId *string                        `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Attributes  *string                        `form:"attributes,omitempty" json:"attributes,omitempty"`
+	TeacherId   *string                        `form:"teacher_id,omitempty" json:"teacher_id,omitempty"`
+	TermId      *string                        `form:"term_id,omitempty" json:"term_id,omitempty"`
+	Tag         *string                        `form:"tag,omitempty" json:"tag,omitempty"`
+	Access      *GetResourceCountsParamsAccess `form:"access,omitempty" json:"access,omitempty"`
+}
+
+// GetResourceCountsParamsAccess defines parameters for GetResourceCounts.
+type GetResourceCountsParamsAccess string
+
+// ListCoverageParams defines parameters for ListCoverage.
+type ListCoverageParams struct {
+	After *string `form:"after,omitempty" json:"after,omitempty"`
+	Limit *string `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // PutCoverageParams defines parameters for PutCoverage.
@@ -925,10 +1208,26 @@ type ListDirectoriesParams struct {
 	ParentId *string `form:"parent_id,omitempty" json:"parent_id,omitempty"`
 	After    *string `form:"after,omitempty" json:"after,omitempty"`
 	Limit    *string `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Tree When true (requires course_id and empty parent_id/after), returns the full course directory tree up to 500 nodes.
+	Tree *bool `form:"tree,omitempty" json:"tree,omitempty"`
 }
 
 // PutDirectoryParams defines parameters for PutDirectory.
 type PutDirectoryParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// FindDuplicateResourcesParams defines parameters for FindDuplicateResources.
+type FindDuplicateResourcesParams struct {
+	SchoolId string `form:"school_id" json:"school_id"`
+	CourseId string `form:"course_id" json:"course_id"`
+	Sha256   string `form:"sha256" json:"sha256"`
+}
+
+// DeleteDraftParams defines parameters for DeleteDraft.
+type DeleteDraftParams struct {
+	Revision       *int64 `form:"revision,omitempty" json:"revision,omitempty"`
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -940,6 +1239,13 @@ type UpdateDraftParams struct {
 // ApplyDecisionParams defines parameters for ApplyDecision.
 type ApplyDecisionParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// DownloadResourceParams defines parameters for DownloadResource.
+type DownloadResourceParams struct {
+	IfNoneMatch *string `json:"If-None-Match,omitempty"`
+	IfRange     *string `json:"If-Range,omitempty"`
+	Range       *string `json:"Range,omitempty"`
 }
 
 // AttachFileParams defines parameters for AttachFile.
@@ -956,6 +1262,13 @@ type ListGrantsParams struct {
 // PutGrantParams defines parameters for PutGrant.
 type PutGrantParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// PreviewResourceParams defines parameters for PreviewResource.
+type PreviewResourceParams struct {
+	IfNoneMatch *string `json:"If-None-Match,omitempty"`
+	IfRange     *string `json:"If-Range,omitempty"`
+	Range       *string `json:"Range,omitempty"`
 }
 
 // CreateRequestParams defines parameters for CreateRequest.
@@ -978,33 +1291,84 @@ type SubmitResourceParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// WithdrawProposalParams defines parameters for WithdrawProposal.
+type WithdrawProposalParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ListManagedResourcesParams defines parameters for ListManagedResources.
 type ListManagedResourcesParams struct {
-	SchoolId    *string                         `form:"school_id,omitempty" json:"school_id,omitempty"`
-	CourseId    *string                         `form:"course_id,omitempty" json:"course_id,omitempty"`
-	CategoryId  *string                         `form:"category_id,omitempty" json:"category_id,omitempty"`
-	DirectoryId *string                         `form:"directory_id,omitempty" json:"directory_id,omitempty"`
-	Query       *string                         `form:"query,omitempty" json:"query,omitempty"`
-	Attributes  *string                         `form:"attributes,omitempty" json:"attributes,omitempty"`
-	After       *string                         `form:"after,omitempty" json:"after,omitempty"`
-	Limit       *string                         `form:"limit,omitempty" json:"limit,omitempty"`
-	Sort        *ListManagedResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
-	FileType    *string                         `form:"file_type,omitempty" json:"file_type,omitempty"`
+	SchoolId      *string                                  `form:"school_id,omitempty" json:"school_id,omitempty"`
+	CourseId      *string                                  `form:"course_id,omitempty" json:"course_id,omitempty"`
+	CategoryId    *string                                  `form:"category_id,omitempty" json:"category_id,omitempty"`
+	DirectoryId   *string                                  `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Query         *string                                  `form:"query,omitempty" json:"query,omitempty"`
+	Attributes    *string                                  `form:"attributes,omitempty" json:"attributes,omitempty"`
+	After         *string                                  `form:"after,omitempty" json:"after,omitempty"`
+	Limit         *string                                  `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort          *ListManagedResourcesParamsSort          `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType      *string                                  `form:"file_type,omitempty" json:"file_type,omitempty"`
+	State         *ListManagedResourcesParamsState         `form:"state,omitempty" json:"state,omitempty"`
+	ProposalState *ListManagedResourcesParamsProposalState `form:"proposal_state,omitempty" json:"proposal_state,omitempty"`
+	FailedOnly    *bool                                    `form:"failed_only,omitempty" json:"failed_only,omitempty"`
+	TeacherId     *string                                  `form:"teacher_id,omitempty" json:"teacher_id,omitempty"`
+	TermId        *string                                  `form:"term_id,omitempty" json:"term_id,omitempty"`
+	Tag           *string                                  `form:"tag,omitempty" json:"tag,omitempty"`
+	Access        *ListManagedResourcesParamsAccess        `form:"access,omitempty" json:"access,omitempty"`
 }
 
 // ListManagedResourcesParamsSort defines parameters for ListManagedResources.
 type ListManagedResourcesParamsSort string
 
+// ListManagedResourcesParamsState defines parameters for ListManagedResources.
+type ListManagedResourcesParamsState string
+
+// ListManagedResourcesParamsProposalState defines parameters for ListManagedResources.
+type ListManagedResourcesParamsProposalState string
+
+// ListManagedResourcesParamsAccess defines parameters for ListManagedResources.
+type ListManagedResourcesParamsAccess string
+
 // ListOwnResourcesParams defines parameters for ListOwnResources.
 type ListOwnResourcesParams struct {
-	After    *string                     `form:"after,omitempty" json:"after,omitempty"`
-	Limit    *string                     `form:"limit,omitempty" json:"limit,omitempty"`
-	Sort     *ListOwnResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
-	FileType *string                     `form:"file_type,omitempty" json:"file_type,omitempty"`
+	SchoolId    *string                       `form:"school_id,omitempty" json:"school_id,omitempty"`
+	CourseId    *string                       `form:"course_id,omitempty" json:"course_id,omitempty"`
+	CategoryId  *string                       `form:"category_id,omitempty" json:"category_id,omitempty"`
+	DirectoryId *string                       `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Query       *string                       `form:"query,omitempty" json:"query,omitempty"`
+	Attributes  *string                       `form:"attributes,omitempty" json:"attributes,omitempty"`
+	After       *string                       `form:"after,omitempty" json:"after,omitempty"`
+	Limit       *string                       `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort        *ListOwnResourcesParamsSort   `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType    *string                       `form:"file_type,omitempty" json:"file_type,omitempty"`
+	TeacherId   *string                       `form:"teacher_id,omitempty" json:"teacher_id,omitempty"`
+	TermId      *string                       `form:"term_id,omitempty" json:"term_id,omitempty"`
+	Tag         *string                       `form:"tag,omitempty" json:"tag,omitempty"`
+	Access      *ListOwnResourcesParamsAccess `form:"access,omitempty" json:"access,omitempty"`
 }
 
 // ListOwnResourcesParamsSort defines parameters for ListOwnResources.
 type ListOwnResourcesParamsSort string
+
+// ListOwnResourcesParamsAccess defines parameters for ListOwnResources.
+type ListOwnResourcesParamsAccess string
+
+// ListEntitledResourcesParams defines parameters for ListEntitledResources.
+type ListEntitledResourcesParams struct {
+	SchoolId    *string                          `form:"school_id,omitempty" json:"school_id,omitempty"`
+	CourseId    *string                          `form:"course_id,omitempty" json:"course_id,omitempty"`
+	CategoryId  *string                          `form:"category_id,omitempty" json:"category_id,omitempty"`
+	DirectoryId *string                          `form:"directory_id,omitempty" json:"directory_id,omitempty"`
+	Query       *string                          `form:"query,omitempty" json:"query,omitempty"`
+	Attributes  *string                          `form:"attributes,omitempty" json:"attributes,omitempty"`
+	After       *string                          `form:"after,omitempty" json:"after,omitempty"`
+	Limit       *string                          `form:"limit,omitempty" json:"limit,omitempty"`
+	Sort        *ListEntitledResourcesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+	FileType    *string                          `form:"file_type,omitempty" json:"file_type,omitempty"`
+}
+
+// ListEntitledResourcesParamsSort defines parameters for ListEntitledResources.
+type ListEntitledResourcesParamsSort string
 
 // MyResourcesReferencesParams defines parameters for MyResourcesReferences.
 type MyResourcesReferencesParams struct {
@@ -1066,6 +1430,9 @@ type ChangeStateJSONRequestBody = StateChange
 
 // SubmitResourceJSONRequestBody defines body for SubmitResource for application/json ContentType.
 type SubmitResourceJSONRequestBody = Command
+
+// WithdrawProposalJSONRequestBody defines body for WithdrawProposal for application/json ContentType.
+type WithdrawProposalJSONRequestBody = Command
 
 // CreatePackageJSONRequestBody defines body for CreatePackage for application/json ContentType.
 type CreatePackageJSONRequestBody = PackageRequest
@@ -1194,12 +1561,19 @@ type ClientInterface interface {
 	// Corresponds with PUT /api/v1/resources/categories/{id} (the `PutCategory` operationId).
 	PutCategory(ctx context.Context, id string, params *PutCategoryParams, body PutCategoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetResourceCounts ListResources
+	// GetResourceCounts Count current-visible published resources
 	//
 	// Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
 	//
 	// Corresponds with GET /api/v1/resources/counts (the `GetResourceCounts` operationId).
 	GetResourceCounts(ctx context.Context, params *GetResourceCountsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListCoverage List billing plan coverage configurations
+	//
+	// Requires global coverage.manage permission.
+	//
+	// Corresponds with GET /api/v1/resources/coverage (the `ListCoverage` operationId).
+	ListCoverage(ctx context.Context, params *ListCoverageParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCoverage Read actual coverage for a billing plan ID
 	//
@@ -1241,6 +1615,18 @@ type ClientInterface interface {
 	// Corresponds with PUT /api/v1/resources/directories/{id} (the `PutDirectory` operationId).
 	PutDirectory(ctx context.Context, id string, params *PutDirectoryParams, body PutDirectoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// FindDuplicateResources Find published resources with identical file digest in the same course
+	//
+	// Checks published resources in the target course (including merged course aliases) matching the SHA-256 file digest. Requires both discover and upload permissions in the school.
+	//
+	// Corresponds with GET /api/v1/resources/duplicates (the `FindDuplicateResources` operationId).
+	FindDuplicateResources(ctx context.Context, params *FindDuplicateResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteDraft Delete an own never-published draft or rejected resource
+	//
+	// Corresponds with DELETE /api/v1/resources/items/{id} (the `DeleteDraft` operationId).
+	DeleteDraft(ctx context.Context, id string, params *DeleteDraftParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetResource GetResource
 	//
 	// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
@@ -1281,7 +1667,7 @@ type ClientInterface interface {
 	// Checks current content admission, configured eligibility, entitlements and resource state before returning any file bytes. Missing conditions return 403; unknown dependencies return 503. Same policy as preview.
 	//
 	// Corresponds with GET /api/v1/resources/items/{id}/download (the `DownloadResource` operationId).
-	DownloadResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DownloadResource(ctx context.Context, id string, params *DownloadResourceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AttachFileWithBody AttachFile
 	//
@@ -1321,7 +1707,7 @@ type ClientInterface interface {
 	// Authenticated inline file bytes, with the exact same current content, eligibility, entitlement and resource-state checks as download. No partial preview or conversion bypass. Errors return no file bytes.
 	//
 	// Corresponds with GET /api/v1/resources/items/{id}/preview (the `PreviewResource` operationId).
-	PreviewResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PreviewResource(ctx context.Context, id string, params *PreviewResourceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateRequestWithBody CreateRequest
 	//
@@ -1379,6 +1765,20 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/resources/items/{id}/submit (the `SubmitResource` operationId).
 	SubmitResource(ctx context.Context, id string, params *SubmitResourceParams, body SubmitResourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// WithdrawProposalWithBody Withdraw an own pending proposal back to draft
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+	WithdrawProposalWithBody(ctx context.Context, id string, params *WithdrawProposalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WithdrawProposal Withdraw an own pending proposal back to draft
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+	WithdrawProposal(ctx context.Context, id string, params *WithdrawProposalParams, body WithdrawProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListManagedResources List resources within the administrators school scope
 	//
 	// Corresponds with GET /api/v1/resources/manage (the `ListManagedResources` operationId).
@@ -1389,12 +1789,21 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 	ListOwnResources(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// MyResourcesReferences performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+	// ListEntitledResources List own purchased and granted resources
+	//
+	// Lists non-blocked resources unlocked by the authenticated caller through non-revoked purchases (including ordinary unlisted items) or active non-expired direct grants. Requires current content admission in each returned school.
+	//
+	// Corresponds with GET /api/v1/resources/me/entitlements (the `ListEntitledResources` operationId).
+	ListEntitledResources(ctx context.Context, params *ListEntitledResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// MyResourcesReferences List own uploaded reference names
 	//
 	// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+	//
+	// Corresponds with GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId).
 	MyResourcesReferences(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetOwnResourceSummary ListOwnResources
+	// GetOwnResourceSummary Read own resource summary counts
 	//
 	// Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
 	//
@@ -1430,19 +1839,19 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/resources/requests (the `ListRequests` operationId).
 	ListRequests(ctx context.Context, params *ListRequestsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetResourceRequest GetResource
+	// GetResourceRequest Read own request status
 	//
 	// Corresponds with GET /api/v1/resources/requests/{id} (the `GetResourceRequest` operationId).
 	GetResourceRequest(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RetryResourceRequestWithBody SubmitResource
+	// RetryResourceRequestWithBody Retry a failed request delivery
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/resources/requests/{id}/retry (the `RetryResourceRequest` operationId).
 	RetryResourceRequestWithBody(ctx context.Context, id string, params *RetryResourceRequestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RetryResourceRequest SubmitResource
+	// RetryResourceRequest Retry a failed request delivery
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -1577,13 +1986,30 @@ func (c *Client) PutCategory(ctx context.Context, id string, params *PutCategory
 	return c.Client.Do(req)
 }
 
-// GetResourceCounts ListResources
+// GetResourceCounts Count current-visible published resources
 //
 // Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
 //
 // Corresponds with GET /api/v1/resources/counts (the `GetResourceCounts` operationId).
 func (c *Client) GetResourceCounts(ctx context.Context, params *GetResourceCountsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetResourceCountsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListCoverage List billing plan coverage configurations
+//
+// Requires global coverage.manage permission.
+//
+// Corresponds with GET /api/v1/resources/coverage (the `ListCoverage` operationId).
+func (c *Client) ListCoverage(ctx context.Context, params *ListCoverageParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCoverageRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1694,6 +2120,38 @@ func (c *Client) PutDirectory(ctx context.Context, id string, params *PutDirecto
 	return c.Client.Do(req)
 }
 
+// FindDuplicateResources Find published resources with identical file digest in the same course
+//
+// Checks published resources in the target course (including merged course aliases) matching the SHA-256 file digest. Requires both discover and upload permissions in the school.
+//
+// Corresponds with GET /api/v1/resources/duplicates (the `FindDuplicateResources` operationId).
+func (c *Client) FindDuplicateResources(ctx context.Context, params *FindDuplicateResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFindDuplicateResourcesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteDraft Delete an own never-published draft or rejected resource
+//
+// Corresponds with DELETE /api/v1/resources/items/{id} (the `DeleteDraft` operationId).
+func (c *Client) DeleteDraft(ctx context.Context, id string, params *DeleteDraftParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteDraftRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetResource GetResource
 //
 // Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
@@ -1784,8 +2242,8 @@ func (c *Client) ApplyDecision(ctx context.Context, id string, params *ApplyDeci
 // Checks current content admission, configured eligibility, entitlements and resource state before returning any file bytes. Missing conditions return 403; unknown dependencies return 503. Same policy as preview.
 //
 // Corresponds with GET /api/v1/resources/items/{id}/download (the `DownloadResource` operationId).
-func (c *Client) DownloadResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDownloadResourceRequest(c.Server, id)
+func (c *Client) DownloadResource(ctx context.Context, id string, params *DownloadResourceParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDownloadResourceRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1884,8 +2342,8 @@ func (c *Client) PutGrant(ctx context.Context, id string, grant string, params *
 // Authenticated inline file bytes, with the exact same current content, eligibility, entitlement and resource-state checks as download. No partial preview or conversion bypass. Errors return no file bytes.
 //
 // Corresponds with GET /api/v1/resources/items/{id}/preview (the `PreviewResource` operationId).
-func (c *Client) PreviewResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPreviewResourceRequest(c.Server, id)
+func (c *Client) PreviewResource(ctx context.Context, id string, params *PreviewResourceParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPreviewResourceRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2032,6 +2490,40 @@ func (c *Client) SubmitResource(ctx context.Context, id string, params *SubmitRe
 	return c.Client.Do(req)
 }
 
+// WithdrawProposalWithBody Withdraw an own pending proposal back to draft
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+func (c *Client) WithdrawProposalWithBody(ctx context.Context, id string, params *WithdrawProposalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWithdrawProposalRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WithdrawProposal Withdraw an own pending proposal back to draft
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+func (c *Client) WithdrawProposal(ctx context.Context, id string, params *WithdrawProposalParams, body WithdrawProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWithdrawProposalRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ListManagedResources List resources within the administrators school scope
 //
 // Corresponds with GET /api/v1/resources/manage (the `ListManagedResources` operationId).
@@ -2062,9 +2554,28 @@ func (c *Client) ListOwnResources(ctx context.Context, params *ListOwnResourcesP
 	return c.Client.Do(req)
 }
 
-// MyResourcesReferences performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+// ListEntitledResources List own purchased and granted resources
+//
+// Lists non-blocked resources unlocked by the authenticated caller through non-revoked purchases (including ordinary unlisted items) or active non-expired direct grants. Requires current content admission in each returned school.
+//
+// Corresponds with GET /api/v1/resources/me/entitlements (the `ListEntitledResources` operationId).
+func (c *Client) ListEntitledResources(ctx context.Context, params *ListEntitledResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListEntitledResourcesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// MyResourcesReferences List own uploaded reference names
 //
 // Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
+//
+// Corresponds with GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId).
 func (c *Client) MyResourcesReferences(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewMyResourcesReferencesRequest(c.Server, params)
 	if err != nil {
@@ -2077,7 +2588,7 @@ func (c *Client) MyResourcesReferences(ctx context.Context, params *MyResourcesR
 	return c.Client.Do(req)
 }
 
-// GetOwnResourceSummary ListOwnResources
+// GetOwnResourceSummary Read own resource summary counts
 //
 // Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
 //
@@ -2173,7 +2684,7 @@ func (c *Client) ListRequests(ctx context.Context, params *ListRequestsParams, r
 	return c.Client.Do(req)
 }
 
-// GetResourceRequest GetResource
+// GetResourceRequest Read own request status
 //
 // Corresponds with GET /api/v1/resources/requests/{id} (the `GetResourceRequest` operationId).
 func (c *Client) GetResourceRequest(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -2188,7 +2699,7 @@ func (c *Client) GetResourceRequest(ctx context.Context, id string, reqEditors .
 	return c.Client.Do(req)
 }
 
-// RetryResourceRequestWithBody SubmitResource
+// RetryResourceRequestWithBody Retry a failed request delivery
 //
 // Takes any type of body and a specified content type.
 //
@@ -2205,7 +2716,7 @@ func (c *Client) RetryResourceRequestWithBody(ctx context.Context, id string, pa
 	return c.Client.Do(req)
 }
 
-// RetryResourceRequest SubmitResource
+// RetryResourceRequest Retry a failed request delivery
 //
 // Takes a body of the `application/json` content type.
 //
@@ -2391,6 +2902,54 @@ func NewListResourcesRequest(server string, params *ListResourcesParams) (*http.
 		if params.FileType != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "file_type", *params.FileType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TeacherId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "teacher_id", *params.TeacherId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TermId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "term_id", *params.TermId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Tag != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tag", *params.Tag, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Access != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "access", *params.Access, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -2716,6 +3275,156 @@ func NewGetResourceCountsRequest(server string, params *GetResourceCountsParams)
 
 		}
 
+		if params.CourseId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "course_id", *params.CourseId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.DirectoryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "directory_id", *params.DirectoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Attributes != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "attributes", *params.Attributes, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TeacherId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "teacher_id", *params.TeacherId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TermId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "term_id", *params.TermId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Tag != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tag", *params.Tag, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Access != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "access", *params.Access, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListCoverageRequest constructs an http.Request for the ListCoverage method
+func NewListCoverageRequest(server string, params *ListCoverageParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/coverage")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.After != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -2912,6 +3621,18 @@ func NewListDirectoriesRequest(server string, params *ListDirectoriesParams) (*h
 
 		}
 
+		if params.Tree != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tree", *params.Tree, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -2969,6 +3690,146 @@ func NewPutDirectoryRequestWithBody(server string, id string, params *PutDirecto
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewFindDuplicateResourcesRequest constructs an http.Request for the FindDuplicateResources method
+func NewFindDuplicateResourcesRequest(server string, params *FindDuplicateResourcesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/duplicates")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "school_id", params.SchoolId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "course_id", params.CourseId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sha256", params.Sha256, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDeleteDraftRequest constructs an http.Request for the DeleteDraft method
+func NewDeleteDraftRequest(server string, id string, params *DeleteDraftParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/items/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Revision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "revision", *params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if params != nil {
 
@@ -3141,7 +4002,7 @@ func NewApplyDecisionRequestWithBody(server string, id string, params *ApplyDeci
 }
 
 // NewDownloadResourceRequest constructs an http.Request for the DownloadResource method
-func NewDownloadResourceRequest(server string, id string) (*http.Request, error) {
+func NewDownloadResourceRequest(server string, id string, params *DownloadResourceParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -3169,6 +4030,43 @@ func NewDownloadResourceRequest(server string, id string) (*http.Request, error)
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IfNoneMatch != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-None-Match", *params.IfNoneMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-None-Match", headerParam0)
+		}
+
+		if params.IfRange != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Range", *params.IfRange, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-Range", headerParam1)
+		}
+
+		if params.Range != nil {
+			var headerParam2 string
+
+			headerParam2, err = runtime.StyleParamWithOptions("simple", false, "Range", *params.Range, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Range", headerParam2)
+		}
+
 	}
 
 	return req, nil
@@ -3375,7 +4273,7 @@ func NewPutGrantRequestWithBody(server string, id string, grant string, params *
 }
 
 // NewPreviewResourceRequest constructs an http.Request for the PreviewResource method
-func NewPreviewResourceRequest(server string, id string) (*http.Request, error) {
+func NewPreviewResourceRequest(server string, id string, params *PreviewResourceParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -3403,6 +4301,43 @@ func NewPreviewResourceRequest(server string, id string) (*http.Request, error) 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IfNoneMatch != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-None-Match", *params.IfNoneMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-None-Match", headerParam0)
+		}
+
+		if params.IfRange != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Range", *params.IfRange, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-Range", headerParam1)
+		}
+
+		if params.Range != nil {
+			var headerParam2 string
+
+			headerParam2, err = runtime.StyleParamWithOptions("simple", false, "Range", *params.Range, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Range", headerParam2)
+		}
+
 	}
 
 	return req, nil
@@ -3648,6 +4583,66 @@ func NewSubmitResourceRequestWithBody(server string, id string, params *SubmitRe
 	return req, nil
 }
 
+// NewWithdrawProposalRequest calls the generic WithdrawProposal builder with application/json body
+func NewWithdrawProposalRequest(server string, id string, params *WithdrawProposalParams, body WithdrawProposalJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewWithdrawProposalRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewWithdrawProposalRequestWithBody constructs an http.Request for the WithdrawProposal method, with any body, and a specified content type
+func NewWithdrawProposalRequestWithBody(server string, id string, params *WithdrawProposalParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/items/%s/withdraw", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewListManagedResourcesRequest constructs an http.Request for the ListManagedResources method
 func NewListManagedResourcesRequest(server string, params *ListManagedResourcesParams) (*http.Request, error) {
 	var err error
@@ -3796,6 +4791,90 @@ func NewListManagedResourcesRequest(server string, params *ListManagedResourcesP
 
 		}
 
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.ProposalState != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "proposal_state", *params.ProposalState, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.FailedOnly != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "failed_only", *params.FailedOnly, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TeacherId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "teacher_id", *params.TeacherId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TermId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "term_id", *params.TermId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Tag != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tag", *params.Tag, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Access != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "access", *params.Access, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -3837,6 +4916,288 @@ func NewListOwnResourcesRequest(server string, params *ListOwnResourcesParams) (
 		// styled parameters, preserving literal commas as delimiters
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
+
+		if params.SchoolId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "school_id", *params.SchoolId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.CourseId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "course_id", *params.CourseId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.CategoryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "category_id", *params.CategoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.DirectoryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "directory_id", *params.DirectoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Query != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "query", *params.Query, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Attributes != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "attributes", *params.Attributes, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.After != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sort", *params.Sort, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.FileType != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "file_type", *params.FileType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TeacherId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "teacher_id", *params.TeacherId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TermId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "term_id", *params.TermId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Tag != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tag", *params.Tag, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Access != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "access", *params.Access, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListEntitledResourcesRequest constructs an http.Request for the ListEntitledResources method
+func NewListEntitledResourcesRequest(server string, params *ListEntitledResourcesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/me/entitlements")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.SchoolId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "school_id", *params.SchoolId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.CourseId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "course_id", *params.CourseId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.CategoryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "category_id", *params.CategoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.DirectoryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "directory_id", *params.DirectoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Query != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "query", *params.Query, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Attributes != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "attributes", *params.Attributes, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
 
 		if params.After != nil {
 
@@ -4430,7 +5791,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /api/v1/resources/categories/{id} (the `PutCategory` operationId).
 	PutCategoryWithResponse(ctx context.Context, id string, params *PutCategoryParams, body PutCategoryJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCategoryResponse, error)
 
-	// GetResourceCountsWithResponse ListResources
+	// GetResourceCountsWithResponse Count current-visible published resources
 	//
 	// Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
 	//
@@ -4438,6 +5799,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/resources/counts (the `GetResourceCounts` operationId).
 	GetResourceCountsWithResponse(ctx context.Context, params *GetResourceCountsParams, reqEditors ...RequestEditorFn) (*GetResourceCountsResponse, error)
+
+	// ListCoverageWithResponse List billing plan coverage configurations
+	//
+	// Requires global coverage.manage permission.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/coverage (the `ListCoverage` operationId).
+	ListCoverageWithResponse(ctx context.Context, params *ListCoverageParams, reqEditors ...RequestEditorFn) (*ListCoverageResponse, error)
 
 	// GetCoverageWithResponse Read actual coverage for a billing plan ID
 	//
@@ -4483,6 +5853,22 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /api/v1/resources/directories/{id} (the `PutDirectory` operationId).
 	PutDirectoryWithResponse(ctx context.Context, id string, params *PutDirectoryParams, body PutDirectoryJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDirectoryResponse, error)
 
+	// FindDuplicateResourcesWithResponse Find published resources with identical file digest in the same course
+	//
+	// Checks published resources in the target course (including merged course aliases) matching the SHA-256 file digest. Requires both discover and upload permissions in the school.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/duplicates (the `FindDuplicateResources` operationId).
+	FindDuplicateResourcesWithResponse(ctx context.Context, params *FindDuplicateResourcesParams, reqEditors ...RequestEditorFn) (*FindDuplicateResourcesResponse, error)
+
+	// DeleteDraftWithResponse Delete an own never-published draft or rejected resource
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/resources/items/{id} (the `DeleteDraft` operationId).
+	DeleteDraftWithResponse(ctx context.Context, id string, params *DeleteDraftParams, reqEditors ...RequestEditorFn) (*DeleteDraftResponse, error)
+
 	// GetResourceWithResponse GetResource
 	//
 	// Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
@@ -4527,7 +5913,7 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/resources/items/{id}/download (the `DownloadResource` operationId).
-	DownloadResourceWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DownloadResourceResponse, error)
+	DownloadResourceWithResponse(ctx context.Context, id string, params *DownloadResourceParams, reqEditors ...RequestEditorFn) (*DownloadResourceResponse, error)
 
 	// AttachFileWithBodyWithResponse AttachFile
 	//
@@ -4571,7 +5957,7 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/resources/items/{id}/preview (the `PreviewResource` operationId).
-	PreviewResourceWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PreviewResourceResponse, error)
+	PreviewResourceWithResponse(ctx context.Context, id string, params *PreviewResourceParams, reqEditors ...RequestEditorFn) (*PreviewResourceResponse, error)
 
 	// CreateRequestWithBodyWithResponse CreateRequest
 	//
@@ -4629,6 +6015,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/resources/items/{id}/submit (the `SubmitResource` operationId).
 	SubmitResourceWithResponse(ctx context.Context, id string, params *SubmitResourceParams, body SubmitResourceJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitResourceResponse, error)
 
+	// WithdrawProposalWithBodyWithResponse Withdraw an own pending proposal back to draft
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+	WithdrawProposalWithBodyWithResponse(ctx context.Context, id string, params *WithdrawProposalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*WithdrawProposalResponse, error)
+
+	// WithdrawProposalWithResponse Withdraw an own pending proposal back to draft
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+	WithdrawProposalWithResponse(ctx context.Context, id string, params *WithdrawProposalParams, body WithdrawProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*WithdrawProposalResponse, error)
+
 	// ListManagedResourcesWithResponse List resources within the administrators school scope
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -4643,14 +6043,25 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/resources/me (the `ListOwnResources` operationId).
 	ListOwnResourcesWithResponse(ctx context.Context, params *ListOwnResourcesParams, reqEditors ...RequestEditorFn) (*ListOwnResourcesResponse, error)
 
-	// MyResourcesReferencesWithResponse performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+	// ListEntitledResourcesWithResponse List own purchased and granted resources
+	//
+	// Lists non-blocked resources unlocked by the authenticated caller through non-revoked purchases (including ordinary unlisted items) or active non-expired direct grants. Requires current content admission in each returned school.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/me/entitlements (the `ListEntitledResources` operationId).
+	ListEntitledResourcesWithResponse(ctx context.Context, params *ListEntitledResourcesParams, reqEditors ...RequestEditorFn) (*ListEntitledResourcesResponse, error)
+
+	// MyResourcesReferencesWithResponse List own uploaded reference names
 	//
 	// Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
 	//
 	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId).
 	MyResourcesReferencesWithResponse(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*MyResourcesReferencesResponse, error)
 
-	// GetOwnResourceSummaryWithResponse ListOwnResources
+	// GetOwnResourceSummaryWithResponse Read own resource summary counts
 	//
 	// Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
 	//
@@ -4694,21 +6105,21 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/resources/requests (the `ListRequests` operationId).
 	ListRequestsWithResponse(ctx context.Context, params *ListRequestsParams, reqEditors ...RequestEditorFn) (*ListRequestsResponse, error)
 
-	// GetResourceRequestWithResponse GetResource
+	// GetResourceRequestWithResponse Read own request status
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/resources/requests/{id} (the `GetResourceRequest` operationId).
 	GetResourceRequestWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetResourceRequestResponse, error)
 
-	// RetryResourceRequestWithBodyWithResponse SubmitResource
+	// RetryResourceRequestWithBodyWithResponse Retry a failed request delivery
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/resources/requests/{id}/retry (the `RetryResourceRequest` operationId).
 	RetryResourceRequestWithBodyWithResponse(ctx context.Context, id string, params *RetryResourceRequestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RetryResourceRequestResponse, error)
 
-	// RetryResourceRequestWithResponse SubmitResource
+	// RetryResourceRequestWithResponse Retry a failed request delivery
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -5270,6 +6681,96 @@ func (r GetResourceCountsResponse) ContentType() string {
 	return ""
 }
 
+type ListCoverageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CoveragePage
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListCoverageResponse) GetJSON200() *CoveragePage {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r ListCoverageResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ListCoverageResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ListCoverageResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ListCoverageResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r ListCoverageResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r ListCoverageResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r ListCoverageResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r ListCoverageResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCoverageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCoverageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListCoverageResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetCoverageResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5630,6 +7131,186 @@ func (r PutDirectoryResponse) ContentType() string {
 	return ""
 }
 
+type FindDuplicateResourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DuplicateResourceList
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON200() *DuplicateResourceList {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r FindDuplicateResourcesResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r FindDuplicateResourcesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r FindDuplicateResourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FindDuplicateResourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r FindDuplicateResourcesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteDraftResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DeleteReceipt
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteDraftResponse) GetJSON200() *DeleteReceipt {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r DeleteDraftResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r DeleteDraftResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r DeleteDraftResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r DeleteDraftResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r DeleteDraftResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r DeleteDraftResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r DeleteDraftResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteDraftResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteDraftResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteDraftResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteDraftResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetResourceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5900,6 +7581,36 @@ func (r ApplyDecisionResponse) ContentType() string {
 	return ""
 }
 
+// DownloadResourceResponse200Headers the declared response headers of an HTTP 200 response for DownloadResource
+type DownloadResourceResponse200Headers struct {
+	AcceptRanges       *string
+	ContentDisposition *string
+	ContentLength      *int64
+	ETag               *string
+}
+
+// DownloadResourceResponse206Headers the declared response headers of an HTTP 206 response for DownloadResource
+type DownloadResourceResponse206Headers struct {
+	AcceptRanges       *string
+	ContentDisposition *string
+	ContentLength      *int64
+	ContentRange       *string
+	ETag               *string
+}
+
+// DownloadResourceResponse304Headers the declared response headers of an HTTP 304 response for DownloadResource
+type DownloadResourceResponse304Headers struct {
+	AcceptRanges *string
+	ETag         *string
+}
+
+// DownloadResourceResponse416Headers the declared response headers of an HTTP 416 response for DownloadResource
+type DownloadResourceResponse416Headers struct {
+	AcceptRanges *string
+	ContentRange *string
+	ETag         *string
+}
+
 type DownloadResourceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5915,8 +7626,18 @@ type DownloadResourceResponse struct {
 	JSON409 *Problem
 	// JSON413 the response for an HTTP 413 `application/json` response
 	JSON413 *Problem
+	// JSON416 the response for an HTTP 416 `application/json` response
+	JSON416 *Problem
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *DownloadResourceResponse200Headers
+	// Headers206 the parsed response headers for an HTTP 206 response
+	Headers206 *DownloadResourceResponse206Headers
+	// Headers304 the parsed response headers for an HTTP 304 response
+	Headers304 *DownloadResourceResponse304Headers
+	// Headers416 the parsed response headers for an HTTP 416 response
+	Headers416 *DownloadResourceResponse416Headers
 }
 
 // GetJSON400 returns the response for an HTTP 400 `application/json` response
@@ -5947,6 +7668,11 @@ func (r DownloadResourceResponse) GetJSON409() *Problem {
 // GetJSON413 returns the response for an HTTP 413 `application/json` response
 func (r DownloadResourceResponse) GetJSON413() *Problem {
 	return r.JSON413
+}
+
+// GetJSON416 returns the response for an HTTP 416 `application/json` response
+func (r DownloadResourceResponse) GetJSON416() *Problem {
+	return r.JSON416
 }
 
 // GetJSON503 returns the response for an HTTP 503 `application/json` response
@@ -6253,6 +7979,36 @@ func (r PutGrantResponse) ContentType() string {
 	return ""
 }
 
+// PreviewResourceResponse200Headers the declared response headers of an HTTP 200 response for PreviewResource
+type PreviewResourceResponse200Headers struct {
+	AcceptRanges       *string
+	ContentDisposition *string
+	ContentLength      *int64
+	ETag               *string
+}
+
+// PreviewResourceResponse206Headers the declared response headers of an HTTP 206 response for PreviewResource
+type PreviewResourceResponse206Headers struct {
+	AcceptRanges       *string
+	ContentDisposition *string
+	ContentLength      *int64
+	ContentRange       *string
+	ETag               *string
+}
+
+// PreviewResourceResponse304Headers the declared response headers of an HTTP 304 response for PreviewResource
+type PreviewResourceResponse304Headers struct {
+	AcceptRanges *string
+	ETag         *string
+}
+
+// PreviewResourceResponse416Headers the declared response headers of an HTTP 416 response for PreviewResource
+type PreviewResourceResponse416Headers struct {
+	AcceptRanges *string
+	ContentRange *string
+	ETag         *string
+}
+
 type PreviewResourceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -6268,8 +8024,18 @@ type PreviewResourceResponse struct {
 	JSON409 *Problem
 	// JSON413 the response for an HTTP 413 `application/json` response
 	JSON413 *Problem
+	// JSON416 the response for an HTTP 416 `application/json` response
+	JSON416 *Problem
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *PreviewResourceResponse200Headers
+	// Headers206 the parsed response headers for an HTTP 206 response
+	Headers206 *PreviewResourceResponse206Headers
+	// Headers304 the parsed response headers for an HTTP 304 response
+	Headers304 *PreviewResourceResponse304Headers
+	// Headers416 the parsed response headers for an HTTP 416 response
+	Headers416 *PreviewResourceResponse416Headers
 }
 
 // GetJSON400 returns the response for an HTTP 400 `application/json` response
@@ -6300,6 +8066,11 @@ func (r PreviewResourceResponse) GetJSON409() *Problem {
 // GetJSON413 returns the response for an HTTP 413 `application/json` response
 func (r PreviewResourceResponse) GetJSON413() *Problem {
 	return r.JSON413
+}
+
+// GetJSON416 returns the response for an HTTP 416 `application/json` response
+func (r PreviewResourceResponse) GetJSON416() *Problem {
+	return r.JSON416
 }
 
 // GetJSON503 returns the response for an HTTP 503 `application/json` response
@@ -6707,6 +8478,96 @@ func (r SubmitResourceResponse) ContentType() string {
 	return ""
 }
 
+type WithdrawProposalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Resource
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r WithdrawProposalResponse) GetJSON200() *Resource {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r WithdrawProposalResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r WithdrawProposalResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r WithdrawProposalResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r WithdrawProposalResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r WithdrawProposalResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r WithdrawProposalResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r WithdrawProposalResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r WithdrawProposalResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WithdrawProposalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WithdrawProposalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WithdrawProposalResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListManagedResourcesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -6881,6 +8742,96 @@ func (r ListOwnResourcesResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ListOwnResourcesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListEntitledResourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ResourcePage
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *Problem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON200() *ResourcePage {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON404() *Problem {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON413() *Problem {
+	return r.JSON413
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r ListEntitledResourcesResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r ListEntitledResourcesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListEntitledResourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListEntitledResourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListEntitledResourcesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -7861,7 +9812,7 @@ func (c *ClientWithResponses) PutCategoryWithResponse(ctx context.Context, id st
 	return ParsePutCategoryResponse(rsp)
 }
 
-// GetResourceCountsWithResponse ListResources
+// GetResourceCountsWithResponse Count current-visible published resources
 //
 // Current-visible published resource counts using the same predicates as ListResources, before pagination. Counts describe discoverable metadata, independently of download entitlement. Each requested course must belong to the authorized school. No cross-request cache.
 //
@@ -7874,6 +9825,21 @@ func (c *ClientWithResponses) GetResourceCountsWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseGetResourceCountsResponse(rsp)
+}
+
+// ListCoverageWithResponse List billing plan coverage configurations
+//
+// Requires global coverage.manage permission.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/coverage (the `ListCoverage` operationId).
+func (c *ClientWithResponses) ListCoverageWithResponse(ctx context.Context, params *ListCoverageParams, reqEditors ...RequestEditorFn) (*ListCoverageResponse, error) {
+	rsp, err := c.ListCoverage(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCoverageResponse(rsp)
 }
 
 // GetCoverageWithResponse Read actual coverage for a billing plan ID
@@ -7956,6 +9922,34 @@ func (c *ClientWithResponses) PutDirectoryWithResponse(ctx context.Context, id s
 	return ParsePutDirectoryResponse(rsp)
 }
 
+// FindDuplicateResourcesWithResponse Find published resources with identical file digest in the same course
+//
+// Checks published resources in the target course (including merged course aliases) matching the SHA-256 file digest. Requires both discover and upload permissions in the school.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/duplicates (the `FindDuplicateResources` operationId).
+func (c *ClientWithResponses) FindDuplicateResourcesWithResponse(ctx context.Context, params *FindDuplicateResourcesParams, reqEditors ...RequestEditorFn) (*FindDuplicateResourcesResponse, error) {
+	rsp, err := c.FindDuplicateResources(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFindDuplicateResourcesResponse(rsp)
+}
+
+// DeleteDraftWithResponse Delete an own never-published draft or rejected resource
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/resources/items/{id} (the `DeleteDraft` operationId).
+func (c *ClientWithResponses) DeleteDraftWithResponse(ctx context.Context, id string, params *DeleteDraftParams, reqEditors ...RequestEditorFn) (*DeleteDraftResponse, error) {
+	rsp, err := c.DeleteDraft(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteDraftResponse(rsp)
+}
+
 // GetResourceWithResponse GetResource
 //
 // Requires content admission for ordinary published metadata. The owner and currently authorized scoped managers may read their own records without content admission. File access always uses the separate current download policy.
@@ -8030,8 +10024,8 @@ func (c *ClientWithResponses) ApplyDecisionWithResponse(ctx context.Context, id 
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /api/v1/resources/items/{id}/download (the `DownloadResource` operationId).
-func (c *ClientWithResponses) DownloadResourceWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DownloadResourceResponse, error) {
-	rsp, err := c.DownloadResource(ctx, id, reqEditors...)
+func (c *ClientWithResponses) DownloadResourceWithResponse(ctx context.Context, id string, params *DownloadResourceParams, reqEditors ...RequestEditorFn) (*DownloadResourceResponse, error) {
+	rsp, err := c.DownloadResource(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -8110,8 +10104,8 @@ func (c *ClientWithResponses) PutGrantWithResponse(ctx context.Context, id strin
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /api/v1/resources/items/{id}/preview (the `PreviewResource` operationId).
-func (c *ClientWithResponses) PreviewResourceWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PreviewResourceResponse, error) {
-	rsp, err := c.PreviewResource(ctx, id, reqEditors...)
+func (c *ClientWithResponses) PreviewResourceWithResponse(ctx context.Context, id string, params *PreviewResourceParams, reqEditors ...RequestEditorFn) (*PreviewResourceResponse, error) {
+	rsp, err := c.PreviewResource(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -8222,6 +10216,32 @@ func (c *ClientWithResponses) SubmitResourceWithResponse(ctx context.Context, id
 	return ParseSubmitResourceResponse(rsp)
 }
 
+// WithdrawProposalWithBodyWithResponse Withdraw an own pending proposal back to draft
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+func (c *ClientWithResponses) WithdrawProposalWithBodyWithResponse(ctx context.Context, id string, params *WithdrawProposalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*WithdrawProposalResponse, error) {
+	rsp, err := c.WithdrawProposalWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWithdrawProposalResponse(rsp)
+}
+
+// WithdrawProposalWithResponse Withdraw an own pending proposal back to draft
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/resources/items/{id}/withdraw (the `WithdrawProposal` operationId).
+func (c *ClientWithResponses) WithdrawProposalWithResponse(ctx context.Context, id string, params *WithdrawProposalParams, body WithdrawProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*WithdrawProposalResponse, error) {
+	rsp, err := c.WithdrawProposal(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWithdrawProposalResponse(rsp)
+}
+
 // ListManagedResourcesWithResponse List resources within the administrators school scope
 //
 // Returns a wrapper object for the known response body format(s).
@@ -8248,11 +10268,28 @@ func (c *ClientWithResponses) ListOwnResourcesWithResponse(ctx context.Context, 
 	return ParseListOwnResourcesResponse(rsp)
 }
 
-// MyResourcesReferencesWithResponse performs a GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId) request.
+// ListEntitledResourcesWithResponse List own purchased and granted resources
+//
+// Lists non-blocked resources unlocked by the authenticated caller through non-revoked purchases (including ordinary unlisted items) or active non-expired direct grants. Requires current content admission in each returned school.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/me/entitlements (the `ListEntitledResources` operationId).
+func (c *ClientWithResponses) ListEntitledResourcesWithResponse(ctx context.Context, params *ListEntitledResourcesParams, reqEditors ...RequestEditorFn) (*ListEntitledResourcesResponse, error) {
+	rsp, err := c.ListEntitledResources(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListEntitledResourcesResponse(rsp)
+}
+
+// MyResourcesReferencesWithResponse List own uploaded reference names
 //
 // Returns only catalog names referenced by the caller own uploaded resources and versions. Requests and complaints do not grant access to catalog associations. Unowned IDs reject the whole batch with 404; current content admission is not required.
 //
 // Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/me/references (the `MyResourcesReferences` operationId).
 func (c *ClientWithResponses) MyResourcesReferencesWithResponse(ctx context.Context, params *MyResourcesReferencesParams, reqEditors ...RequestEditorFn) (*MyResourcesReferencesResponse, error) {
 	rsp, err := c.MyResourcesReferences(ctx, params, reqEditors...)
 	if err != nil {
@@ -8261,7 +10298,7 @@ func (c *ClientWithResponses) MyResourcesReferencesWithResponse(ctx context.Cont
 	return ParseMyResourcesReferencesResponse(rsp)
 }
 
-// GetOwnResourceSummaryWithResponse ListOwnResources
+// GetOwnResourceSummaryWithResponse Read own resource summary counts
 //
 // Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted.
 //
@@ -8341,7 +10378,7 @@ func (c *ClientWithResponses) ListRequestsWithResponse(ctx context.Context, para
 	return ParseListRequestsResponse(rsp)
 }
 
-// GetResourceRequestWithResponse GetResource
+// GetResourceRequestWithResponse Read own request status
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -8354,7 +10391,7 @@ func (c *ClientWithResponses) GetResourceRequestWithResponse(ctx context.Context
 	return ParseGetResourceRequestResponse(rsp)
 }
 
-// RetryResourceRequestWithBodyWithResponse SubmitResource
+// RetryResourceRequestWithBodyWithResponse Retry a failed request delivery
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -8367,7 +10404,7 @@ func (c *ClientWithResponses) RetryResourceRequestWithBodyWithResponse(ctx conte
 	return ParseRetryResourceRequestResponse(rsp)
 }
 
-// RetryResourceRequestWithResponse SubmitResource
+// RetryResourceRequestWithResponse Retry a failed request delivery
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -8856,6 +10893,81 @@ func ParseGetResourceCountsResponse(rsp *http.Response) (*GetResourceCountsRespo
 	return response, nil
 }
 
+// ParseListCoverageResponse parses an HTTP response from a ListCoverageWithResponse call
+func ParseListCoverageResponse(rsp *http.Response) (*ListCoverageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCoverageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CoveragePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetCoverageResponse parses an HTTP response from a GetCoverageWithResponse call
 func ParseGetCoverageResponse(rsp *http.Response) (*GetCoverageResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -9156,6 +11268,156 @@ func ParsePutDirectoryResponse(rsp *http.Response) (*PutDirectoryResponse, error
 	return response, nil
 }
 
+// ParseFindDuplicateResourcesResponse parses an HTTP response from a FindDuplicateResourcesWithResponse call
+func ParseFindDuplicateResourcesResponse(rsp *http.Response) (*FindDuplicateResourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FindDuplicateResourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DuplicateResourceList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteDraftResponse parses an HTTP response from a DeleteDraftWithResponse call
+func ParseDeleteDraftResponse(rsp *http.Response) (*DeleteDraftResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteDraftResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeleteReceipt
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetResourceResponse parses an HTTP response from a GetResourceWithResponse call
 func ParseGetResourceResponse(rsp *http.Response) (*GetResourceResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -9395,6 +11657,9 @@ func ParseDownloadResourceResponse(rsp *http.Response) (*DownloadResourceRespons
 	}
 
 	switch {
+	case rsp.StatusCode == 304:
+		break // No content-type
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -9437,6 +11702,13 @@ func ParseDownloadResourceResponse(rsp *http.Response) (*DownloadResourceRespons
 		}
 		response.JSON413 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 416:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON416 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -9444,6 +11716,119 @@ func ParseDownloadResourceResponse(rsp *http.Response) (*DownloadResourceRespons
 		}
 		response.JSON503 = &dest
 
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers DownloadResourceResponse200Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = &value
+		}
+		if values := rsp.Header.Values("Content-Length"); len(values) > 0 {
+			var value int64
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Length", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			}
+			headers.ContentLength = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 206:
+		var headers DownloadResourceResponse206Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = &value
+		}
+		if values := rsp.Header.Values("Content-Length"); len(values) > 0 {
+			var value int64
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Length", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			}
+			headers.ContentLength = &value
+		}
+		if values := rsp.Header.Values("Content-Range"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Range", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentRange = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers206 = &headers
+	case rsp.StatusCode == 304:
+		var headers DownloadResourceResponse304Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers304 = &headers
+	case rsp.StatusCode == 416:
+		var headers DownloadResourceResponse416Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("Content-Range"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Range", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentRange = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers416 = &headers
 	}
 
 	return response, nil
@@ -9688,6 +12073,9 @@ func ParsePreviewResourceResponse(rsp *http.Response) (*PreviewResourceResponse,
 	}
 
 	switch {
+	case rsp.StatusCode == 304:
+		break // No content-type
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -9730,6 +12118,13 @@ func ParsePreviewResourceResponse(rsp *http.Response) (*PreviewResourceResponse,
 		}
 		response.JSON413 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 416:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON416 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -9737,6 +12132,119 @@ func ParsePreviewResourceResponse(rsp *http.Response) (*PreviewResourceResponse,
 		}
 		response.JSON503 = &dest
 
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers PreviewResourceResponse200Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = &value
+		}
+		if values := rsp.Header.Values("Content-Length"); len(values) > 0 {
+			var value int64
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Length", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			}
+			headers.ContentLength = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 206:
+		var headers PreviewResourceResponse206Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = &value
+		}
+		if values := rsp.Header.Values("Content-Length"); len(values) > 0 {
+			var value int64
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Length", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			}
+			headers.ContentLength = &value
+		}
+		if values := rsp.Header.Values("Content-Range"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Range", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentRange = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers206 = &headers
+	case rsp.StatusCode == 304:
+		var headers PreviewResourceResponse304Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers304 = &headers
+	case rsp.StatusCode == 416:
+		var headers PreviewResourceResponse416Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("Content-Range"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Range", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentRange = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers416 = &headers
 	}
 
 	return response, nil
@@ -10051,6 +12559,81 @@ func ParseSubmitResourceResponse(rsp *http.Response) (*SubmitResourceResponse, e
 	return response, nil
 }
 
+// ParseWithdrawProposalResponse parses an HTTP response from a WithdrawProposalWithResponse call
+func ParseWithdrawProposalResponse(rsp *http.Response) (*WithdrawProposalResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WithdrawProposalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Resource
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListManagedResourcesResponse parses an HTTP response from a ListManagedResourcesWithResponse call
 func ParseListManagedResourcesResponse(rsp *http.Response) (*ListManagedResourcesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -10135,6 +12718,81 @@ func ParseListOwnResourcesResponse(rsp *http.Response) (*ListOwnResourcesRespons
 	}
 
 	response := &ListOwnResourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ResourcePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListEntitledResourcesResponse parses an HTTP response from a ListEntitledResourcesWithResponse call
+func ParseListEntitledResourcesResponse(rsp *http.Response) (*ListEntitledResourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListEntitledResourcesResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

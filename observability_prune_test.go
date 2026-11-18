@@ -1,6 +1,7 @@
 package resources_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
@@ -148,4 +149,74 @@ func TestRequestIDCorrelationOperationalReadinessStatsAndBoundedPruning(t *testi
 	if remainingLimits != 1 {
 		t.Fatalf("active submission limit window was pruned: remaining=%d", remainingLimits)
 	}
+}
+
+func TestPruningUsesCompletionTimeAndSkipsRenewingWindows(t *testing.T) {
+	t.Run("long queued job", func(t *testing.T) {
+		h := newFixture(t)
+		d := h.draft(t, "waited-to-run", "public")
+		_, err := h.s.Submit(h.ctx, uploader, d.ID, "queue-now", r.Command{Revision: d.Revision})
+		must(t, err)
+		h.clock.Add(48 * time.Hour)
+		h.drain(t)
+		removed, err := h.repo.PruneJobs(h.ctx, h.clock.Now().Add(-24*time.Hour), 10)
+		must(t, err)
+		if removed != 0 {
+			t.Fatalf("recent completion pruned: %d", removed)
+		}
+		removed, err = h.repo.PruneJobs(h.ctx, h.clock.Now().Add(time.Second), 10)
+		must(t, err)
+		if removed != 1 {
+			t.Fatalf("expired completion not pruned: %d", removed)
+		}
+	})
+	t.Run("existing completed job", func(t *testing.T) {
+		h := newFixture(t)
+		queued := h.clock.Now().Add(-48 * time.Hour)
+		_, err := h.admin.Exec(`INSERT INTO resources.jobs(id,state,available_at,lease_until,data) VALUES('legacy-done','done',$1,$1,'{}')`, queued)
+		must(t, err)
+		must(t, rp.Migrate(h.ctx, h.admin))
+		var completed time.Time
+		must(t, h.admin.QueryRow(`SELECT completed_at FROM resources.jobs WHERE id='legacy-done'`).Scan(&completed))
+		must(t, rp.Migrate(h.ctx, h.admin))
+		var again time.Time
+		must(t, h.admin.QueryRow(`SELECT completed_at FROM resources.jobs WHERE id='legacy-done'`).Scan(&again))
+		if !again.Equal(completed) {
+			t.Fatal("migration reset completion time")
+		}
+		removed, err := h.repo.PruneJobs(h.ctx, completed, 1)
+		must(t, err)
+		if removed != 0 {
+			t.Fatal("migration prematurely pruned job")
+		}
+		removed, err = h.repo.PruneJobs(h.ctx, completed.Add(time.Second), 1)
+		must(t, err)
+		if removed != 1 {
+			t.Fatal("legacy job did not expire")
+		}
+	})
+	t.Run("renewing window", func(t *testing.T) {
+		h := newFixture(t)
+		now := h.clock.Now()
+		_, err := h.db.Exec(`INSERT INTO resources.submission_limits(owner_key,started_at,used) VALUES('renewing',$1,1)`, now.Add(-time.Hour))
+		must(t, err)
+		tx, err := h.db.Begin()
+		must(t, err)
+		defer tx.Rollback()
+		_, err = tx.Exec(`UPDATE resources.submission_limits SET started_at=$1,used=1 WHERE owner_key='renewing'`, now)
+		must(t, err)
+		ctx, cancel := context.WithTimeout(h.ctx, 2*time.Second)
+		defer cancel()
+		removed, err := h.repo.PruneSubmissionLimits(ctx, now, 10)
+		must(t, err)
+		if removed != 0 {
+			t.Fatalf("renewing window removed: %d", removed)
+		}
+		must(t, tx.Commit())
+		var used int
+		must(t, h.db.QueryRow(`SELECT used FROM resources.submission_limits WHERE owner_key='renewing' AND started_at=$1`, now).Scan(&used))
+		if used != 1 {
+			t.Fatalf("renewed count=%d", used)
+		}
+	})
 }

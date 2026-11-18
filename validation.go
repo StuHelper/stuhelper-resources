@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -21,6 +22,16 @@ func validID(s string) bool    { return identifier.MatchString(s) }
 func optionalID(s string) bool { return s == "" || validID(s) }
 func text(s string, max int) bool {
 	return utf8.ValidString(s) && utf8.RuneCountInString(s) <= max && !strings.ContainsRune(s, 0)
+}
+func validFilename(s string) bool {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" || s == "." || s == ".." || !text(s, 255) {
+		return false
+	}
+	if strings.ContainsAny(s, `/\`) || strings.ContainsFunc(s, unicode.IsControl) {
+		return false
+	}
+	return true
 }
 func names(n Names) bool {
 	if len(n) == 0 || len(n) > 8 || strings.TrimSpace(n["zh-CN"]) == "" {
@@ -182,6 +193,9 @@ func validateMetadata(m Metadata, terms Terms) error {
 		return ErrInput
 	}
 	if a.OfferingID != "" && a.CourseID == "" {
+		return ErrInput
+	}
+	if m.Origin.VerifiedInstructor && (a.SchoolID == "" || a.CourseID == "") {
 		return ErrInput
 	}
 	o := m.Origin

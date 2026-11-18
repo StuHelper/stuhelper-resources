@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	resources "github.com/StuHelper/stuhelper-resources"
 	"github.com/StuHelper/stuhelper-resources/contracts"
 	"github.com/getkin/kin-openapi/openapi3"
@@ -14,9 +15,12 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 type Authenticator interface {
@@ -96,6 +100,15 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 		}
 		return s.OwnSummary(r.Context(), p)
 	})
+	h.mount(m, "GET /api/v1/resources/duplicates", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		q := r.URL.Query()
+		for k := range q {
+			if k != "school_id" && k != "course_id" && k != "sha256" {
+				return nil, resources.ErrInput
+			}
+		}
+		return s.FindDuplicates(r.Context(), p, q.Get("school_id"), q.Get("course_id"), q.Get("sha256"))
+	})
 	h.mount(m, "GET /api/v1/resources/counts", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		f, err := filter(r)
 		if err != nil {
@@ -106,6 +119,13 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 			ids = strings.Split(r.URL.Query().Get("course_ids"), ",")
 		}
 		return s.Counts(r.Context(), p, f, ids)
+	})
+	h.mount(m, "GET /api/v1/resources/coverage", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		n, e := limit(r)
+		if e != nil {
+			return nil, e
+		}
+		return s.ListCoverage(r.Context(), p, n, r.URL.Query().Get("after"))
 	})
 	h.mount(m, "GET /api/v1/resources/coverage/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.GetCoverage(r.Context(), p, r.PathValue("id"))
@@ -145,24 +165,49 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 			return s.List(r.Context(), p, f, route.mine, route.admin)
 		})
 	}
+	h.mount(m, "GET /api/v1/resources/me/entitlements", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		f, e := filter(r)
+		if e != nil {
+			return nil, e
+		}
+		return s.ListEntitled(r.Context(), p, f)
+	})
 	write[resources.DraftWrite](h, m, "POST /api/v1/resources", func(r *http.Request, p resources.Principal, in resources.DraftWrite) (any, error) {
 		return s.CreateDraft(r.Context(), p, key(r), in)
 	})
 	h.mount(m, "GET /api/v1/resources/review/{version}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.ReviewResource(r.Context(), p, r.PathValue("version"))
 	})
-	h.mount(m, "GET /api/v1/resources/review/{version}/file", h.reviewDownload)
+	h.mountStream(m, "GET /api/v1/resources/review/{version}/file", h.reviewDownload)
 	h.mount(m, "GET /api/v1/resources/items/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.Get(r.Context(), p, r.PathValue("id"))
 	})
 	write[resources.DraftWrite](h, m, "PUT /api/v1/resources/items/{id}", func(r *http.Request, p resources.Principal, in resources.DraftWrite) (any, error) {
 		return s.UpdateDraft(r.Context(), p, r.PathValue("id"), key(r), in)
 	})
+	h.mount(m, "DELETE /api/v1/resources/items/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		q := r.URL.Query()
+		var rev int64
+		if len(q) > 1 || len(q) == 1 && !q.Has("revision") {
+			return nil, resources.ErrInput
+		}
+		if raw := q.Get("revision"); raw != "" {
+			n, e := strconv.ParseInt(raw, 10, 64)
+			if e != nil || n < 1 {
+				return nil, resources.ErrInput
+			}
+			rev = n
+		}
+		return s.DeleteDraft(r.Context(), p, r.PathValue("id"), key(r), rev)
+	})
 	write[resources.FileLink](h, m, "POST /api/v1/resources/items/{id}/file", func(r *http.Request, p resources.Principal, in resources.FileLink) (any, error) {
 		return s.AttachFile(r.Context(), p, r.PathValue("id"), key(r), in)
 	})
 	write[resources.Command](h, m, "POST /api/v1/resources/items/{id}/submit", func(r *http.Request, p resources.Principal, in resources.Command) (any, error) {
 		return s.Submit(r.Context(), p, r.PathValue("id"), key(r), in)
+	})
+	write[resources.Command](h, m, "POST /api/v1/resources/items/{id}/withdraw", func(r *http.Request, p resources.Principal, in resources.Command) (any, error) {
+		return s.WithdrawProposal(r.Context(), p, r.PathValue("id"), key(r), in)
 	})
 	write[resources.Command](h, m, "POST /api/v1/resources/items/{id}/retry", func(r *http.Request, p resources.Principal, in resources.Command) (any, error) {
 		return s.RetryPending(r.Context(), p, r.PathValue("id"), key(r), in)
@@ -204,11 +249,21 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 		return s.PutGrant(r.Context(), p, r.PathValue("id"), r.PathValue("grant"), key(r), in)
 	})
 	h.mount(m, "GET /api/v1/resources/directories", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
-		n, e := limit(r)
+		tree, e := boolean(r, "tree")
 		if e != nil {
 			return nil, e
 		}
 		q := r.URL.Query()
+		if tree {
+			if q.Get("parent_id") != "" || q.Get("after") != "" || q.Has("limit") {
+				return nil, resources.ErrInput
+			}
+			return s.CourseDirectoryTree(r.Context(), p, q.Get("school_id"), q.Get("course_id"))
+		}
+		n, e := limit(r)
+		if e != nil {
+			return nil, e
+		}
 		return s.Directories(r.Context(), p, q.Get("school_id"), q.Get("course_id"), q.Get("parent_id"), n, q.Get("after"))
 	})
 	write[resources.DirectoryWrite](h, m, "PUT /api/v1/resources/directories/{id}", func(r *http.Request, p resources.Principal, in resources.DirectoryWrite) (any, error) {
@@ -221,9 +276,9 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 		out, e := s.GetPackage(r.Context(), p, r.PathValue("id"))
 		return out.Package, e
 	})
-	h.mount(m, "GET /api/v1/resources/items/{id}/download", h.download)
-	h.mount(m, "GET /api/v1/resources/items/{id}/preview", h.preview)
-	h.mount(m, "GET /api/v1/resources/packages/{id}/parts/{part}", h.downloadPackage)
+	h.mountStream(m, "GET /api/v1/resources/items/{id}/download", h.download)
+	h.mountStream(m, "GET /api/v1/resources/items/{id}/preview", h.preview)
+	h.mountStream(m, "GET /api/v1/resources/packages/{id}/parts/{part}", h.downloadPackage)
 	return m, nil
 }
 func key(r *http.Request) string { return r.Header.Get("Idempotency-Key") }
@@ -237,6 +292,28 @@ func write[T any](h *handler, m *http.ServeMux, path string, run func(*http.Requ
 	})
 }
 func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
+	h.mountWithMode(m, path, false, run)
+}
+func (h *handler) mountStream(m *http.ServeMux, path string, run endpoint) {
+	h.mountWithMode(m, path, true, run)
+}
+
+// Streaming preflight has a fixed deadline. Once bytes start flowing, each
+// socket write gets its own idle deadline and the service monitors upstream progress.
+type streamResponseWriter struct {
+	http.ResponseWriter
+	preflight *time.Timer
+	timeout   time.Duration
+}
+
+func (w *streamResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w *streamResponseWriter) Write(p []byte) (int, error) {
+	w.preflight.Stop()
+	_ = http.NewResponseController(w.ResponseWriter).SetWriteDeadline(time.Now().Add(w.timeout))
+	return w.ResponseWriter.Write(p)
+}
+
+func (h *handler) mountWithMode(m *http.ServeMux, path string, streaming bool, run endpoint) {
 	m.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -245,6 +322,41 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 			w.Header().Set("X-Request-ID", reqID)
 			r = r.WithContext(WithRequestID(r.Context(), reqID))
 		}
+		var ctx context.Context
+		var cancel context.CancelFunc
+		if streaming {
+			ctx, cancel = context.WithCancel(r.Context())
+			timeout := h.s.OperationTimeout()
+			preflight := time.AfterFunc(timeout, cancel)
+			defer preflight.Stop()
+			w = &streamResponseWriter{ResponseWriter: w, preflight: preflight, timeout: timeout}
+		} else {
+			ctx, cancel = context.WithTimeout(r.Context(), 2*time.Minute)
+		}
+		defer cancel()
+		r = r.WithContext(ctx)
+		controller := http.NewResponseController(w)
+		initialDeadline := time.Now().Add(2 * time.Minute)
+		if deadline, ok := ctx.Deadline(); ok && deadline.Before(initialDeadline) {
+			initialDeadline = deadline
+		}
+		_ = controller.SetReadDeadline(initialDeadline)
+		_ = controller.SetWriteDeadline(initialDeadline)
+		stopped := make(chan struct{})
+		stop := context.AfterFunc(ctx, func() {
+			_ = controller.SetReadDeadline(time.Now())
+			if !streaming {
+				_ = controller.SetWriteDeadline(time.Now())
+			}
+			close(stopped)
+		})
+		defer func() {
+			if !stop() {
+				<-stopped
+			}
+			_ = controller.SetReadDeadline(time.Time{})
+			_ = controller.SetWriteDeadline(time.Time{})
+		}()
 		p, e := h.auth.Authenticate(r)
 		if e != nil || !p.Valid() {
 			if errors.Is(e, resources.ErrUnavailable) {
@@ -254,16 +366,13 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 			}
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
-		defer cancel()
-		r = r.WithContext(ctx)
-		controller := http.NewResponseController(w)
-		deadline, _ := ctx.Deadline()
-		_ = controller.SetReadDeadline(deadline)
-		_ = controller.SetWriteDeadline(deadline)
-		stop := context.AfterFunc(ctx, func() { _ = controller.SetReadDeadline(time.Now()); _ = controller.SetWriteDeadline(time.Now()) })
-		defer stop()
-		r.Body = http.MaxBytesReader(w, r.Body, 128<<10)
+
+		var bodyLimit int64 = 128 << 10
+		if path == "POST /api/v1/resources/packages" {
+			// A compact request can contain 10,000 identifiers of up to 128 ASCII bytes.
+			bodyLimit = 2 << 20
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
 		if len(r.Header.Values("Idempotency-Key")) > 1 {
 			failure(w, reqID, resources.ErrInput)
 			return
@@ -301,13 +410,17 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 			return
 		}
 		if out != nil {
-			status := 200
+			codes := []int{}
 			for code := range route.Operation.Responses.Map() {
 				n, e := strconv.Atoi(code)
 				if e == nil && n >= 200 && n < 300 {
-					status = n
-					break
+					codes = append(codes, n)
 				}
+			}
+			slices.Sort(codes)
+			status := 200
+			if len(codes) > 0 {
+				status = codes[0]
 			}
 			writeJSON(w, status, out)
 		}
@@ -349,12 +462,18 @@ func boolean(r *http.Request, key string) (bool, error) {
 func filter(r *http.Request) (resources.Filter, error) {
 	q := r.URL.Query()
 	n, e := limit(r)
-	out := resources.Filter{SchoolID: q.Get("school_id"), CourseID: q.Get("course_id"), CategoryID: q.Get("category_id"), DirectoryID: q.Get("directory_id"), Query: q.Get("query"), After: q.Get("after"), Limit: n, Sort: q.Get("sort"), FileType: q.Get("file_type")}
-	if e != nil {
-		return out, e
+	failedOnly, fe := boolean(r, "failed_only")
+	out := resources.Filter{SchoolID: q.Get("school_id"), CourseID: q.Get("course_id"), CategoryID: q.Get("category_id"), DirectoryID: q.Get("directory_id"), TeacherID: q.Get("teacher_id"), TermID: q.Get("term_id"), Tag: q.Get("tag"), Access: q.Get("access"), State: q.Get("state"), ProposalState: q.Get("proposal_state"), FailedOnly: failedOnly, Query: q.Get("query"), After: q.Get("after"), Limit: n, Sort: q.Get("sort"), FileType: q.Get("file_type")}
+	if e != nil || fe != nil {
+		return out, resources.ErrInput
 	}
 	if raw := q.Get("attributes"); raw != "" {
-		if len(raw) > 16000 || json.Unmarshal([]byte(raw), &out.Attributes) != nil {
+		if !utf8.ValidString(raw) || utf8.RuneCountInString(raw) > 2000 {
+			return out, resources.ErrInput
+		}
+		d := json.NewDecoder(strings.NewReader(raw))
+		d.DisallowUnknownFields()
+		if d.Decode(&out.Attributes) != nil || d.Decode(new(any)) != io.EOF || out.Attributes == nil {
 			return out, resources.ErrInput
 		}
 	}
@@ -399,10 +518,31 @@ func failure(w http.ResponseWriter, reqID string, e error) {
 }
 
 type stream struct {
-	w          http.ResponseWriter
-	kind, name string
-	inline     bool
-	written    bool
+	w             http.ResponseWriter
+	kind, name    string
+	etag          string
+	contentRange  string
+	contentLength int64
+	bytes         int64
+	status        int
+	inline        bool
+	written       bool
+}
+
+func formatContentDisposition(disposition, name string) string {
+	cleaned := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == '/' || r == '\\' {
+			return '_'
+		}
+		return r
+	}, name)
+	cleaned = strings.TrimSpace(cleaned)
+	if cleaned != "" && cleaned != "." && cleaned != ".." {
+		if formatted := mime.FormatMediaType(disposition, map[string]string{"filename": cleaned}); formatted != "" {
+			return formatted
+		}
+	}
+	return disposition
 }
 
 func (s *stream) Write(b []byte) (int, error) {
@@ -413,11 +553,104 @@ func (s *stream) Write(b []byte) (int, error) {
 			disposition = "inline"
 			s.w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
 		}
-		s.w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": s.name}))
+		s.w.Header().Set("Content-Disposition", formatContentDisposition(disposition, s.name))
+		if s.etag != "" {
+			s.w.Header().Set("ETag", s.etag)
+			s.w.Header().Set("Accept-Ranges", "bytes")
+		}
+		if s.contentLength > 0 {
+			s.w.Header().Set("Content-Length", strconv.FormatInt(s.contentLength, 10))
+		}
+		if s.contentRange != "" {
+			s.w.Header().Set("Content-Range", s.contentRange)
+		}
+		if s.status != 0 && s.status != http.StatusOK {
+			s.w.WriteHeader(s.status)
+		}
 		s.written = true
 	}
-	return s.w.Write(b)
+	n, err := s.w.Write(b)
+	s.bytes += int64(n)
+	return n, err
 }
+
+func etagMatches(headerVal, sha256 string) bool {
+	raw := strings.TrimSpace(headerVal)
+	if raw == "" {
+		return false
+	}
+	if raw == "*" {
+		return true
+	}
+	target := "\"" + sha256 + "\""
+	for _, part := range strings.Split(raw, ",") {
+		tag := strings.TrimSpace(part)
+		tag = strings.TrimPrefix(tag, "W/")
+		if tag == target {
+			return true
+		}
+	}
+	return false
+}
+
+func parseByteRange(rangeHeader, ifRange, etag string, size int64) (*resources.ByteRange, bool) {
+	if rangeHeader == "" {
+		return nil, true
+	}
+	if cond := strings.TrimSpace(ifRange); cond != "" && cond != etag {
+		return nil, true
+	}
+	if !strings.HasPrefix(rangeHeader, "bytes=") {
+		return nil, true
+	}
+	spec := strings.TrimSpace(strings.TrimPrefix(rangeHeader, "bytes="))
+	if spec == "" || size <= 0 {
+		return nil, false
+	}
+	if strings.Contains(spec, ",") {
+		return nil, true
+	}
+	startStr, endStr, ok := strings.Cut(spec, "-")
+	if !ok || startStr == "" && endStr == "" {
+		return nil, false
+	}
+	if startStr == "" {
+		if strings.HasPrefix(endStr, "+") || strings.HasPrefix(endStr, "-") {
+			return nil, false
+		}
+		suffix, err := strconv.ParseInt(endStr, 10, 64)
+		if err != nil || suffix <= 0 {
+			return nil, false
+		}
+		if suffix >= size {
+			return &resources.ByteRange{Offset: 0, Length: size}, true
+		} else {
+			return &resources.ByteRange{Offset: size - suffix, Length: suffix}, true
+		}
+	}
+	if strings.HasPrefix(startStr, "+") || strings.HasPrefix(startStr, "-") {
+		return nil, false
+	}
+	start, err := strconv.ParseInt(startStr, 10, 64)
+	if err != nil || start < 0 || start >= size {
+		return nil, false
+	}
+	if endStr == "" {
+		return &resources.ByteRange{Offset: start, Length: size - start}, true
+	}
+	if strings.HasPrefix(endStr, "+") || strings.HasPrefix(endStr, "-") {
+		return nil, false
+	}
+	end, err := strconv.ParseInt(endStr, 10, 64)
+	if err != nil || end < start {
+		return nil, false
+	}
+	if end >= size {
+		end = size - 1
+	}
+	return &resources.ByteRange{Offset: start, Length: end - start + 1}, true
+}
+
 func (h *handler) download(w http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 	return h.file(w, r, p, false)
 }
@@ -425,24 +658,46 @@ func (h *handler) preview(w http.ResponseWriter, r *http.Request, p resources.Pr
 	return h.file(w, r, p, true)
 }
 func (h *handler) file(w http.ResponseWriter, r *http.Request, p resources.Principal, inline bool) (any, error) {
-	resource, e := h.s.Get(r.Context(), p, r.PathValue("id"))
-	if e != nil {
-		return nil, e
-	}
-	if !resource.DownloadAllowed || resource.Current == nil || resource.Current.File == nil {
-		if resource.AccessReason == "" {
-			return nil, resources.ErrDenied
+	var out *stream
+	e := h.s.StreamDownloadRange(r.Context(), p, r.PathValue("id"), func(meta resources.File) (io.Writer, *resources.ByteRange) {
+		etag := "\"" + meta.SHA256 + "\""
+		if etagMatches(r.Header.Get("If-None-Match"), meta.SHA256) {
+			w.Header().Set("ETag", etag)
+			w.Header().Set("Accept-Ranges", "bytes")
+			if inline {
+				w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
+			}
+			w.WriteHeader(http.StatusNotModified)
+			return nil, nil
 		}
-		return nil, &resources.AccessFailure{Reason: resource.AccessReason, Missing: resource.MissingConditions, Unavailable: resource.UnavailableConditions, RuleVersion: resource.RuleVersion}
-	}
-	kind := "application/octet-stream"
-	if inline {
-		kind = resource.Current.File.ContentType
-	}
-	out := &stream{w: w, kind: kind, name: resource.Current.File.Filename, inline: inline}
-	_, e = h.s.Download(r.Context(), p, resource.ID, out)
-	if e != nil && out.written {
-		panic(http.ErrAbortHandler)
+		br, satisfiable := parseByteRange(r.Header.Get("Range"), r.Header.Get("If-Range"), etag, meta.Size)
+		if !satisfiable {
+			w.Header().Set("Content-Range", "bytes */"+strconv.FormatInt(meta.Size, 10))
+			w.Header().Set("Accept-Ranges", "bytes")
+			w.Header().Set("ETag", etag)
+			writeJSON(w, http.StatusRequestedRangeNotSatisfiable, map[string]any{"code": resources.ErrInput.Error()})
+			return nil, nil
+		}
+		kind := "application/octet-stream"
+		if inline {
+			kind = meta.ContentType
+		}
+
+		out = &stream{w: w, kind: kind, name: meta.Filename, inline: inline, etag: etag, contentLength: meta.Size, status: http.StatusOK}
+		if br != nil {
+			out.status = http.StatusPartialContent
+			out.contentLength = br.Length
+			out.contentRange = fmt.Sprintf("bytes %d-%d/%d", br.Offset, br.Offset+br.Length-1, meta.Size)
+		}
+		return out, br
+	})
+	if out != nil {
+		if out.written && (e != nil || out.bytes != out.contentLength) {
+			panic(http.ErrAbortHandler)
+		}
+		if e == nil && out.bytes != out.contentLength {
+			return nil, resources.ErrUnavailable
+		}
 	}
 	return nil, e
 }

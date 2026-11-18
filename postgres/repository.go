@@ -39,7 +39,7 @@ func safe(e error) error {
 	return resources.ErrUnavailable
 }
 func (r *Repository) Transaction(ctx context.Context, run func(resources.Transaction) error) error {
-	tx, e := r.DB.BeginTx(ctx, nil)
+	tx, e := r.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if e != nil {
 		return safe(e)
 	}
@@ -104,7 +104,11 @@ func (t *transaction) SaveCategory(v resources.Category) error {
 	return t.save(`INSERT INTO resources.categories(id,revision,enabled,data) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,enabled=excluded.enabled,data=excluded.data`, v, v.ID, v.Revision, v.Enabled)
 }
 func (t *transaction) Categories(n int, after string, disabled bool) ([]resources.Category, error) {
-	return list[resources.Category](t, `SELECT data FROM resources.categories WHERE id>$1 AND ($2 OR enabled) ORDER BY id LIMIT $3`, after, disabled, n)
+	return list[resources.Category](t, `SELECT data FROM resources.categories
+ WHERE ($2 OR enabled)
+ AND ($1='' OR EXISTS(SELECT 1 FROM resources.categories c WHERE c.id=$1 AND ((resources.categories.data->>'order')::int,resources.categories.id COLLATE "C")>((c.data->>'order')::int,c.id COLLATE "C"))
+      OR (NOT EXISTS(SELECT 1 FROM resources.categories c WHERE c.id=$1) AND id COLLATE "C">$1))
+ ORDER BY (data->>'order')::int ASC,id COLLATE "C" ASC LIMIT $3`, after, disabled, n)
 }
 func (t *transaction) Record(id string) (resources.Record, error) {
 	return read[resources.Record](t, `SELECT data FROM resources.records WHERE id=$1`, id)
@@ -133,16 +137,20 @@ func (t *transaction) List(f resources.Filter) ([]resources.Record, error) {
 		attrs = []byte("{}")
 	}
 	return list[resources.Record](t, `SELECT r.data FROM resources.records r JOIN resources.versions v ON v.id=CASE WHEN $1 THEN coalesce(nullif(r.proposal_id,''),r.active_id) ELSE r.active_id END
- WHERE r.id>$2 AND ($3='' OR r.school_id=$3) AND ($4='' OR r.owner_key=$4) AND ($1 OR r.state='published')
+ WHERE r.id COLLATE "C">$2 AND ($3='' OR r.school_id=$3) AND ($4='' OR r.owner_key=$4) AND ($1 OR r.state='published')
  AND ($5='' OR v.data->'Version'->'metadata'->'associations'->>'course_id'=$5)
  AND ($6='' OR v.data->'Version'->'metadata'->>'category_id'=$6)
  AND ($7='' OR v.data->'Version'->'metadata'->>'directory_id'=$7)
  AND ($8='' OR strpos(lower(v.data->'Version'->'metadata'->>'title'),lower($8))>0)
  AND coalesce(v.data->'Version'->'metadata'->'attributes','{}'::jsonb) @> $9::jsonb
- ORDER BY r.id LIMIT $10`, f.IncludeUnpublished, f.After, f.SchoolID, f.OwnerKey, f.CourseID, f.CategoryID, f.DirectoryID, f.Query, string(attrs), f.Limit)
+ AND ($10='' OR v.data->'Version'->'metadata'->'associations'->>'teacher_id'=$10)
+ AND ($11='' OR v.data->'Version'->'metadata'->'associations'->>'term_id'=$11)
+ AND ($12='' OR coalesce(v.data->'Version'->'metadata'->'tags','[]'::jsonb) @> jsonb_build_array($12::text))
+ AND ($13='' OR v.data->'Version'->'metadata'->>'access'=$13)
+ ORDER BY r.id COLLATE "C" LIMIT $14`, f.IncludeUnpublished, f.After, f.SchoolID, f.OwnerKey, f.CourseID, f.CategoryID, f.DirectoryID, f.Query, string(attrs), f.TeacherID, f.TermID, f.Tag, f.Access, f.Limit)
 }
 func (t *transaction) Counts() (a, b, c int, e error) {
-	e = t.tx.QueryRowContext(t.ctx, `SELECT (SELECT count(*) FROM resources.records),(SELECT count(*) FROM resources.replays),(SELECT count(*) FROM resources.jobs WHERE state IN ('pending','working'))`).Scan(&a, &b, &c)
+	e = t.tx.QueryRowContext(t.ctx, `SELECT COALESCE(sum(delta) FILTER(WHERE name='records'),0),COALESCE(sum(delta) FILTER(WHERE name='replays'),0),COALESCE(sum(delta) FILTER(WHERE name='active_jobs'),0) FROM resources.counter_shards`).Scan(&a, &b, &c)
 	return a, b, c, safe(e)
 }
 func (t *transaction) Replay(key string) (resources.Replay, error) {
@@ -158,7 +166,7 @@ func (t *transaction) GrantByID(id string) (resources.GrantRecord, error) {
 	return read[resources.GrantRecord](t, `SELECT data FROM resources.grants WHERE id=$1`, id)
 }
 func (t *transaction) Grants(resource string, n int, after string) ([]resources.GrantRecord, error) {
-	return list[resources.GrantRecord](t, `SELECT data FROM resources.grants WHERE resource_id=$1 AND id>$2 ORDER BY id LIMIT $3`, resource, after, n)
+	return list[resources.GrantRecord](t, `SELECT data FROM resources.grants WHERE resource_id=$1 AND id COLLATE "C">$2 ORDER BY id COLLATE "C" LIMIT $3`, resource, after, n)
 }
 func (t *transaction) SaveGrant(v resources.GrantRecord) error {
 	return t.save(`INSERT INTO resources.grants(id,resource_id,subject_key,data,query_changed_at) VALUES($1,$2,$3,$4,clock_timestamp()) ON CONFLICT(id) DO UPDATE SET data=excluded.data,query_changed_at=clock_timestamp()`, v, v.Grant.ID, v.ResourceID, v.SubjectKey)
@@ -170,7 +178,13 @@ func (t *transaction) SaveDirectory(v resources.Directory) error {
 	return t.save(`INSERT INTO resources.directories(id,school_id,course_id,parent_id,data) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,data=excluded.data`, v, v.ID, v.SchoolID, v.CourseID, v.ParentID)
 }
 func (t *transaction) Directories(school, course, parent string, n int, after string) ([]resources.Directory, error) {
-	return list[resources.Directory](t, `SELECT data FROM resources.directories WHERE school_id=$1 AND ($2='' OR course_id=$2) AND parent_id=$3 AND id>$4 ORDER BY id LIMIT $5`, school, course, parent, after, n)
+	return t.DirectoriesFiltered(school, course, parent, n, after, true)
+}
+func (t *transaction) DirectoriesFiltered(school, course, parent string, n int, after string, includeDisabled bool) ([]resources.Directory, error) {
+	return list[resources.Directory](t, `SELECT data FROM resources.directories WHERE school_id=$1 AND ($2='' OR course_id=$2) AND parent_id=$3 AND ($6 OR COALESCE((data->>'enabled')::boolean,false)) AND id COLLATE "C">$4 ORDER BY id COLLATE "C" LIMIT $5`, school, course, parent, after, n, includeDisabled)
+}
+func (t *transaction) CourseDirectories(school, course string, limit int) ([]resources.Directory, error) {
+	return list[resources.Directory](t, `SELECT data FROM resources.directories WHERE school_id=$1 AND course_id=$2 ORDER BY id COLLATE "C" LIMIT $3`, school, course, limit)
 }
 func (t *transaction) Package(id string) (resources.PackageRecord, error) {
 	return read[resources.PackageRecord](t, `SELECT data FROM resources.packages WHERE id=$1`, id)
@@ -188,7 +202,7 @@ func (t *transaction) Job(id string) (resources.Job, error) {
 	return read[resources.Job](t, `SELECT data FROM resources.jobs WHERE id=$1`, id)
 }
 func (t *transaction) SaveJob(v resources.Job) error {
-	return t.save(`INSERT INTO resources.jobs(id,state,available_at,lease_until,data) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET state=excluded.state,available_at=excluded.available_at,lease_until=excluded.lease_until,data=excluded.data`, v, v.ID, v.State, v.AvailableAt, v.LeaseUntil)
+	return t.save(`INSERT INTO resources.jobs(id,state,available_at,lease_until,completed_at,data) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET state=excluded.state,available_at=excluded.available_at,lease_until=excluded.lease_until,completed_at=excluded.completed_at,data=excluded.data`, v, v.ID, v.State, v.AvailableAt, v.LeaseUntil, v.CompletedAt)
 }
 func (t *transaction) Event(v resources.Event) error {
 	if e := t.save(`INSERT INTO resources.audit(id,reason,result,data) VALUES($1,$2,'success',$3)`, v, v.ID, v.Reason); e != nil {
@@ -250,7 +264,7 @@ func (r *Repository) PruneJobs(ctx context.Context, before time.Time, n int) (in
 	if before.IsZero() || n < 1 || n > 1000 {
 		return 0, resources.ErrInput
 	}
-	res, e := r.DB.ExecContext(ctx, `DELETE FROM resources.jobs WHERE id IN (SELECT id FROM resources.jobs WHERE state='done' AND available_at<$1 ORDER BY available_at LIMIT $2)`, before, n)
+	res, e := r.DB.ExecContext(ctx, `DELETE FROM resources.jobs WHERE id IN (SELECT id FROM resources.jobs WHERE state='done' AND completed_at<$1 ORDER BY completed_at,id LIMIT $2 FOR UPDATE SKIP LOCKED)`, before, n)
 	if e != nil {
 		return 0, safe(e)
 	}
@@ -263,7 +277,7 @@ func (r *Repository) PruneSubmissionLimits(ctx context.Context, now time.Time, n
 	if now.IsZero() || n < 1 || n > 1000 {
 		return 0, resources.ErrInput
 	}
-	res, e := r.DB.ExecContext(ctx, `DELETE FROM resources.submission_limits WHERE owner_key IN (SELECT owner_key FROM resources.submission_limits WHERE started_at <= $1::timestamptz-interval '1 minute' ORDER BY started_at LIMIT $2)`, now, n)
+	res, e := r.DB.ExecContext(ctx, `DELETE FROM resources.submission_limits WHERE owner_key IN (SELECT owner_key FROM resources.submission_limits WHERE started_at <= $1::timestamptz-interval '1 minute' ORDER BY started_at,owner_key LIMIT $2 FOR UPDATE SKIP LOCKED)`, now, n)
 	if e != nil {
 		return 0, safe(e)
 	}
@@ -339,5 +353,49 @@ func (t *transaction) Requests(p resources.Principal, n int, after string) ([]re
 	if e != nil {
 		return nil, e
 	}
-	return list[resources.RequestRecord](t, `SELECT data FROM resources.requests WHERE data->'Reporter'=$1::jsonb AND id>$2 ORDER BY id LIMIT $3`, string(encoded), after, n)
+	return list[resources.RequestRecord](t, `SELECT data FROM resources.requests WHERE data->'Reporter'=$1::jsonb AND id COLLATE "C">$2 ORDER BY id COLLATE "C" LIMIT $3`, string(encoded), after, n)
+}
+
+func (t *transaction) DeleteDraftRecord(v resources.Record) error {
+	var linked bool
+	e := t.tx.QueryRowContext(t.ctx, `SELECT EXISTS(SELECT 1 FROM resources.requests WHERE resource_id=$1) OR EXISTS(SELECT 1 FROM resources.grants WHERE resource_id=$1) OR EXISTS(SELECT 1 FROM resources.purchases WHERE resource_id=$1)
+ OR EXISTS(SELECT 1 FROM resources.jobs WHERE data->>'ResourceID'=$1 AND data->>'Kind' IN ('publish','release') AND state <> 'done')`, v.ID).Scan(&linked)
+	if e != nil {
+		return safe(e)
+	}
+	if linked {
+		return resources.ErrConflict
+	}
+	tombstone := v
+	tombstone.Revision++
+	tombstone.State = "draft"
+	tombstone.ActiveID = ""
+	tombstone.ProposalID = ""
+	if e = t.saveDiscovery(tombstone); e != nil {
+		return e
+	}
+	if _, e = t.tx.ExecContext(t.ctx, `DELETE FROM resources.jobs WHERE data->>'ResourceID'=$1`, v.ID); e != nil {
+		return safe(e)
+	}
+	if _, e = t.tx.ExecContext(t.ctx, `DELETE FROM resources.versions WHERE resource_id=$1`, v.ID); e != nil {
+		return safe(e)
+	}
+	result, e := t.tx.ExecContext(t.ctx, `DELETE FROM resources.records WHERE id=$1`, v.ID)
+	if e != nil {
+		return safe(e)
+	}
+	n, e := result.RowsAffected()
+	if e != nil {
+		return safe(e)
+	}
+	if n == 0 {
+		return resources.ErrNotFound
+	}
+	return nil
+}
+
+func (t *transaction) DeletedRecordSchool(id string) (string, error) {
+	var school string
+	e := t.tx.QueryRowContext(t.ctx, `SELECT data->>'school_id' FROM resources.discovery_history WHERE id=$1 ORDER BY revision DESC LIMIT 1`, id).Scan(&school)
+	return school, safe(e)
 }

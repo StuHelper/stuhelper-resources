@@ -5,8 +5,37 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"time"
 )
+
+type AccessFactTarget struct {
+	ResourceID  string `json:"resource_id"`
+	SchoolID    string `json:"school_id"`
+	DirectoryID string `json:"directory_id"`
+	CategoryID  string `json:"category_id"`
+}
+
+type AccessFacts struct {
+	Granted   bool
+	Purchased bool
+	Member    bool
+}
+
+type BatchReadTransaction interface {
+	RecordsByIDs([]string) (map[string]Record, error)
+	VersionsByIDs([]string) (map[string]VersionRecord, error)
+	AccessFactsBatch(string, time.Time, []AccessFactTarget) (map[string]AccessFacts, error)
+}
+
+func (s *Service) withRequestAuthority() *Service {
+	if _, ok := s.deps.Authority.(*requestAuthority); ok {
+		return s
+	}
+	copy := *s
+	copy.deps.Authority = &requestAuthority{source: s.deps.Authority, results: map[authorizationKey]error{}}
+	return &copy
+}
 
 func (s *Service) version(ctx context.Context, id string) (VersionRecord, error) {
 	var v VersionRecord
@@ -15,9 +44,44 @@ func (s *Service) version(ctx context.Context, id string) (VersionRecord, error)
 }
 func denied(e error) bool { return errors.Is(e, ErrDenied) || errors.Is(e, ErrUnauthenticated) }
 
+func loadSingleAccessFacts(tx Transaction, ownerKey string, r Record, v VersionRecord, now time.Time) (AccessFacts, error) {
+	var out AccessFacts
+	if ownerKey == "" {
+		return out, nil
+	}
+	if port, ok := tx.(BatchReadTransaction); ok {
+		m, err := port.AccessFactsBatch(ownerKey, now, []AccessFactTarget{{
+			ResourceID:  r.ID,
+			SchoolID:    r.SchoolID,
+			DirectoryID: v.Version.Metadata.DirectoryID,
+			CategoryID:  v.Version.Metadata.CategoryID,
+		}})
+		return m[r.ID], err
+	}
+	if r.State == "published" {
+		grant, err := tx.Grant(r.ID, ownerKey)
+		if err == nil && !grant.Grant.Revoked && (grant.Grant.ExpiresAt == nil || now.Before(*grant.Grant.ExpiresAt)) {
+			out.Granted = true
+		} else if err != nil && !errors.Is(err, ErrNotFound) {
+			return out, err
+		}
+	}
+	rights, err := tx.Rights(ownerKey, r.ID, r.SchoolID, v.Version.Metadata.DirectoryID, v.Version.Metadata.CategoryID, now)
+	if err != nil {
+		return out, err
+	}
+	out.Purchased = rights.Purchased
+	out.Member = rights.Member
+	return out, nil
+}
+
 // access evaluates current identity facts and each independent source of rights.
 // Ordinary unlisting retains purchased delivery only; a safety block denies all.
 func (s *Service) access(ctx context.Context, p Principal, r Record, v VersionRecord) error {
+	return s.accessWithFacts(ctx, p, r, v, nil)
+}
+
+func (s *Service) accessWithFacts(ctx context.Context, p Principal, r Record, v VersionRecord, preloaded *AccessFacts) error {
 	if r.State == "blocked" || v.Version.State == "blocked" {
 		return &AccessFailure{Reason: "resource_unavailable"}
 	}
@@ -44,46 +108,142 @@ func (s *Service) access(ctx context.Context, p Principal, r Record, v VersionRe
 	if e = s.auth(ctx, p, action, r.SchoolID); e != nil {
 		return e
 	}
-	if r.State == "published" {
-		if v.Version.Metadata.Access == "public" {
-			return nil
-		}
-		var grant GrantRecord
-		err := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; grant, e = tx.Grant(r.ID, p.Key()); return e })
-		if err == nil && !grant.Grant.Revoked && (grant.Grant.ExpiresAt == nil || s.now().Before(*grant.Grant.ExpiresAt)) {
-			return nil
-		}
-		if err != nil && !errors.Is(err, ErrNotFound) {
+	if r.State == "published" && v.Version.Metadata.Access == "public" {
+		return nil
+	}
+	var facts AccessFacts
+	if preloaded != nil {
+		facts = *preloaded
+	} else {
+		err := s.repo.Transaction(ctx, func(tx Transaction) error {
+			var e error
+			facts, e = loadSingleAccessFacts(tx, p.Key(), r, v, s.now())
+			return e
+		})
+		if err != nil {
 			return err
 		}
 	}
-	rights, err := s.localRights(ctx, p, r, v)
+	if r.State == "published" && facts.Granted {
+		return nil
+	}
+	if facts.Purchased || r.State == "published" && facts.Member {
+		return nil
+	}
+	return &AccessFailure{Reason: "requirements_missing", Missing: []string{"resource_entitlement"}}
+}
+
+func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, error) {
+	if !validID(id) {
+		return Resource{}, ErrInput
+	}
+	s = s.withRequestAuthority()
+	var r Record
+	var activeV, proposalV *VersionRecord
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
+		var e error
+		r, e = tx.Record(id)
+		if e != nil {
+			return e
+		}
+		if r.ActiveID != "" {
+			v, e := tx.Version(r.ActiveID)
+			if e != nil {
+				return e
+			}
+			activeV = &v
+		}
+		if r.ProposalID != "" {
+			if activeV != nil && r.ProposalID == activeV.Version.ID {
+				cp := *activeV
+				proposalV = &cp
+			} else {
+				v, e := tx.Version(r.ProposalID)
+				if e != nil {
+					return e
+				}
+				proposalV = &v
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return Resource{}, err
+	}
+	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil, false)
+}
+func populateAdminOperation(tx Transaction, r Record, out *Resource) error {
+	if out.Proposal == nil || (out.Proposal.State != "pending" && out.Proposal.State != "preparing") {
+		return nil
+	}
+	kind := "review"
+	if out.Proposal.State == "preparing" {
+		kind = "publish"
+	}
+	job, err := tx.Job(hash([]string{kind, r.ID, out.Proposal.ID, "", ""}))
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
-	if rights.Purchased || r.State == "published" && rights.Member {
-		return nil
+	if job.State == "pending" || job.State == "working" || job.State == "failed" {
+		out.OperationState = job.State
+		if job.ErrorCode == "resources_dependency_pending" || job.ErrorCode == "resources_dependency_failed" {
+			out.OperationErrorCode = job.ErrorCode
+		}
 	}
+	return nil
+}
 
-	return &AccessFailure{Reason: "requirements_missing", Missing: []string{"resource_entitlement"}}
-}
-func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, error) {
-	var out Resource
-	r, e := s.record(ctx, id)
-	if e != nil {
-		return out, e
-	}
-	return s.getRecord(ctx, p, r)
-}
 func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resource, error) {
+	return s.getRecordWithEntitlement(ctx, p, r, false)
+}
+func (s *Service) getRecordWithEntitlement(ctx context.Context, p Principal, r Record, entitledPurchaser bool) (Resource, error) {
+	var activeV, proposalV *VersionRecord
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
+		if r.ActiveID != "" {
+			v, e := tx.Version(r.ActiveID)
+			if e != nil {
+				return e
+			}
+			activeV = &v
+		}
+		if r.ProposalID != "" {
+			if activeV != nil && r.ProposalID == activeV.Version.ID {
+				cp := *activeV
+				proposalV = &cp
+			} else {
+				v, e := tx.Version(r.ProposalID)
+				if e != nil {
+					return e
+				}
+				proposalV = &v
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return Resource{}, err
+	}
+	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil, entitledPurchaser)
+}
+
+func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Record, activeV, proposalV *VersionRecord, facts *AccessFacts, entitledPurchaser bool) (Resource, error) {
 	var out Resource
 	var e error
+	isManager := false
 	privileged := r.Owner == p && p.Valid()
 	if !privileged {
 		e = s.auth(ctx, p, "manage", r.SchoolID)
-		privileged = e == nil
+		isManager = e == nil
+		privileged = isManager
 		if e != nil && !denied(e) {
 			return out, e
+		}
+	} else {
+		if s.auth(ctx, p, "manage", r.SchoolID) == nil {
+			isManager = true
 		}
 	}
 	if !privileged {
@@ -94,21 +254,31 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 			return out, ErrNotFound
 		}
 	}
-	e = s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = ownerView(tx, r, p); return e })
-	if e != nil {
-		return out, e
+	out = Resource{ID: r.ID, Revision: r.Revision, State: r.State, Owned: r.Owner == p, AccessReason: "not_checked"}
+	if activeV != nil {
+		out.Current = publishedVersionView(activeV.Version)
 	}
-	if !privileged {
-		out.Proposal = nil
+	if privileged && proposalV != nil {
+		ver := proposalV.Version
+		out.Proposal = &ver
 	}
-	if out.Current == nil {
+	needJob := isManager && out.Proposal != nil && (out.Proposal.State == "pending" || out.Proposal.State == "preparing")
+	if hasInstructor(&out) || needJob {
+		if err := s.repo.Transaction(ctx, func(tx Transaction) error {
+			if needJob {
+				if err := populateAdminOperation(tx, r, &out); err != nil {
+					return err
+				}
+			}
+			return redactClosedInstructor(tx, r.Owner, &out)
+		}); err != nil {
+			return Resource{}, err
+		}
+	}
+	if activeV == nil {
 		return out, nil
 	}
-	v, e := s.version(ctx, out.Current.ID)
-	if e != nil {
-		return out, e
-	}
-	e = s.access(ctx, p, r, v)
+	e = s.accessWithFacts(ctx, p, r, *activeV, facts)
 	if e == nil {
 		out.DownloadAllowed = true
 		out.AccessReason = "allowed"
@@ -137,7 +307,7 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 		out.AvailableMethods = []string{"download"}
 		out.UnlockReason = "already_accessible"
 	} else {
-		decision, err := s.unlockEligibilityFor(ctx, p, r, v, e)
+		decision, err := s.unlockEligibilityFor(ctx, p, r, *activeV, e)
 		if err == nil {
 			out.UnlockReason = decision.Reason
 			if decision.Eligible {
@@ -148,7 +318,7 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 		}
 	}
 	// Unlisted content is visible only to its owner, administrators or current purchasers.
-	if r.State == "unlisted" && !privileged && !out.DownloadAllowed {
+	if r.State == "unlisted" && !privileged && !out.DownloadAllowed && !entitledPurchaser {
 		return Resource{}, ErrNotFound
 	}
 	return out, nil
@@ -156,11 +326,9 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin bool) (Page, error) {
 	// Reuse only this request's school/action decisions. Every subsequent request
 	// starts with current facts; per-resource grants and state remain independent.
-	copy := *s
-	copy.deps.Authority = &requestAuthority{source: s.deps.Authority, results: map[authorizationKey]error{}}
-	s = &copy
+	s = s.withRequestAuthority()
 	out := Page{Items: []Resource{}}
-	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) {
+	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) || validBrowseFilters(f) != nil || validAdminFilters(f, admin) != nil {
 		return out, ErrInput
 	}
 	if mine && admin {
@@ -194,6 +362,11 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 	}
 	if e := prepareBrowse(&f); e != nil {
 		return out, e
+	}
+	if !mine {
+		if e := s.validateFilterAssociations(ctx, Associations{SchoolID: f.SchoolID, TermID: f.TermID, TeacherID: f.TeacherID}); e != nil {
+			return out, e
+		}
 	}
 	f.CourseIDs = nil
 	if f.CourseID != "" {
@@ -236,15 +409,12 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 	if more {
 		records = records[:f.Limit]
 	}
-	for _, record := range records {
-		v, e := s.getRecord(ctx, p, record)
-		if errors.Is(e, ErrNotFound) || denied(e) {
-			continue
+	if len(records) > 0 {
+		items, err := s.hydrateRecords(ctx, p, records)
+		if err != nil {
+			return Page{}, err
 		}
-		if e != nil {
-			return Page{}, e
-		}
-		out.Items = append(out.Items, v)
+		out.Items = items
 	}
 	if more {
 		out.NextCursor, e = encodeBrowseCursor(f, records[len(records)-1])
@@ -254,47 +424,441 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 	}
 	return out, nil
 }
+
+func (s *Service) hydrateRecords(ctx context.Context, p Principal, records []Record) ([]Resource, error) {
+	var versions map[string]VersionRecord
+	var factsMap map[string]AccessFacts
+	batched := false
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
+		port, ok := tx.(BatchReadTransaction)
+		if !ok {
+			return nil
+		}
+		batched = true
+		verIDs := make([]string, 0, len(records)*2)
+		seenVer := map[string]bool{}
+		for _, r := range records {
+			for _, vid := range []string{r.ActiveID, r.ProposalID} {
+				if vid != "" && !seenVer[vid] {
+					seenVer[vid] = true
+					verIDs = append(verIDs, vid)
+				}
+			}
+		}
+		var e error
+		versions, e = port.VersionsByIDs(verIDs)
+		if e != nil {
+			return e
+		}
+		if p.Valid() {
+			targets := make([]AccessFactTarget, 0, len(records))
+			for _, r := range records {
+				if r.ActiveID == "" {
+					continue
+				}
+				v, ok := versions[r.ActiveID]
+				if !ok {
+					continue
+				}
+				if r.State == "published" && v.Version.Metadata.Access == "public" {
+					continue
+				}
+				targets = append(targets, AccessFactTarget{
+					ResourceID:  r.ID,
+					SchoolID:    r.SchoolID,
+					DirectoryID: v.Version.Metadata.DirectoryID,
+					CategoryID:  v.Version.Metadata.CategoryID,
+				})
+			}
+			factsMap, e = port.AccessFactsBatch(p.Key(), s.now(), targets)
+			if e != nil {
+				return e
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Resource, 0, len(records))
+	for _, record := range records {
+		var v Resource
+		var e error
+		if !batched {
+			v, e = s.getRecord(ctx, p, record)
+		} else {
+			var activePtr, proposalPtr *VersionRecord
+			var factsPtr *AccessFacts
+			if record.ActiveID != "" {
+				av, ok := versions[record.ActiveID]
+				if !ok {
+					return nil, ErrNotFound
+				}
+				activePtr = &av
+				f := factsMap[record.ID]
+				factsPtr = &f
+			}
+			if record.ProposalID != "" {
+				pv, ok := versions[record.ProposalID]
+				if !ok {
+					return nil, ErrNotFound
+				}
+				proposalPtr = &pv
+			}
+			v, e = s.evaluatePreloadedRecord(ctx, p, record, activePtr, proposalPtr, factsPtr, false)
+		}
+		if errors.Is(e, ErrNotFound) || denied(e) {
+			continue
+		}
+		if e != nil {
+			return nil, e
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+type schoolSelection struct {
+	Selection
+	schoolID string
+}
+
+func (s *Service) selectBatch(ctx context.Context, p Principal, ids []string) (map[string]schoolSelection, map[string]error, error) {
+	s = s.withRequestAuthority()
+	selections := make(map[string]schoolSelection, len(ids))
+	itemErrs := make(map[string]error, len(ids))
+	const chunkSize = 200
+	for start := 0; start < len(ids); start += chunkSize {
+		end := min(start+chunkSize, len(ids))
+		chunk := ids[start:end]
+		var records map[string]Record
+		var versions map[string]VersionRecord
+		var factsMap map[string]AccessFacts
+		batched := false
+		err := s.repo.Transaction(ctx, func(tx Transaction) error {
+			port, ok := tx.(BatchReadTransaction)
+			if !ok {
+				return nil
+			}
+			batched = true
+			var e error
+			records, e = port.RecordsByIDs(chunk)
+			if e != nil {
+				return e
+			}
+			verIDs := make([]string, 0, len(records))
+			seenVer := map[string]bool{}
+			for _, rec := range records {
+				if rec.ActiveID != "" && !seenVer[rec.ActiveID] {
+					seenVer[rec.ActiveID] = true
+					verIDs = append(verIDs, rec.ActiveID)
+				}
+			}
+			versions, e = port.VersionsByIDs(verIDs)
+			if e != nil {
+				return e
+			}
+			if p.Valid() {
+				targets := make([]AccessFactTarget, 0, len(records))
+				for _, rec := range records {
+					if rec.ActiveID == "" {
+						continue
+					}
+					v, ok := versions[rec.ActiveID]
+					if !ok || (rec.State == "published" && v.Version.Metadata.Access == "public") {
+						continue
+					}
+					targets = append(targets, AccessFactTarget{
+						ResourceID:  rec.ID,
+						SchoolID:    rec.SchoolID,
+						DirectoryID: v.Version.Metadata.DirectoryID,
+						CategoryID:  v.Version.Metadata.CategoryID,
+					})
+				}
+				factsMap, e = port.AccessFactsBatch(p.Key(), s.now(), targets)
+				if e != nil {
+					return e
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, id := range chunk {
+			if !batched {
+				sel, school, e := s.selectionWithSchool(ctx, p, id, true)
+				if e != nil {
+					itemErrs[id] = e
+				} else {
+					selections[id] = schoolSelection{Selection: sel, schoolID: school}
+				}
+				continue
+			}
+			rec, ok := records[id]
+			if !ok {
+				itemErrs[id] = ErrNotFound
+				continue
+			}
+			if e := s.auth(ctx, p, "package", rec.SchoolID); e != nil {
+				itemErrs[id] = e
+				continue
+			}
+			if rec.ActiveID == "" {
+				itemErrs[id] = ErrDenied
+				continue
+			}
+			ver, ok := versions[rec.ActiveID]
+			if !ok {
+				itemErrs[id] = ErrNotFound
+				continue
+			}
+			f := factsMap[rec.ID]
+			if e := s.accessWithFacts(ctx, p, rec, ver, &f); e != nil {
+				itemErrs[id] = e
+				continue
+			}
+			if ver.Version.File == nil {
+				itemErrs[id] = ErrUnavailable
+				continue
+			}
+			selections[id] = schoolSelection{Selection: Selection{ResourceID: rec.ID, VersionID: ver.Version.ID, ReferenceID: ver.ReferenceID, File: *ver.Version.File}, schoolID: rec.SchoolID}
+		}
+	}
+	return selections, itemErrs, nil
+}
+
 func (s *Service) selection(ctx context.Context, p Principal, id string) (Selection, error) {
+	sel, _, err := s.selectionWithSchool(ctx, p, id, false)
+	return sel, err
+}
+func (s *Service) selectionWithSchool(ctx context.Context, p Principal, id string, forPackage bool) (Selection, string, error) {
 	var out Selection
-	r, e := s.record(ctx, id)
-	if e != nil {
-		return out, e
+	if !validID(id) {
+		return out, "", ErrInput
+	}
+	var r Record
+	var v VersionRecord
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
+		var e error
+		r, e = tx.Record(id)
+		if e != nil {
+			return e
+		}
+		if r.ActiveID == "" {
+			return nil
+		}
+		v, e = tx.Version(r.ActiveID)
+		if e != nil {
+			return e
+		}
+		return nil
+	})
+	if err != nil {
+		return out, "", err
+	}
+	if forPackage {
+		if e := s.auth(ctx, p, "package", r.SchoolID); e != nil {
+			return out, "", e
+		}
 	}
 	if r.ActiveID == "" {
-		return out, ErrDenied
+		return out, "", ErrDenied
 	}
-	v, e := s.version(ctx, r.ActiveID)
-	if e != nil {
-		return out, e
-	}
-	if e = s.access(ctx, p, r, v); e != nil {
-		return out, e
+	if e := s.accessWithFacts(ctx, p, r, v, nil); e != nil {
+		return out, "", e
 	}
 	if v.Version.File == nil {
-		return out, ErrUnavailable
+		return out, "", ErrUnavailable
 	}
-	return Selection{ResourceID: r.ID, VersionID: v.Version.ID, ReferenceID: v.ReferenceID, File: *v.Version.File}, nil
+	return Selection{ResourceID: r.ID, VersionID: v.Version.ID, ReferenceID: v.ReferenceID, File: *v.Version.File}, r.SchoolID, nil
 }
+
+var errRangeStop = errors.New("range_complete")
+
+type slicingWriter struct {
+	w       io.Writer
+	skip    int64
+	remain  int64
+	written int64
+	stop    func()
+}
+
+func (s *slicingWriter) Write(p []byte) (int, error) {
+	total := len(p)
+	if s.skip > 0 {
+		if int64(len(p)) <= s.skip {
+			s.skip -= int64(len(p))
+			return total, nil
+		}
+		p = p[s.skip:]
+		s.skip = 0
+	}
+	if s.remain <= 0 {
+		if s.stop != nil {
+			s.stop()
+		}
+		return 0, errRangeStop
+	}
+	take := p
+	done := false
+	if int64(len(take)) >= s.remain {
+		take = take[:s.remain]
+		done = true
+	}
+	n, err := s.w.Write(take)
+	s.written += int64(n)
+	s.remain -= int64(n)
+	if err != nil {
+		return n, err
+	}
+	if done {
+		if s.stop != nil {
+			s.stop()
+		}
+		if len(take) == len(p) {
+			return total, nil
+		}
+		return 0, errRangeStop
+	}
+	return total, nil
+}
+
+func (s *Service) StreamDownload(ctx context.Context, p Principal, id string, open func(File) io.Writer) error {
+	return s.StreamDownloadRange(ctx, p, id, func(f File) (io.Writer, *ByteRange) { return open(f), nil })
+}
+
+// StreamDownloadRange authorizes one selection and uses it for both response
+// metadata and transfer. A nil writer completes a conditional request.
+func (s *Service) StreamDownloadRange(ctx context.Context, p Principal, id string, open func(File) (io.Writer, *ByteRange)) error {
+	if !validID(id) {
+		return ErrInput
+	}
+	s = s.withRequestAuthority()
+	var r Record
+	var activeV *VersionRecord
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
+		var e error
+		r, e = tx.Record(id)
+		if e != nil {
+			return e
+		}
+		if r.ActiveID != "" {
+			v, e := tx.Version(r.ActiveID)
+			if e != nil {
+				return e
+			}
+			activeV = &v
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	privileged := r.Owner == p && p.Valid()
+	if !privileged {
+		e := s.auth(ctx, p, "manage", r.SchoolID)
+		privileged = e == nil
+		if e != nil && !denied(e) {
+			return e
+		}
+	}
+	if !privileged {
+		if e := s.auth(ctx, p, "discover", r.SchoolID); e != nil {
+			return e
+		}
+		if r.State != "published" && r.State != "unlisted" {
+			return ErrNotFound
+		}
+	}
+	if activeV == nil || activeV.Version.File == nil {
+		return &AccessFailure{Reason: "resource_unavailable"}
+	}
+	if e := s.accessWithFacts(ctx, p, r, *activeV, nil); e != nil {
+		if r.State == "unlisted" && !privileged && denied(e) {
+			return ErrNotFound
+		}
+		var detail *AccessFailure
+		if denied(e) && !errors.As(e, &detail) {
+			return &AccessFailure{Reason: "permission_denied"}
+		}
+		return e
+	}
+	f := *activeV.Version.File
+	w, br := open(f)
+	if w == nil {
+		return nil
+	}
+	if br != nil {
+		return s.transferRange(ctx, p, activeV.ReferenceID, f.Size, *br, w)
+	}
+	return s.withStreamIdleTimeout(ctx, w, func(work context.Context, out io.Writer) error {
+		return s.deps.Files.Download(work, p, activeV.ReferenceID, out)
+	})
+}
+
 func (s *Service) Download(ctx context.Context, p Principal, id string, w io.Writer) (File, error) {
+	s = s.withRequestAuthority()
 	selected, e := s.selection(ctx, p, id)
 	if e != nil {
 		return File{}, e
 	}
-	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
-	defer cancel()
-	e = s.deps.Files.Download(work, p, selected.ReferenceID, w)
+	e = s.withStreamIdleTimeout(ctx, w, func(streamCtx context.Context, out io.Writer) error {
+		return s.deps.Files.Download(streamCtx, p, selected.ReferenceID, out)
+	})
 	return selected.File, e
+}
+func (s *Service) DownloadRange(ctx context.Context, p Principal, id string, br ByteRange, w io.Writer) (File, error) {
+	if br.Offset < 0 || br.Length < 1 {
+		return File{}, ErrInput
+	}
+	selected, e := s.selection(ctx, p, id)
+	if e != nil {
+		return File{}, e
+	}
+	return selected.File, s.transferRange(ctx, p, selected.ReferenceID, selected.File.Size, br, w)
+}
+
+func (s *Service) transferRange(ctx context.Context, p Principal, ref string, size int64, br ByteRange, w io.Writer) error {
+	if br.Offset < 0 || br.Length < 1 || br.Offset >= size || br.Length > size-br.Offset {
+		return ErrInput
+	}
+	return s.withStreamIdleTimeout(ctx, w, func(work context.Context, out io.Writer) error {
+		if rf, ok := s.deps.Files.(RangeFiles); ok {
+			limited := &slicingWriter{w: out, remain: br.Length}
+			err := rf.DownloadRange(work, p, ref, br, limited)
+			if err == nil && limited.written != br.Length {
+				return ErrUnavailable
+			}
+			return err
+		}
+		stream, stop := context.WithCancel(work)
+		defer stop()
+		sliced := &slicingWriter{w: out, skip: br.Offset, remain: br.Length, stop: stop}
+		err := s.deps.Files.Download(stream, p, ref, sliced)
+		if sliced.written == br.Length && (err == nil || errors.Is(err, errRangeStop) || errors.Is(err, context.Canceled)) {
+			return nil
+		}
+		if err == nil {
+			return ErrUnavailable
+		}
+		return err
+	})
 }
 func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in StateChange) (Resource, error) {
 	var out Resource
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || in.Revision < 1 || !text(in.Reason, 2000) || strings.TrimSpace(in.Reason) == "" || in.State != "published" && in.State != "unlisted" && in.State != "blocked" {
+		return out, ErrInput
+	}
 	r, e := s.record(ctx, id)
 	if e != nil {
 		return out, e
 	}
-	if in.Revision < 1 || !text(in.Reason, 2000) || strings.TrimSpace(in.Reason) == "" || in.State != "published" && in.State != "unlisted" && in.State != "blocked" {
-		return out, ErrInput
-	}
-	e = s.mutation(ctx, p, "manage", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+	budget := mutationBudget{exemptOps: in.State == "blocked" || in.State == "unlisted"}
+	e = s.mutationWithBudget(ctx, p, "manage", r.SchoolID, key, id, in, &budget, func(tx Transaction) (any, error) {
 		if e := tx.Lock("resource:" + id); e != nil {
 			return nil, e
 		}
@@ -319,14 +883,21 @@ func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in 
 }
 func (s *Service) PutGrant(ctx context.Context, p Principal, id, grantID, key string, in GrantWrite) (Grant, error) {
 	var out Grant
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(grantID) || !validID(key) || in.Revision < 0 || in.ExpiresAt != nil && !in.ExpiresAt.After(s.now()) {
+		return out, ErrInput
+	}
+	if _, err := ParsePrincipalKey(in.SubjectKey); err != nil {
+		return out, ErrInput
+	}
 	r, e := s.record(ctx, id)
 	if e != nil {
 		return out, e
 	}
-	if !validID(grantID) || in.Revision < 0 || in.SubjectKey == "" || !text(in.SubjectKey, 1100) || in.ExpiresAt != nil && !in.ExpiresAt.After(s.now()) {
-		return out, ErrInput
-	}
-	e = s.mutation(ctx, p, "grants.manage", r.SchoolID, key, id+":"+grantID, in, func(tx Transaction) (any, error) {
+	budget := mutationBudget{exemptOps: in.Revoked && in.Revision > 0}
+	e = s.mutationWithBudget(ctx, p, "grants.manage", r.SchoolID, key, id+":"+grantID, in, &budget, func(tx Transaction) (any, error) {
 		if e := tx.Lock("grant:" + id + ":" + in.SubjectKey); e != nil {
 			return nil, e
 		}
@@ -340,6 +911,8 @@ func (s *Service) PutGrant(ctx context.Context, p Principal, id, grantID, key st
 		} else if old.ResourceID != id || old.SubjectKey != in.SubjectKey || old.Grant.Revision != in.Revision {
 			return nil, ErrConflict
 		}
+		// A new key for an already revoked grant is an ordinary update.
+		budget.exemptOps = budget.exemptOps && !old.Grant.Revoked
 		out = Grant{SubjectKey: in.SubjectKey, ID: grantID, Revision: in.Revision + 1, ExpiresAt: in.ExpiresAt, Revoked: in.Revoked}
 		if e = tx.SaveGrant(GrantRecord{Grant: out, ResourceID: id, SubjectKey: in.SubjectKey}); e != nil {
 			return nil, e
@@ -376,13 +949,20 @@ func (s *Service) Grants(ctx context.Context, p Principal, id string, n int, aft
 	}
 	return out, e
 }
+
+// requestCreation keeps the resource revision for the event while encoding
+// exactly the public receipt in the idempotency record.
+type requestCreation struct {
+	RequestReceipt
+	resourceRevision int64
+}
+
 func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string, in Request) (RequestReceipt, error) {
 	var out RequestReceipt
-	r, e := s.record(ctx, id)
-	if e != nil {
-		return out, e
+	if !p.Valid() {
+		return out, ErrUnauthenticated
 	}
-	if !text(in.Reason, 2000) || strings.TrimSpace(in.Reason) == "" || !text(in.Contact, 500) || len(in.Evidence) > 4 {
+	if !validID(id) || !validID(key) || !text(in.Reason, 2000) || strings.TrimSpace(in.Reason) == "" || !text(in.Contact, 500) || len(in.Evidence) > 4 {
 		return out, ErrInput
 	}
 	for _, evidence := range in.Evidence {
@@ -393,28 +973,29 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 	if in.Kind == "appeal" && !validID(in.PreviousTaskID) || in.Kind != "appeal" && in.PreviousTaskID != "" {
 		return out, ErrInput
 	}
-	switch in.Kind {
-	case "withdrawal", "appeal":
-		if r.Owner != p {
-			return out, ErrDenied
-		}
-	case "complaint":
-		if in.Contact == "" || len(in.Evidence) == 0 {
-			return out, ErrInput
-		}
-	default:
+	if in.Kind != "withdrawal" && in.Kind != "appeal" && in.Kind != "complaint" {
 		return out, ErrInput
+	}
+	if in.Kind == "complaint" && (in.Contact == "" || len(in.Evidence) == 0) {
+		return out, ErrInput
+	}
+	r, e := s.record(ctx, id)
+	if e != nil {
+		return out, e
+	}
+	if (in.Kind == "withdrawal" || in.Kind == "appeal") && r.Owner != p {
+		return out, ErrDenied
 	}
 	// Title disclosure is fixed at submission. A later qualification change or
 	// idempotent retry cannot add a title to a receipt created without admission.
-	includeTitle := in.Kind != "complaint" && r.Owner == p && p.Valid()
-	if !includeTitle && r.State == "published" && r.ActiveID != "" && p.Valid() {
-		includeTitle = s.auth(ctx, p, "discover", r.SchoolID) == nil
+	discoverOK := false
+	if !(in.Kind != "complaint" && r.Owner == p) {
+		discoverOK = s.auth(ctx, p, "discover", r.SchoolID) == nil
 	}
 	if err := ctx.Err(); err != nil {
 		return out, err
 	}
-	e = s.mutation(ctx, p, "request", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+	e = s.mutationWithBudget(ctx, p, "request", r.SchoolID, key, id, in, &mutationBudget{addJob: true}, func(tx Transaction) (any, error) {
 		if in.Kind == "complaint" {
 			limiter, ok := tx.(interface{ LimitSubmission(string, time.Time) error })
 			if !ok {
@@ -424,12 +1005,26 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 				return nil, err
 			}
 		}
-		versionID := r.ActiveID
+		if e := tx.Lock("resource:" + id); e != nil {
+			return nil, e
+		}
+		latest, e := tx.Record(id)
+		if e != nil {
+			return nil, e
+		}
+		if (in.Kind == "withdrawal" || in.Kind == "appeal") && latest.Owner != p {
+			return nil, ErrDenied
+		}
+		versionID := latest.ActiveID
 		if versionID == "" {
-			versionID = r.ProposalID
+			versionID = latest.ProposalID
 		}
 		if versionID == "" {
 			return nil, ErrConflict
+		}
+		includeTitle := in.Kind != "complaint" && latest.Owner == p && p.Valid()
+		if !includeTitle && latest.State == "published" && latest.ActiveID != "" {
+			includeTitle = discoverOK
 		}
 		out = RequestReceipt{ID: newID(), State: "pending", ResourceID: id, Kind: in.Kind, CreatedAt: s.now()}
 		if includeTitle {
@@ -445,7 +1040,7 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 		if e := s.queue(tx, "request", id, "", out.ID, ""); e != nil {
 			return nil, e
 		}
-		return out, nil
+		return requestCreation{RequestReceipt: out, resourceRevision: latest.Revision}, nil
 	}, &out)
 	return out, e
 }
@@ -455,6 +1050,7 @@ type authorizationKey struct {
 	Action, Scope string
 }
 type requestAuthority struct {
+	mu      sync.Mutex
 	source  Authority
 	results map[authorizationKey]error
 }
@@ -464,10 +1060,15 @@ func (a *requestAuthority) Check(ctx context.Context, p Principal, action, scope
 		return err
 	}
 	key := authorizationKey{p, action, scope}
+	a.mu.Lock()
 	if err, ok := a.results[key]; ok {
+		a.mu.Unlock()
 		return err
 	}
+	a.mu.Unlock()
 	err := a.source.Check(ctx, p, action, scope)
+	a.mu.Lock()
 	a.results[key] = err
+	a.mu.Unlock()
 	return err
 }
