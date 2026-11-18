@@ -197,7 +197,7 @@ func (s *Service) AttachFile(ctx context.Context, p Principal, id, key string, i
 	defer cancel()
 	file, e := s.deps.Files.Inspect(work, p, in.MediaVersionID)
 	if e != nil {
-		return out, e
+		return out, normalizeDepError(ctx, e)
 	}
 	if file.SchoolID != r.SchoolID {
 		return out, ErrDenied
