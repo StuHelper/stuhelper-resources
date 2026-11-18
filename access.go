@@ -255,25 +255,29 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 	return out, nil
 }
 func (s *Service) selection(ctx context.Context, p Principal, id string) (Selection, error) {
+	sel, _, err := s.selectionWithSchool(ctx, p, id)
+	return sel, err
+}
+func (s *Service) selectionWithSchool(ctx context.Context, p Principal, id string) (Selection, string, error) {
 	var out Selection
 	r, e := s.record(ctx, id)
 	if e != nil {
-		return out, e
+		return out, "", e
 	}
 	if r.ActiveID == "" {
-		return out, ErrDenied
+		return out, "", ErrDenied
 	}
 	v, e := s.version(ctx, r.ActiveID)
 	if e != nil {
-		return out, e
+		return out, "", e
 	}
 	if e = s.access(ctx, p, r, v); e != nil {
-		return out, e
+		return out, "", e
 	}
 	if v.Version.File == nil {
-		return out, ErrUnavailable
+		return out, "", ErrUnavailable
 	}
-	return Selection{ResourceID: r.ID, VersionID: v.Version.ID, ReferenceID: v.ReferenceID, File: *v.Version.File}, nil
+	return Selection{ResourceID: r.ID, VersionID: v.Version.ID, ReferenceID: v.ReferenceID, File: *v.Version.File}, r.SchoolID, nil
 }
 func (s *Service) Download(ctx context.Context, p Principal, id string, w io.Writer) (File, error) {
 	selected, e := s.selection(ctx, p, id)

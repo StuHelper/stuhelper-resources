@@ -1,7 +1,7 @@
 ---
 type: spec
 status: Accepted
-updated: 2026-11-10
+updated: 2026-11-18
 ---
 
 # 资料分类、发布与交付
@@ -117,7 +117,7 @@ contracts/discovery-event.schema.json 固定 search 9e791c6 的 discovery.v1 约
 
 事件采用 CloudEvents 1.0。source 为 resources，subject 等于 data.target.id，事件 ID 由对象 ID 与修订确定。相同请求重放沿用业务幂等回执，不重复写入投影事件。普通业务事件也使用该封套，只携带业务修订。
 
-模块导出 OutboxChannel。postgres.Repository.PendingOutbox(ctx, limit, excludeSubjects) 返回待发送 Envelope，每批 1 至 100 条，最多排除 1000 个主题。nil 与空集合等价，排除在 LIMIT 前执行，同主题按写入顺序读取。
+模块导出 OutboxChannel。postgres.Repository.PendingOutbox(ctx, limit, excludeSubjects) 按写入自增序号全局先进先出返回待发送 Envelope，每批 1 至 100 条，最多排除 1000 个主题。nil 与空集合等价，排除在 LIMIT 前执行，同主题严格保持写入顺序。
 
 outbox 只用 sent_at 表示确认状态，未发送部分索引支持空闲与积压查询。读取不认领、不确认事件。ConfirmOutbox(ctx, id) 在所有订阅消费者持久提交后调用，重复确认保留首次时间，不存在的 ID 返回 not_found。
 
