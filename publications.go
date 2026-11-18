@@ -35,22 +35,27 @@ func validateDirectory(tx Transaction, m Metadata) error {
 }
 func (s *Service) CreateDraft(ctx context.Context, p Principal, key string, in DraftWrite) (Resource, error) {
 	var out Resource
-	if in.Revision != 0 {
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(key) || in.Revision != 0 {
 		return out, ErrInput
 	}
 	if e := s.auth(ctx, p, "upload", in.Metadata.Associations.SchoolID); e != nil {
 		return out, e
 	}
+	if e := s.checkOwnerActive(ctx, p); e != nil {
+		return out, e
+	}
+	if hit, e := s.precheckReplay(ctx, p, "upload", "", key, in, &out); e != nil || hit {
+		return out, e
+	}
 	if e := s.validateDraft(ctx, in.Metadata); e != nil {
 		return out, e
 	}
-	e := s.mutation(ctx, p, "upload", in.Metadata.Associations.SchoolID, key, "", in, func(tx Transaction) (any, error) {
-		count, _, _, e := tx.Counts()
-		if e != nil {
+	e := s.mutationWithBudget(ctx, p, "upload", in.Metadata.Associations.SchoolID, key, "", in, &mutationBudget{addRecord: true}, func(tx Transaction) (any, error) {
+		if e := checkTxOwnerActive(tx, p); e != nil {
 			return nil, e
-		}
-		if count >= s.cfg.MaxRecords {
-			return nil, ErrCapacity
 		}
 		category, e := currentCategory(tx, in.Metadata)
 		if e != nil {
@@ -71,18 +76,18 @@ func (s *Service) CreateDraft(ctx context.Context, p Principal, key string, in D
 	}, &out)
 	return out, e
 }
-func (s *Service) authorizeDraftEdit(ctx context.Context, p Principal, r Record, checkInput func() error) (string, error) {
+func (s *Service) authorizeDraftEdit(ctx context.Context, p Principal, r Record, schoolMatches bool) (string, error) {
 	if r.Owner != p {
 		if e := s.auth(ctx, p, "manage", r.SchoolID); e != nil {
 			return "", e
 		}
-		if e := checkInput(); e != nil {
-			return "", e
+		if !schoolMatches {
+			return "", ErrInput
 		}
 		return "manage", nil
 	}
-	if e := checkInput(); e != nil {
-		return "", e
+	if !schoolMatches {
+		return "", ErrInput
 	}
 	if e := s.auth(ctx, p, "upload", r.SchoolID); e != nil {
 		return "", e
@@ -111,23 +116,33 @@ func (s *Service) applyProposalDecision(tx Transaction, r Record, v *VersionReco
 
 func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, in DraftWrite) (Resource, error) {
 	var out Resource
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || in.Revision < 1 {
+		return out, ErrInput
+	}
 	r, e := s.record(ctx, id)
 	if e != nil {
 		return out, e
 	}
-	action, e := s.authorizeDraftEdit(ctx, p, r, func() error {
-		if in.Revision < 1 || in.Metadata.Associations.SchoolID != r.SchoolID {
-			return ErrInput
-		}
-		return nil
-	})
+	action, e := s.authorizeDraftEdit(ctx, p, r, in.Metadata.Associations.SchoolID == r.SchoolID)
 	if e != nil {
+		return out, e
+	}
+	if e = s.checkOwnerActive(ctx, p); e != nil {
+		return out, e
+	}
+	if hit, e := s.precheckReplay(ctx, p, action, id, key, in, &out); e != nil || hit {
 		return out, e
 	}
 	if e = s.validateDraft(ctx, in.Metadata); e != nil {
 		return out, e
 	}
 	e = s.mutation(ctx, p, action, r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+		if e := checkTxOwnerActive(tx, p); e != nil {
+			return nil, e
+		}
 		if e := tx.Lock("resource:" + id); e != nil {
 			return nil, e
 		}
@@ -206,32 +221,42 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 }
 func (s *Service) AttachFile(ctx context.Context, p Principal, id, key string, in FileLink) (Resource, error) {
 	var out Resource
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || in.Revision < 1 || !validID(in.MediaVersionID) {
+		return out, ErrInput
+	}
 	r, e := s.record(ctx, id)
 	if e != nil {
 		return out, e
 	}
-	action, e := s.authorizeDraftEdit(ctx, p, r, func() error {
-		if in.Revision < 1 || !validID(in.MediaVersionID) {
-			return ErrInput
-		}
-		return nil
-	})
+	action, e := s.authorizeDraftEdit(ctx, p, r, true)
 	if e != nil {
+		return out, e
+	}
+	if e = s.checkOwnerActive(ctx, p); e != nil {
+		return out, e
+	}
+	if hit, e := s.precheckReplay(ctx, p, action, id, key, in, &out); e != nil || hit {
 		return out, e
 	}
 	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
 	defer cancel()
 	file, e := s.deps.Files.Inspect(work, p, in.MediaVersionID)
 	if e != nil {
-		return out, e
+		return out, normalizeDepError(ctx, e)
 	}
 	if file.SchoolID != r.SchoolID {
 		return out, ErrDenied
 	}
-	if file.Owner != p || file.Module != "resources" || file.File.VersionID != in.MediaVersionID || file.File.Size < 1 || file.File.Size > s.cfg.MaxFileSize || !slices.Contains(s.cfg.AllowedTypes, file.File.ContentType) || !digestPattern.MatchString(file.File.SHA256) || !slices.Contains([]string{"awaiting_approval", "approved", "ready"}, file.State) {
+	if file.Owner != p || file.Module != "resources" || file.File.VersionID != in.MediaVersionID || !validFilename(file.File.Filename) || file.File.Size < 1 || file.File.Size > s.cfg.MaxFileSize || !slices.Contains(s.cfg.AllowedTypes, file.File.ContentType) || !digestPattern.MatchString(file.File.SHA256) || !slices.Contains([]string{"awaiting_approval", "approved", "ready"}, file.State) {
 		return out, ErrDenied
 	}
 	e = s.mutation(ctx, p, action, r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+		if e := checkTxOwnerActive(tx, p); e != nil {
+			return nil, e
+		}
 		if e := tx.Lock("resource:" + id); e != nil {
 			return nil, e
 		}
@@ -282,6 +307,12 @@ func ownerView(tx Transaction, r Record, p Principal) (Resource, error) {
 }
 func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Command) (Resource, error) {
 	var out Resource
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || in.Revision < 1 {
+		return out, ErrInput
+	}
 	r, e := s.record(ctx, id)
 	if e != nil {
 		return out, e
@@ -291,6 +322,9 @@ func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Co
 		action = "manage"
 	}
 	returnOut := func(tx Transaction) (any, error) {
+		if e := checkTxOwnerActive(tx, p); e != nil {
+			return nil, e
+		}
 		if e := tx.Lock("resource:" + id); e != nil {
 			return nil, e
 		}
@@ -327,19 +361,23 @@ func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Co
 		}
 		return ownerView(tx, r, p)
 	}
-	e = s.mutation(ctx, p, action, r.SchoolID, key, id, in, returnOut, &out)
+	e = s.mutationWithBudget(ctx, p, action, r.SchoolID, key, id, in, &mutationBudget{addJob: true}, returnOut, &out)
 	return out, e
 }
 func (s *Service) ApplyDecision(ctx context.Context, p Principal, id, key string, in Decision) (Resource, error) {
 	var out Resource
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || !validID(in.ID) || in.Revision < 1 || !validID(in.VersionID) || !slices.Contains([]string{"approve", "reject"}, in.Action) || !text(in.Reason, 2000) {
+		return out, ErrInput
+	}
 	r, e := s.record(ctx, id)
 	if e != nil {
 		return out, e
 	}
-	if !validID(in.ID) || in.Revision < 1 || !validID(in.VersionID) || !slices.Contains([]string{"approve", "reject"}, in.Action) || !text(in.Reason, 2000) {
-		return out, ErrInput
-	}
-	e = s.mutation(ctx, p, "moderation.execute", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+	budget := mutationBudget{exemptOps: in.Action == "reject", addJob: in.Action == "approve"}
+	e = s.mutationWithBudget(ctx, p, "moderation.execute", r.SchoolID, key, id, in, &budget, func(tx Transaction) (any, error) {
 		if e := tx.Lock("resource:" + id); e != nil {
 			return nil, e
 		}
