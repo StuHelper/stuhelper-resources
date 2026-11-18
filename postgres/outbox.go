@@ -7,7 +7,7 @@ import (
 
 var _ m.OutboxReader = (*Repository)(nil)
 
-const pendingOutboxSQL = `SELECT data FROM resources.outbox WHERE sent_at IS NULL AND NOT ((data->>'subject')=ANY(COALESCE($2::text[],ARRAY[]::text[]))) ORDER BY (data->>'source') COLLATE "C",(data->>'subject') COLLATE "C",seq LIMIT $1`
+const pendingOutboxSQL = `SELECT data FROM resources.outbox WHERE sent_at IS NULL AND NOT ((data->>'subject')=ANY(COALESCE($2::text[],ARRAY[]::text[]))) ORDER BY seq ASC LIMIT $1`
 
 func (r *Repository) PendingOutbox(ctx context.Context, limit int, excludeSubjects []string) ([]m.Envelope, error) {
 	if limit < 1 || limit > 100 || len(excludeSubjects) > 1000 {

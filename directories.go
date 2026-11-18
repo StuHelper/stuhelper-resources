@@ -123,8 +123,9 @@ func (s *Service) Directories(ctx context.Context, p Principal, school, course, 
 	}
 	return out, e
 }
-func (s *Service) directoryResources(ctx context.Context, id string) ([]string, error) {
+func (s *Service) directoryResources(ctx context.Context, id string) ([]string, string, error) {
 	ids := []string{}
+	school := ""
 	e := s.repo.Transaction(ctx, func(tx Transaction) error {
 		root, e := tx.Directory(id)
 		if e != nil {
@@ -133,6 +134,7 @@ func (s *Service) directoryResources(ctx context.Context, id string) ([]string, 
 		if !root.Enabled {
 			return ErrNotFound
 		}
+		school = root.SchoolID
 		queue := []string{id}
 		seen := map[string]bool{}
 		maxFiles := s.cfg.MaxPackageFiles * s.cfg.MaxPackageParts
@@ -178,7 +180,7 @@ func (s *Service) directoryResources(ctx context.Context, id string) ([]string, 
 		}
 		return nil
 	})
-	return ids, e
+	return ids, school, e
 }
 func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in PackageRequest) (Package, error) {
 	var out Package
@@ -192,11 +194,16 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 		return out, e
 	}
 	ids := in.ResourceIDs
+	schools := map[string]bool{}
 	if in.DirectoryID != "" {
 		var e error
-		ids, e = s.directoryResources(ctx, in.DirectoryID)
+		var dirSchool string
+		ids, dirSchool, e = s.directoryResources(ctx, in.DirectoryID)
 		if e != nil {
 			return out, e
+		}
+		if dirSchool != "" {
+			schools[dirSchool] = true
 		}
 	}
 	selected := [][]Selection{}
@@ -207,12 +214,15 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 			return out, ErrInput
 		}
 		seen[id] = true
-		file, e := s.selection(ctx, p, id)
+		file, schoolID, e := s.selectionWithSchool(ctx, p, id)
 		if denied(e) || errors.Is(e, ErrNotFound) {
 			continue
 		}
 		if e != nil {
 			return out, e
+		}
+		if schoolID != "" {
+			schools[schoolID] = true
 		}
 		if file.File.Size > s.cfg.MaxPackageBytes {
 			return out, ErrCapacity
@@ -232,7 +242,13 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 	if len(parts) == 0 {
 		return out, ErrNotFound
 	}
-	e := s.mutation(ctx, p, "package", "", key, "", in, func(tx Transaction) (any, error) {
+	auditSchool := ""
+	if len(schools) == 1 {
+		for sc := range schools {
+			auditSchool = sc
+		}
+	}
+	e := s.mutationWithAuditSchool(ctx, p, "package", "", auditSchool, key, "", in, &mutationBudget{}, func(tx Transaction) (any, error) {
 		out = Package{ID: newID(), Parts: parts, ExpiresAt: s.now().Add(s.cfg.PackageTTL)}
 		if e := tx.SavePackage(PackageRecord{Package: out, Owner: p, Selections: selected}); e != nil {
 			return nil, e

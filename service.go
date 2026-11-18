@@ -63,6 +63,58 @@ func (s *Service) record(ctx context.Context, id string) (Record, error) {
 	err := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = tx.Record(id); return e })
 	return out, err
 }
+func eventTargetAndRevision(id string, value any) (string, int64) {
+	target := id
+	var revision int64 = 1
+	switch v := value.(type) {
+	case Resource:
+		if target == "" {
+			target = v.ID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Category:
+		if target == "" {
+			target = v.ID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Directory:
+		if target == "" {
+			target = v.ID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Grant:
+		if target == "" {
+			target = v.ID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Coverage:
+		if target == "" {
+			target = v.PlanID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Package:
+		if target == "" {
+			target = v.ID
+		}
+	case requestCreation:
+		target, revision = v.ResourceID, v.resourceRevision
+	case RequestReceipt:
+		if target == "" {
+			target = v.ID
+		}
+	}
+	return target, revision
+}
 
 type mutationBudget struct {
 	exemptOps bool
@@ -93,6 +145,10 @@ func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key,
 }
 
 func (s *Service) mutationWithBudget(ctx context.Context, p Principal, action, scope, key, id string, input any, budget *mutationBudget, apply func(Transaction) (any, error), out any) error {
+	return s.mutationWithAuditSchool(ctx, p, action, scope, scope, key, id, input, budget, apply, out)
+}
+
+func (s *Service) mutationWithAuditSchool(ctx context.Context, p Principal, action, scope, auditSchool, key, id string, input any, budget *mutationBudget, apply func(Transaction) (any, error), out any) error {
 	if !p.Valid() {
 		return ErrUnauthenticated
 	}
@@ -132,11 +188,8 @@ func (s *Service) mutationWithBudget(ctx context.Context, p Principal, action, s
 		if e != nil {
 			return ErrUnavailable
 		}
-		auditTarget := id
-		if created, ok := value.(Resource); ok && auditTarget == "" {
-			auditTarget = created.ID
-		}
-		if e = tx.Event(Event{Reason: auditReason(input), ID: operation, Type: "resources." + action + ".v1", ResourceID: auditTarget, SchoolID: scope, Actor: p.Key(), Time: s.now()}); e != nil {
+		auditTarget, revision := eventTargetAndRevision(id, value)
+		if e = tx.Event(Event{Reason: auditReason(input), ID: operation, Type: "resources." + action + ".v1", ResourceID: auditTarget, SchoolID: auditSchool, Actor: p.Key(), Revision: revision, Time: s.now()}); e != nil {
 			return e
 		}
 		if e = tx.SaveReplay(Replay{Key: operation, Digest: digest, Result: data}); e != nil {

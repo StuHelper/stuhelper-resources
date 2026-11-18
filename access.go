@@ -255,25 +255,29 @@ func (s *Service) List(ctx context.Context, p Principal, f Filter, mine, admin b
 	return out, nil
 }
 func (s *Service) selection(ctx context.Context, p Principal, id string) (Selection, error) {
+	sel, _, err := s.selectionWithSchool(ctx, p, id)
+	return sel, err
+}
+func (s *Service) selectionWithSchool(ctx context.Context, p Principal, id string) (Selection, string, error) {
 	var out Selection
 	r, e := s.record(ctx, id)
 	if e != nil {
-		return out, e
+		return out, "", e
 	}
 	if r.ActiveID == "" {
-		return out, ErrDenied
+		return out, "", ErrDenied
 	}
 	v, e := s.version(ctx, r.ActiveID)
 	if e != nil {
-		return out, e
+		return out, "", e
 	}
 	if e = s.access(ctx, p, r, v); e != nil {
-		return out, e
+		return out, "", e
 	}
 	if v.Version.File == nil {
-		return out, ErrUnavailable
+		return out, "", ErrUnavailable
 	}
-	return Selection{ResourceID: r.ID, VersionID: v.Version.ID, ReferenceID: v.ReferenceID, File: *v.Version.File}, nil
+	return Selection{ResourceID: r.ID, VersionID: v.Version.ID, ReferenceID: v.ReferenceID, File: *v.Version.File}, r.SchoolID, nil
 }
 func (s *Service) Download(ctx context.Context, p Principal, id string, w io.Writer) (File, error) {
 	selected, e := s.selection(ctx, p, id)
@@ -383,6 +387,14 @@ func (s *Service) Grants(ctx context.Context, p Principal, id string, n int, aft
 	}
 	return out, e
 }
+
+// requestCreation keeps the resource revision for the event while encoding
+// exactly the public receipt in the idempotency record.
+type requestCreation struct {
+	RequestReceipt
+	resourceRevision int64
+}
+
 func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string, in Request) (RequestReceipt, error) {
 	var out RequestReceipt
 	r, e := s.record(ctx, id)
@@ -431,6 +443,16 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 				return nil, err
 			}
 		}
+		if e := tx.Lock("resource:" + id); e != nil {
+			return nil, e
+		}
+		latest, e := tx.Record(id)
+		if e != nil {
+			return nil, e
+		}
+		if latest.Revision != r.Revision {
+			return nil, ErrConflict
+		}
 		versionID := r.ActiveID
 		if versionID == "" {
 			versionID = r.ProposalID
@@ -452,7 +474,7 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 		if e := s.queue(tx, "request", id, "", out.ID, ""); e != nil {
 			return nil, e
 		}
-		return out, nil
+		return requestCreation{RequestReceipt: out, resourceRevision: latest.Revision}, nil
 	}, &out)
 	return out, e
 }
