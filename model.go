@@ -334,6 +334,9 @@ type Capabilities struct {
 // Authority supplies current action eligibility and administration scope. Upload
 // and download decisions include the configured campus/phone facts. Missing facts
 // return unavailable; a permission grant cannot silently stand in for a fact.
+// Global administration (taxonomy.manage, coverage.manage) and instance-wide
+// admission pre-checks pass an empty scope (""); school-owned resources,
+// directories and coverage rules pass their concrete school_id.
 type Authority interface {
 	Check(context.Context, Principal, string, string) error
 }

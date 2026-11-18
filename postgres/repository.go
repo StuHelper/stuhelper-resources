@@ -104,7 +104,11 @@ func (t *transaction) SaveCategory(v resources.Category) error {
 	return t.save(`INSERT INTO resources.categories(id,revision,enabled,data) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,enabled=excluded.enabled,data=excluded.data`, v, v.ID, v.Revision, v.Enabled)
 }
 func (t *transaction) Categories(n int, after string, disabled bool) ([]resources.Category, error) {
-	return list[resources.Category](t, `SELECT data FROM resources.categories WHERE id COLLATE "C">$1 AND ($2 OR enabled) ORDER BY id COLLATE "C" LIMIT $3`, after, disabled, n)
+	return list[resources.Category](t, `SELECT data FROM resources.categories
+ WHERE ($2 OR enabled)
+ AND ($1='' OR EXISTS(SELECT 1 FROM resources.categories c WHERE c.id=$1 AND ((resources.categories.data->>'order')::int,resources.categories.id COLLATE "C")>((c.data->>'order')::int,c.id COLLATE "C"))
+      OR (NOT EXISTS(SELECT 1 FROM resources.categories c WHERE c.id=$1) AND id COLLATE "C">$1))
+ ORDER BY (data->>'order')::int ASC,id COLLATE "C" ASC LIMIT $3`, after, disabled, n)
 }
 func (t *transaction) Record(id string) (resources.Record, error) {
 	return read[resources.Record](t, `SELECT data FROM resources.records WHERE id=$1`, id)
@@ -170,7 +174,10 @@ func (t *transaction) SaveDirectory(v resources.Directory) error {
 	return t.save(`INSERT INTO resources.directories(id,school_id,course_id,parent_id,data) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,data=excluded.data`, v, v.ID, v.SchoolID, v.CourseID, v.ParentID)
 }
 func (t *transaction) Directories(school, course, parent string, n int, after string) ([]resources.Directory, error) {
-	return list[resources.Directory](t, `SELECT data FROM resources.directories WHERE school_id=$1 AND ($2='' OR course_id=$2) AND parent_id=$3 AND id COLLATE "C">$4 ORDER BY id COLLATE "C" LIMIT $5`, school, course, parent, after, n)
+	return t.DirectoriesFiltered(school, course, parent, n, after, true)
+}
+func (t *transaction) DirectoriesFiltered(school, course, parent string, n int, after string, includeDisabled bool) ([]resources.Directory, error) {
+	return list[resources.Directory](t, `SELECT data FROM resources.directories WHERE school_id=$1 AND ($2='' OR course_id=$2) AND parent_id=$3 AND ($6 OR COALESCE((data->>'enabled')::boolean,false)) AND id COLLATE "C">$4 ORDER BY id COLLATE "C" LIMIT $5`, school, course, parent, after, n, includeDisabled)
 }
 func (t *transaction) Package(id string) (resources.PackageRecord, error) {
 	return read[resources.PackageRecord](t, `SELECT data FROM resources.packages WHERE id=$1`, id)

@@ -113,16 +113,67 @@ func directoryDepth(tx Transaction, school, id string, seen map[string]bool, bud
 }
 func (s *Service) Directories(ctx context.Context, p Principal, school, course, parent string, n int, after string) (DirectoryPage, error) {
 	out := DirectoryPage{Items: []Directory{}}
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
 	if !validID(school) || !optionalID(course) || !optionalID(parent) || !optionalID(after) || n < 1 || n > 100 {
 		return out, ErrInput
 	}
-	if e := s.auth(ctx, p, "discover", school); e != nil {
-		return out, e
+	includeDisabled := true
+	if e := s.auth(ctx, p, "directories.manage", school); e != nil {
+		if !denied(e) {
+			return out, e
+		}
+		includeDisabled = false
+		if e = s.auth(ctx, p, "discover", school); e != nil {
+			return out, e
+		}
 	}
-	e := s.repo.Transaction(ctx, func(tx Transaction) error {
-		var e error
-		out.Items, e = tx.Directories(school, course, parent, n, after)
-		return e
+	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+	defer cancel()
+	e := s.repo.Transaction(work, func(tx Transaction) error {
+		if port, ok := tx.(interface {
+			DirectoriesFiltered(string, string, string, int, string, bool) ([]Directory, error)
+		}); ok {
+			var err error
+			out.Items, err = port.DirectoriesFiltered(school, course, parent, n, after, includeDisabled)
+			return err
+		}
+		if includeDisabled {
+			var err error
+			out.Items, err = tx.Directories(school, course, parent, n, after)
+			return err
+		}
+		// Legacy repositories return disabled entries too. Advance by the last
+		// scanned ID while collecting the requested number of visible entries.
+		const batchSize = 100
+		cursor := after
+		for len(out.Items) < n {
+			if err := work.Err(); err != nil {
+				return err
+			}
+			items, err := tx.Directories(school, course, parent, batchSize, cursor)
+			if err != nil {
+				return err
+			}
+			for _, item := range items {
+				if item.Enabled {
+					out.Items = append(out.Items, item)
+					if len(out.Items) == n {
+						return nil
+					}
+				}
+			}
+			if len(items) < batchSize {
+				break
+			}
+			next := items[len(items)-1].ID
+			if next <= cursor {
+				return ErrUnavailable
+			}
+			cursor = next
+		}
+		return nil
 	})
 	if len(out.Items) == n {
 		out.NextCursor = out.Items[n-1].ID
@@ -219,6 +270,9 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 			return out, e
 		}
 		if dirSchool != "" {
+			if e = s.auth(ctx, p, "package", dirSchool); e != nil {
+				return out, e
+			}
 			schools[dirSchool] = true
 		}
 	}

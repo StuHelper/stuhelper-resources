@@ -538,7 +538,7 @@ func (s *Service) selectBatch(ctx context.Context, p Principal, ids []string) (m
 		}
 		for _, id := range chunk {
 			if !batched {
-				sel, school, e := s.selectionWithSchool(ctx, p, id)
+				sel, school, e := s.selectionWithSchool(ctx, p, id, true)
 				if e != nil {
 					itemErrs[id] = e
 				} else {
@@ -549,6 +549,10 @@ func (s *Service) selectBatch(ctx context.Context, p Principal, ids []string) (m
 			rec, ok := records[id]
 			if !ok {
 				itemErrs[id] = ErrNotFound
+				continue
+			}
+			if e := s.auth(ctx, p, "package", rec.SchoolID); e != nil {
+				itemErrs[id] = e
 				continue
 			}
 			if rec.ActiveID == "" {
@@ -576,17 +580,16 @@ func (s *Service) selectBatch(ctx context.Context, p Principal, ids []string) (m
 }
 
 func (s *Service) selection(ctx context.Context, p Principal, id string) (Selection, error) {
-	sel, _, err := s.selectionWithSchool(ctx, p, id)
+	sel, _, err := s.selectionWithSchool(ctx, p, id, false)
 	return sel, err
 }
-func (s *Service) selectionWithSchool(ctx context.Context, p Principal, id string) (Selection, string, error) {
+func (s *Service) selectionWithSchool(ctx context.Context, p Principal, id string, forPackage bool) (Selection, string, error) {
 	var out Selection
 	if !validID(id) {
 		return out, "", ErrInput
 	}
 	var r Record
 	var v VersionRecord
-	var facts AccessFacts
 	err := s.repo.Transaction(ctx, func(tx Transaction) error {
 		var e error
 		r, e = tx.Record(id)
@@ -600,21 +603,20 @@ func (s *Service) selectionWithSchool(ctx context.Context, p Principal, id strin
 		if e != nil {
 			return e
 		}
-		if p.Valid() && !(r.State == "published" && v.Version.Metadata.Access == "public") {
-			facts, e = loadSingleAccessFacts(tx, p.Key(), r, v, s.now())
-			if e != nil {
-				return e
-			}
-		}
 		return nil
 	})
 	if err != nil {
 		return out, "", err
 	}
+	if forPackage {
+		if e := s.auth(ctx, p, "package", r.SchoolID); e != nil {
+			return out, "", e
+		}
+	}
 	if r.ActiveID == "" {
 		return out, "", ErrDenied
 	}
-	if e := s.accessWithFacts(ctx, p, r, v, &facts); e != nil {
+	if e := s.accessWithFacts(ctx, p, r, v, nil); e != nil {
 		return out, "", e
 	}
 	if v.Version.File == nil {
