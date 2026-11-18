@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -410,6 +411,22 @@ type stream struct {
 	written    bool
 }
 
+func formatContentDisposition(disposition, name string) string {
+	cleaned := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == '/' || r == '\\' {
+			return '_'
+		}
+		return r
+	}, name)
+	cleaned = strings.TrimSpace(cleaned)
+	if cleaned != "" && cleaned != "." && cleaned != ".." {
+		if formatted := mime.FormatMediaType(disposition, map[string]string{"filename": cleaned}); formatted != "" {
+			return formatted
+		}
+	}
+	return disposition
+}
+
 func (s *stream) Write(b []byte) (int, error) {
 	if !s.written {
 		s.w.Header().Set("Content-Type", s.kind)
@@ -418,7 +435,7 @@ func (s *stream) Write(b []byte) (int, error) {
 			disposition = "inline"
 			s.w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
 		}
-		s.w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": s.name}))
+		s.w.Header().Set("Content-Disposition", formatContentDisposition(disposition, s.name))
 		s.written = true
 	}
 	return s.w.Write(b)

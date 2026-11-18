@@ -99,6 +99,7 @@ scenario_tests:
     - file_access_test.go#TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions
     - timeout_test.go#TestDownloadPreflightAndHTTPWriteAreBounded
     - timeout_test.go#TestStreamProgressAndMetadataRPCTimeouts
+    - filename_safety_test.go#TestAttachFileRejectsUnsafeFilenamesAndStreamPreservesDisposition
   RES-15:
     - closure_test.go#TestClosedUploaderKeepsFilesAndCopyrightWithoutPublicAccountLink
   RES-16:
