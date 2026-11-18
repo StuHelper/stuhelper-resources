@@ -112,11 +112,12 @@ type Consent struct {
 	Digest   string `json:"digest"`
 }
 type Origin struct {
-	Kind    string   `json:"kind"`
-	Source  string   `json:"source,omitempty"`
-	Author  string   `json:"author,omitempty"`
-	License string   `json:"license,omitempty"`
-	Consent *Consent `json:"consent,omitempty"`
+	Kind               string   `json:"kind"`
+	Source             string   `json:"source,omitempty"`
+	Author             string   `json:"author,omitempty"`
+	License            string   `json:"license,omitempty"`
+	Consent            *Consent `json:"consent,omitempty"`
+	VerifiedInstructor bool     `json:"verified_instructor,omitempty"`
 }
 type Metadata struct {
 	Title            string           `json:"title"`
@@ -155,15 +156,30 @@ type File struct {
 	SHA256      string `json:"sha256"`
 }
 type Version struct {
-	ID             string     `json:"id"`
-	Number         int64      `json:"number"`
-	Metadata       Metadata   `json:"metadata"`
-	Category       Category   `json:"category"`
-	File           *File      `json:"file,omitempty"`
-	State          string     `json:"state"`
-	DecisionReason string     `json:"decision_reason,omitempty"`
-	SubmittedAt    *time.Time `json:"submitted_at,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
+	ID                 string     `json:"id"`
+	Number             int64      `json:"number"`
+	Metadata           Metadata   `json:"metadata"`
+	Category           Category   `json:"category"`
+	File               *File      `json:"file,omitempty"`
+	State              string     `json:"state"`
+	DecisionReason     string     `json:"decision_reason,omitempty"`
+	SubmittedAt        *time.Time `json:"submitted_at,omitempty"`
+	VerifiedInstructor bool       `json:"verified_instructor,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+}
+type DuplicateResource struct {
+	ID         string    `json:"id"`
+	VersionID  string    `json:"version_id"`
+	Title      string    `json:"title"`
+	CategoryID string    `json:"category_id"`
+	Access     string    `json:"access"`
+	Filename   string    `json:"filename"`
+	Size       int64     `json:"size"`
+	Owned      bool      `json:"owned"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+type DuplicateResourceList struct {
+	Items []DuplicateResource `json:"items"`
 }
 
 // Record and VersionRecord are private repository/port models, never HTTP DTOs.
@@ -351,6 +367,12 @@ type Authority interface {
 }
 type Catalog interface {
 	Validate(context.Context, Associations) error
+}
+
+// InstructorCatalog is an optional Catalog extension confirming that Principal
+// holds a verified instructor binding for the specified school and course.
+type InstructorCatalog interface {
+	VerifyCourseInstructor(context.Context, Principal, Associations) error
 }
 type FileEvidence struct {
 	File                            File

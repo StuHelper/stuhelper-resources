@@ -116,6 +116,8 @@ scenario_tests:
     - performance_test.go#TestBatchQueriesRequestAuthReuseAndVersionIndexes
   RES-17:
     - integration_test.go#TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting
+  RES-21:
+    - dedup_instructor_test.go#TestCourseDuplicateDigestCheckAndVerifiedInstructorAttribution
   RES-18:
     - draft_workflow_test.go#TestDraftOneStepSubmitRejectionReasonWithdrawAndDelete
   RS-05:

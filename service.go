@@ -73,6 +73,37 @@ func (s *Service) record(ctx context.Context, id string) (Record, error) {
 	err := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = tx.Record(id); return e })
 	return out, err
 }
+
+// Replay uses the original result and the owner's current disclosure state.
+func decodeReplay(tx Transaction, data []byte, out any) error {
+	resource, ok := out.(*Resource)
+	if !ok {
+		if json.Unmarshal(data, out) != nil {
+			return ErrUnavailable
+		}
+		return nil
+	}
+	var saved Resource
+	if json.Unmarshal(data, &saved) != nil {
+		return ErrUnavailable
+	}
+	if hasInstructor(&saved) {
+		record, err := tx.Record(saved.ID)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			clearInstructor(&saved)
+		case err != nil:
+			return err
+		default:
+			if err := redactClosedInstructor(tx, record.Owner, &saved); err != nil {
+				return err
+			}
+		}
+	}
+	*resource = saved
+	return nil
+}
+
 func (s *Service) precheckReplay(ctx context.Context, p Principal, action, id, key string, input any, out any) (bool, error) {
 	operation := hash([]string{p.Key(), action, id, key})
 	digest := hash(input)
@@ -88,8 +119,8 @@ func (s *Service) precheckReplay(ctx context.Context, p Principal, action, id, k
 		if prior.Digest != digest {
 			return ErrConflict
 		}
-		if json.Unmarshal(prior.Result, out) != nil {
-			return ErrUnavailable
+		if err := decodeReplay(tx, prior.Result, out); err != nil {
+			return err
 		}
 		hit = true
 		return nil
@@ -205,8 +236,8 @@ func (s *Service) mutationWithReplay(ctx context.Context, p Principal, action, s
 			if prior.Digest != digest {
 				return ErrConflict
 			}
-			if json.Unmarshal(prior.Result, out) != nil {
-				return ErrUnavailable
+			if err := decodeReplay(tx, prior.Result, out); err != nil {
+				return err
 			}
 			replayed = true
 			return nil

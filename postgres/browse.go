@@ -172,3 +172,23 @@ func (t *transaction) OwnResourceSummary(owner string) (r.OwnResourceSummary, er
 	return read[r.OwnResourceSummary](t, `SELECT jsonb_build_object('resource_count',count(*),'published_count',count(*) FILTER(WHERE r.state='published'))
  FROM resources.records r JOIN resources.versions v ON v.id=COALESCE(NULLIF(r.proposal_id,''),r.active_id) WHERE r.owner_key=$1`, owner)
 }
+
+func (t *transaction) DuplicateResources(school string, courseIDs []string, sha256, ownerKey string, limit int) ([]r.DuplicateResource, error) {
+	return list[r.DuplicateResource](t, `SELECT jsonb_build_object(
+ 'id', r.id,
+ 'version_id', v.id,
+ 'title', v.data->'Version'->'metadata'->>'title',
+ 'category_id', v.data->'Version'->'metadata'->>'category_id',
+ 'access', v.data->'Version'->'metadata'->>'access',
+ 'filename', v.data->'Version'->'file'->>'filename',
+ 'size', (v.data->'Version'->'file'->>'size')::bigint,
+ 'owned', r.owner_key=$4,
+ 'created_at', (v.data->'Version'->>'created_at')::timestamptz
+) FROM resources.records r JOIN resources.versions v ON v.id=r.active_id
+ WHERE r.school_id=$1 AND r.state='published'
+ AND v.data->'Version'->>'state'='published'
+ AND v.data->'Version'->'metadata'->'associations'->>'school_id'=$1
+ AND v.data->'Version'->'file'->>'sha256'=$2
+ AND v.data->'Version'->'metadata'->'associations'->>'course_id'=ANY($3::text[])
+ ORDER BY (v.data->'Version'->>'created_at')::timestamptz DESC, r.id COLLATE "C" DESC LIMIT $5`, school, sha256, courseIDs, ownerKey, limit)
+}

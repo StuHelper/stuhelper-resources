@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS resources.records (id text PRIMARY KEY, owner_key tex
 CREATE INDEX IF NOT EXISTS resources_records_owner ON resources.records(owner_key,id);
 CREATE INDEX IF NOT EXISTS resources_records_school ON resources.records(school_id,state,id);
 CREATE TABLE IF NOT EXISTS resources.versions (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), number bigint NOT NULL, data jsonb NOT NULL, UNIQUE(resource_id,number));
+CREATE INDEX IF NOT EXISTS resources_versions_published_sha256 ON resources.versions((data->'Version'->'metadata'->'associations'->>'school_id'),(data->'Version'->'file'->>'sha256')) WHERE data->'Version'->>'state'='published';
 CREATE INDEX IF NOT EXISTS resources_versions_course ON resources.versions ((data->'Version'->'metadata'->'associations'->>'course_id'));
 CREATE INDEX IF NOT EXISTS resources_versions_category ON resources.versions ((data->'Version'->'metadata'->>'category_id'));
 CREATE INDEX IF NOT EXISTS resources_versions_directory ON resources.versions ((data->'Version'->'metadata'->>'directory_id'));

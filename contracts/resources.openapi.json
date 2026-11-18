@@ -4600,6 +4600,132 @@
         "description": "Authenticated owner only. resource_count matches the owned list across current states; published_count is the published subset. No owner parameter is accepted."
       }
     },
+    "/api/v1/resources/duplicates": {
+      "get": {
+        "operationId": "FindDuplicateResources",
+        "summary": "Find published resources with identical file digest in the same course",
+        "parameters": [
+          {
+            "name": "school_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "course_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "sha256",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateResourceList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revision, policy or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Configured resource limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Checks published resources in the target course (including merged course aliases) matching the SHA-256 file digest. Requires both discover and upload permissions in the school."
+      }
+    },
     "/api/v1/resources/me/entitlements": {
       "get": {
         "operationId": "ListEntitledResources",
@@ -5261,6 +5387,10 @@
           },
           "consent": {
             "$ref": "#/components/schemas/Consent"
+          },
+          "verified_instructor": {
+            "type": "boolean",
+            "description": "Optional opt-in for verified course instructors; server-verified against current Authority and Catalog facts."
           }
         },
         "required": [
@@ -5469,6 +5599,10 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "verified_instructor": {
+            "type": "boolean",
+            "description": "Server-verified snapshot indicating the version was submitted by a verified instructor of the course."
           },
           "decision_reason": {
             "type": "string",
@@ -6349,6 +6483,79 @@
         "required": [
           "resource_count",
           "published_count"
+        ]
+      },
+      "DuplicateResource": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "version_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "category_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "access": {
+            "type": "string",
+            "enum": [
+              "public",
+              "restricted"
+            ]
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "owned": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "version_id",
+          "title",
+          "category_id",
+          "access",
+          "filename",
+          "size",
+          "owned",
+          "created_at"
+        ]
+      },
+      "DuplicateResourceList": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DuplicateResource"
+            },
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "items"
         ]
       },
       "DeleteReceipt": {

@@ -233,6 +233,11 @@ func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Re
 		ver := proposalV.Version
 		out.Proposal = &ver
 	}
+	if hasInstructor(&out) {
+		if err := s.repo.Transaction(ctx, func(tx Transaction) error { return redactClosedInstructor(tx, r.Owner, &out) }); err != nil {
+			return Resource{}, err
+		}
+	}
 	if activeV == nil {
 		return out, nil
 	}
