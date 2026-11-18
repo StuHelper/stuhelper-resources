@@ -88,6 +88,7 @@ type files struct {
 	mu        sync.Mutex
 	items     map[string]resources.FileEvidence
 	refs      map[string]string
+	sizes     map[string]int64
 	writes    int
 	fail      bool
 	downloads int
@@ -116,6 +117,12 @@ func (f *files) Publish(_ context.Context, in resources.Publication) (string, bo
 	if f.fail {
 		return "", false, resources.ErrUnavailable
 	}
+	if f.sizes == nil {
+		f.sizes = map[string]int64{}
+	}
+	if ev, ok := f.items[id]; ok && ev.File.Size > 0 {
+		f.sizes[ref] = ev.File.Size
+	}
 	return ref, true, nil
 }
 func (f *files) Release(_ context.Context, id, key string) error {
@@ -124,11 +131,23 @@ func (f *files) Release(_ context.Context, id, key string) error {
 	f.released[id] = true
 	return nil
 }
+func (f *files) payload(id string) string {
+	f.mu.Lock()
+	size := f.sizes[id]
+	f.mu.Unlock()
+	if size <= 0 {
+		return id
+	}
+	if int64(len(id)) >= size {
+		return id[:size]
+	}
+	return id + strings.Repeat(".", int(size)-len(id))
+}
 func (f *files) Download(_ context.Context, _ resources.Principal, id string, w io.Writer) error {
 	f.mu.Lock()
 	f.downloads++
 	f.mu.Unlock()
-	_, e := io.WriteString(w, id)
+	_, e := io.WriteString(w, f.payload(id))
 	return e
 }
 func (f *files) Archive(_ context.Context, _ resources.Principal, items []resources.Selection, w io.Writer) error {

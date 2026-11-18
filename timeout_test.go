@@ -36,7 +36,7 @@ func (f *pacedFiles) stream(ctx context.Context, payload string, w io.Writer) er
 			return ctx.Err()
 		case <-time.After(f.interval):
 		}
-		if _, err := io.WriteString(w, payload); err != nil {
+		if _, err := io.WriteString(w, payload[len(payload)*i/f.chunks:len(payload)*(i+1)/f.chunks]); err != nil {
 			return err
 		}
 	}
@@ -44,7 +44,7 @@ func (f *pacedFiles) stream(ctx context.Context, payload string, w io.Writer) er
 }
 
 func (f *pacedFiles) Download(ctx context.Context, _ r.Principal, id string, w io.Writer) error {
-	return f.stream(ctx, id+":", w)
+	return f.stream(ctx, f.payload(id), w)
 }
 
 func (f *pacedFiles) Archive(ctx context.Context, _ r.Principal, items []r.Selection, w io.Writer) error {

@@ -106,6 +106,9 @@ scenario_tests:
     - timeout_test.go#TestDownloadPreflightAndHTTPWriteAreBounded
     - timeout_test.go#TestStreamProgressAndMetadataRPCTimeouts
     - filename_safety_test.go#TestAttachFileRejectsUnsafeFilenamesAndStreamPreservesDisposition
+  RES-20:
+    - file_access_test.go#TestDownloadPinsResponseToAuthorizedVersion
+    - file_access_test.go#TestPreviewAndDownloadETagConditionalAndByteRangeDelivery
   RES-15:
     - closure_test.go#TestClosedUploaderKeepsFilesAndCopyrightWithoutPublicAccountLink
   RES-16:

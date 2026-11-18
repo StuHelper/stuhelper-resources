@@ -1075,6 +1075,13 @@ type ApplyDecisionParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// DownloadResourceParams defines parameters for DownloadResource.
+type DownloadResourceParams struct {
+	IfNoneMatch *string `json:"If-None-Match,omitempty"`
+	IfRange     *string `json:"If-Range,omitempty"`
+	Range       *string `json:"Range,omitempty"`
+}
+
 // AttachFileParams defines parameters for AttachFile.
 type AttachFileParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -1089,6 +1096,13 @@ type ListGrantsParams struct {
 // PutGrantParams defines parameters for PutGrant.
 type PutGrantParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// PreviewResourceParams defines parameters for PreviewResource.
+type PreviewResourceParams struct {
+	IfNoneMatch *string `json:"If-None-Match,omitempty"`
+	IfRange     *string `json:"If-Range,omitempty"`
+	Range       *string `json:"Range,omitempty"`
 }
 
 // CreateRequestParams defines parameters for CreateRequest.
@@ -1464,7 +1478,7 @@ type ClientInterface interface {
 	// Checks current content admission, configured eligibility, entitlements and resource state before returning any file bytes. Missing conditions return 403; unknown dependencies return 503. Same policy as preview.
 	//
 	// Corresponds with GET /api/v1/resources/items/{id}/download (the `DownloadResource` operationId).
-	DownloadResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DownloadResource(ctx context.Context, id string, params *DownloadResourceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AttachFileWithBody AttachFile
 	//
@@ -1504,7 +1518,7 @@ type ClientInterface interface {
 	// Authenticated inline file bytes, with the exact same current content, eligibility, entitlement and resource-state checks as download. No partial preview or conversion bypass. Errors return no file bytes.
 	//
 	// Corresponds with GET /api/v1/resources/items/{id}/preview (the `PreviewResource` operationId).
-	PreviewResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PreviewResource(ctx context.Context, id string, params *PreviewResourceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateRequestWithBody CreateRequest
 	//
@@ -2005,8 +2019,8 @@ func (c *Client) ApplyDecision(ctx context.Context, id string, params *ApplyDeci
 // Checks current content admission, configured eligibility, entitlements and resource state before returning any file bytes. Missing conditions return 403; unknown dependencies return 503. Same policy as preview.
 //
 // Corresponds with GET /api/v1/resources/items/{id}/download (the `DownloadResource` operationId).
-func (c *Client) DownloadResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDownloadResourceRequest(c.Server, id)
+func (c *Client) DownloadResource(ctx context.Context, id string, params *DownloadResourceParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDownloadResourceRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2105,8 +2119,8 @@ func (c *Client) PutGrant(ctx context.Context, id string, grant string, params *
 // Authenticated inline file bytes, with the exact same current content, eligibility, entitlement and resource-state checks as download. No partial preview or conversion bypass. Errors return no file bytes.
 //
 // Corresponds with GET /api/v1/resources/items/{id}/preview (the `PreviewResource` operationId).
-func (c *Client) PreviewResource(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPreviewResourceRequest(c.Server, id)
+func (c *Client) PreviewResource(ctx context.Context, id string, params *PreviewResourceParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPreviewResourceRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3621,7 +3635,7 @@ func NewApplyDecisionRequestWithBody(server string, id string, params *ApplyDeci
 }
 
 // NewDownloadResourceRequest constructs an http.Request for the DownloadResource method
-func NewDownloadResourceRequest(server string, id string) (*http.Request, error) {
+func NewDownloadResourceRequest(server string, id string, params *DownloadResourceParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -3649,6 +3663,43 @@ func NewDownloadResourceRequest(server string, id string) (*http.Request, error)
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IfNoneMatch != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-None-Match", *params.IfNoneMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-None-Match", headerParam0)
+		}
+
+		if params.IfRange != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Range", *params.IfRange, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-Range", headerParam1)
+		}
+
+		if params.Range != nil {
+			var headerParam2 string
+
+			headerParam2, err = runtime.StyleParamWithOptions("simple", false, "Range", *params.Range, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Range", headerParam2)
+		}
+
 	}
 
 	return req, nil
@@ -3855,7 +3906,7 @@ func NewPutGrantRequestWithBody(server string, id string, grant string, params *
 }
 
 // NewPreviewResourceRequest constructs an http.Request for the PreviewResource method
-func NewPreviewResourceRequest(server string, id string) (*http.Request, error) {
+func NewPreviewResourceRequest(server string, id string, params *PreviewResourceParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -3883,6 +3934,43 @@ func NewPreviewResourceRequest(server string, id string) (*http.Request, error) 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IfNoneMatch != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-None-Match", *params.IfNoneMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-None-Match", headerParam0)
+		}
+
+		if params.IfRange != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Range", *params.IfRange, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-Range", headerParam1)
+		}
+
+		if params.Range != nil {
+			var headerParam2 string
+
+			headerParam2, err = runtime.StyleParamWithOptions("simple", false, "Range", *params.Range, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Range", headerParam2)
+		}
+
 	}
 
 	return req, nil
@@ -5404,7 +5492,7 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/resources/items/{id}/download (the `DownloadResource` operationId).
-	DownloadResourceWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DownloadResourceResponse, error)
+	DownloadResourceWithResponse(ctx context.Context, id string, params *DownloadResourceParams, reqEditors ...RequestEditorFn) (*DownloadResourceResponse, error)
 
 	// AttachFileWithBodyWithResponse AttachFile
 	//
@@ -5448,7 +5536,7 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/resources/items/{id}/preview (the `PreviewResource` operationId).
-	PreviewResourceWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PreviewResourceResponse, error)
+	PreviewResourceWithResponse(ctx context.Context, id string, params *PreviewResourceParams, reqEditors ...RequestEditorFn) (*PreviewResourceResponse, error)
 
 	// CreateRequestWithBodyWithResponse CreateRequest
 	//
@@ -6892,6 +6980,36 @@ func (r ApplyDecisionResponse) ContentType() string {
 	return ""
 }
 
+// DownloadResourceResponse200Headers the declared response headers of an HTTP 200 response for DownloadResource
+type DownloadResourceResponse200Headers struct {
+	AcceptRanges       *string
+	ContentDisposition *string
+	ContentLength      *int64
+	ETag               *string
+}
+
+// DownloadResourceResponse206Headers the declared response headers of an HTTP 206 response for DownloadResource
+type DownloadResourceResponse206Headers struct {
+	AcceptRanges       *string
+	ContentDisposition *string
+	ContentLength      *int64
+	ContentRange       *string
+	ETag               *string
+}
+
+// DownloadResourceResponse304Headers the declared response headers of an HTTP 304 response for DownloadResource
+type DownloadResourceResponse304Headers struct {
+	AcceptRanges *string
+	ETag         *string
+}
+
+// DownloadResourceResponse416Headers the declared response headers of an HTTP 416 response for DownloadResource
+type DownloadResourceResponse416Headers struct {
+	AcceptRanges *string
+	ContentRange *string
+	ETag         *string
+}
+
 type DownloadResourceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -6907,8 +7025,18 @@ type DownloadResourceResponse struct {
 	JSON409 *Problem
 	// JSON413 the response for an HTTP 413 `application/json` response
 	JSON413 *Problem
+	// JSON416 the response for an HTTP 416 `application/json` response
+	JSON416 *Problem
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *DownloadResourceResponse200Headers
+	// Headers206 the parsed response headers for an HTTP 206 response
+	Headers206 *DownloadResourceResponse206Headers
+	// Headers304 the parsed response headers for an HTTP 304 response
+	Headers304 *DownloadResourceResponse304Headers
+	// Headers416 the parsed response headers for an HTTP 416 response
+	Headers416 *DownloadResourceResponse416Headers
 }
 
 // GetJSON400 returns the response for an HTTP 400 `application/json` response
@@ -6939,6 +7067,11 @@ func (r DownloadResourceResponse) GetJSON409() *Problem {
 // GetJSON413 returns the response for an HTTP 413 `application/json` response
 func (r DownloadResourceResponse) GetJSON413() *Problem {
 	return r.JSON413
+}
+
+// GetJSON416 returns the response for an HTTP 416 `application/json` response
+func (r DownloadResourceResponse) GetJSON416() *Problem {
+	return r.JSON416
 }
 
 // GetJSON503 returns the response for an HTTP 503 `application/json` response
@@ -7245,6 +7378,36 @@ func (r PutGrantResponse) ContentType() string {
 	return ""
 }
 
+// PreviewResourceResponse200Headers the declared response headers of an HTTP 200 response for PreviewResource
+type PreviewResourceResponse200Headers struct {
+	AcceptRanges       *string
+	ContentDisposition *string
+	ContentLength      *int64
+	ETag               *string
+}
+
+// PreviewResourceResponse206Headers the declared response headers of an HTTP 206 response for PreviewResource
+type PreviewResourceResponse206Headers struct {
+	AcceptRanges       *string
+	ContentDisposition *string
+	ContentLength      *int64
+	ContentRange       *string
+	ETag               *string
+}
+
+// PreviewResourceResponse304Headers the declared response headers of an HTTP 304 response for PreviewResource
+type PreviewResourceResponse304Headers struct {
+	AcceptRanges *string
+	ETag         *string
+}
+
+// PreviewResourceResponse416Headers the declared response headers of an HTTP 416 response for PreviewResource
+type PreviewResourceResponse416Headers struct {
+	AcceptRanges *string
+	ContentRange *string
+	ETag         *string
+}
+
 type PreviewResourceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7260,8 +7423,18 @@ type PreviewResourceResponse struct {
 	JSON409 *Problem
 	// JSON413 the response for an HTTP 413 `application/json` response
 	JSON413 *Problem
+	// JSON416 the response for an HTTP 416 `application/json` response
+	JSON416 *Problem
 	// JSON503 the response for an HTTP 503 `application/json` response
 	JSON503 *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *PreviewResourceResponse200Headers
+	// Headers206 the parsed response headers for an HTTP 206 response
+	Headers206 *PreviewResourceResponse206Headers
+	// Headers304 the parsed response headers for an HTTP 304 response
+	Headers304 *PreviewResourceResponse304Headers
+	// Headers416 the parsed response headers for an HTTP 416 response
+	Headers416 *PreviewResourceResponse416Headers
 }
 
 // GetJSON400 returns the response for an HTTP 400 `application/json` response
@@ -7292,6 +7465,11 @@ func (r PreviewResourceResponse) GetJSON409() *Problem {
 // GetJSON413 returns the response for an HTTP 413 `application/json` response
 func (r PreviewResourceResponse) GetJSON413() *Problem {
 	return r.JSON413
+}
+
+// GetJSON416 returns the response for an HTTP 416 `application/json` response
+func (r PreviewResourceResponse) GetJSON416() *Problem {
+	return r.JSON416
 }
 
 // GetJSON503 returns the response for an HTTP 503 `application/json` response
@@ -9215,8 +9393,8 @@ func (c *ClientWithResponses) ApplyDecisionWithResponse(ctx context.Context, id 
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /api/v1/resources/items/{id}/download (the `DownloadResource` operationId).
-func (c *ClientWithResponses) DownloadResourceWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DownloadResourceResponse, error) {
-	rsp, err := c.DownloadResource(ctx, id, reqEditors...)
+func (c *ClientWithResponses) DownloadResourceWithResponse(ctx context.Context, id string, params *DownloadResourceParams, reqEditors ...RequestEditorFn) (*DownloadResourceResponse, error) {
+	rsp, err := c.DownloadResource(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -9295,8 +9473,8 @@ func (c *ClientWithResponses) PutGrantWithResponse(ctx context.Context, id strin
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /api/v1/resources/items/{id}/preview (the `PreviewResource` operationId).
-func (c *ClientWithResponses) PreviewResourceWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PreviewResourceResponse, error) {
-	rsp, err := c.PreviewResource(ctx, id, reqEditors...)
+func (c *ClientWithResponses) PreviewResourceWithResponse(ctx context.Context, id string, params *PreviewResourceParams, reqEditors ...RequestEditorFn) (*PreviewResourceResponse, error) {
+	rsp, err := c.PreviewResource(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -10698,6 +10876,9 @@ func ParseDownloadResourceResponse(rsp *http.Response) (*DownloadResourceRespons
 	}
 
 	switch {
+	case rsp.StatusCode == 304:
+		break // No content-type
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -10740,6 +10921,13 @@ func ParseDownloadResourceResponse(rsp *http.Response) (*DownloadResourceRespons
 		}
 		response.JSON413 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 416:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON416 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -10747,6 +10935,119 @@ func ParseDownloadResourceResponse(rsp *http.Response) (*DownloadResourceRespons
 		}
 		response.JSON503 = &dest
 
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers DownloadResourceResponse200Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = &value
+		}
+		if values := rsp.Header.Values("Content-Length"); len(values) > 0 {
+			var value int64
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Length", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			}
+			headers.ContentLength = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 206:
+		var headers DownloadResourceResponse206Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = &value
+		}
+		if values := rsp.Header.Values("Content-Length"); len(values) > 0 {
+			var value int64
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Length", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			}
+			headers.ContentLength = &value
+		}
+		if values := rsp.Header.Values("Content-Range"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Range", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentRange = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers206 = &headers
+	case rsp.StatusCode == 304:
+		var headers DownloadResourceResponse304Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers304 = &headers
+	case rsp.StatusCode == 416:
+		var headers DownloadResourceResponse416Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("Content-Range"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Range", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentRange = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers416 = &headers
 	}
 
 	return response, nil
@@ -10991,6 +11292,9 @@ func ParsePreviewResourceResponse(rsp *http.Response) (*PreviewResourceResponse,
 	}
 
 	switch {
+	case rsp.StatusCode == 304:
+		break // No content-type
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -11033,6 +11337,13 @@ func ParsePreviewResourceResponse(rsp *http.Response) (*PreviewResourceResponse,
 		}
 		response.JSON413 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 416:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON416 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -11040,6 +11351,119 @@ func ParsePreviewResourceResponse(rsp *http.Response) (*PreviewResourceResponse,
 		}
 		response.JSON503 = &dest
 
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers PreviewResourceResponse200Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = &value
+		}
+		if values := rsp.Header.Values("Content-Length"); len(values) > 0 {
+			var value int64
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Length", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			}
+			headers.ContentLength = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 206:
+		var headers PreviewResourceResponse206Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = &value
+		}
+		if values := rsp.Header.Values("Content-Length"); len(values) > 0 {
+			var value int64
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Length", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			}
+			headers.ContentLength = &value
+		}
+		if values := rsp.Header.Values("Content-Range"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Range", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentRange = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers206 = &headers
+	case rsp.StatusCode == 304:
+		var headers PreviewResourceResponse304Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers304 = &headers
+	case rsp.StatusCode == 416:
+		var headers PreviewResourceResponse416Headers
+		if values := rsp.Header.Values("Accept-Ranges"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Accept-Ranges", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.AcceptRanges = &value
+		}
+		if values := rsp.Header.Values("Content-Range"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Range", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentRange = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers416 = &headers
 	}
 
 	return response, nil

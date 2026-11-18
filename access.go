@@ -632,7 +632,63 @@ func (s *Service) selectionWithSchool(ctx context.Context, p Principal, id strin
 	return Selection{ResourceID: r.ID, VersionID: v.Version.ID, ReferenceID: v.ReferenceID, File: *v.Version.File}, r.SchoolID, nil
 }
 
+var errRangeStop = errors.New("range_complete")
+
+type slicingWriter struct {
+	w       io.Writer
+	skip    int64
+	remain  int64
+	written int64
+	stop    func()
+}
+
+func (s *slicingWriter) Write(p []byte) (int, error) {
+	total := len(p)
+	if s.skip > 0 {
+		if int64(len(p)) <= s.skip {
+			s.skip -= int64(len(p))
+			return total, nil
+		}
+		p = p[s.skip:]
+		s.skip = 0
+	}
+	if s.remain <= 0 {
+		if s.stop != nil {
+			s.stop()
+		}
+		return 0, errRangeStop
+	}
+	take := p
+	done := false
+	if int64(len(take)) >= s.remain {
+		take = take[:s.remain]
+		done = true
+	}
+	n, err := s.w.Write(take)
+	s.written += int64(n)
+	s.remain -= int64(n)
+	if err != nil {
+		return n, err
+	}
+	if done {
+		if s.stop != nil {
+			s.stop()
+		}
+		if len(take) == len(p) {
+			return total, nil
+		}
+		return 0, errRangeStop
+	}
+	return total, nil
+}
+
 func (s *Service) StreamDownload(ctx context.Context, p Principal, id string, open func(File) io.Writer) error {
+	return s.StreamDownloadRange(ctx, p, id, func(f File) (io.Writer, *ByteRange) { return open(f), nil })
+}
+
+// StreamDownloadRange authorizes one selection and uses it for both response
+// metadata and transfer. A nil writer completes a conditional request.
+func (s *Service) StreamDownloadRange(ctx context.Context, p Principal, id string, open func(File) (io.Writer, *ByteRange)) error {
 	if !validID(id) {
 		return ErrInput
 	}
@@ -686,8 +742,16 @@ func (s *Service) StreamDownload(ctx context.Context, p Principal, id string, op
 		}
 		return e
 	}
-	return s.withStreamIdleTimeout(ctx, open(*activeV.Version.File), func(streamCtx context.Context, out io.Writer) error {
-		return s.deps.Files.Download(streamCtx, p, activeV.ReferenceID, out)
+	f := *activeV.Version.File
+	w, br := open(f)
+	if w == nil {
+		return nil
+	}
+	if br != nil {
+		return s.transferRange(ctx, p, activeV.ReferenceID, f.Size, *br, w)
+	}
+	return s.withStreamIdleTimeout(ctx, w, func(work context.Context, out io.Writer) error {
+		return s.deps.Files.Download(work, p, activeV.ReferenceID, out)
 	})
 }
 
@@ -701,6 +765,43 @@ func (s *Service) Download(ctx context.Context, p Principal, id string, w io.Wri
 		return s.deps.Files.Download(streamCtx, p, selected.ReferenceID, out)
 	})
 	return selected.File, e
+}
+func (s *Service) DownloadRange(ctx context.Context, p Principal, id string, br ByteRange, w io.Writer) (File, error) {
+	if br.Offset < 0 || br.Length < 1 {
+		return File{}, ErrInput
+	}
+	selected, e := s.selection(ctx, p, id)
+	if e != nil {
+		return File{}, e
+	}
+	return selected.File, s.transferRange(ctx, p, selected.ReferenceID, selected.File.Size, br, w)
+}
+
+func (s *Service) transferRange(ctx context.Context, p Principal, ref string, size int64, br ByteRange, w io.Writer) error {
+	if br.Offset < 0 || br.Length < 1 || br.Offset >= size || br.Length > size-br.Offset {
+		return ErrInput
+	}
+	return s.withStreamIdleTimeout(ctx, w, func(work context.Context, out io.Writer) error {
+		if rf, ok := s.deps.Files.(RangeFiles); ok {
+			limited := &slicingWriter{w: out, remain: br.Length}
+			err := rf.DownloadRange(work, p, ref, br, limited)
+			if err == nil && limited.written != br.Length {
+				return ErrUnavailable
+			}
+			return err
+		}
+		stream, stop := context.WithCancel(work)
+		defer stop()
+		sliced := &slicingWriter{w: out, skip: br.Offset, remain: br.Length, stop: stop}
+		err := s.deps.Files.Download(stream, p, ref, sliced)
+		if sliced.written == br.Length && (err == nil || errors.Is(err, errRangeStop) || errors.Is(err, context.Canceled)) {
+			return nil
+		}
+		if err == nil {
+			return ErrUnavailable
+		}
+		return err
+	})
 }
 func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in StateChange) (Resource, error) {
 	var out Resource

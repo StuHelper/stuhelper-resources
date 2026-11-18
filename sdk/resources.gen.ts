@@ -2771,7 +2771,11 @@ export interface operations {
     DownloadResource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "If-None-Match"?: string;
+                "If-Range"?: string;
+                Range?: string;
+            };
             path: {
                 id: string;
             };
@@ -2779,14 +2783,41 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Authorized complete file or archive */
+            /** @description Authorized complete file */
             200: {
                 headers: {
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    "Content-Length"?: number;
+                    "Content-Disposition"?: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/octet-stream": string;
                 };
+            };
+            /** @description Authorized byte range */
+            206: {
+                headers: {
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    "Content-Length"?: number;
+                    "Content-Disposition"?: string;
+                    "Content-Range"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Not modified after current authorization check */
+            304: {
+                headers: {
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Invalid request */
             400: {
@@ -2836,6 +2867,18 @@ export interface operations {
             /** @description Configured resource limit exceeded */
             413: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Range not satisfiable */
+            416: {
+                headers: {
+                    "Content-Range"?: string;
+                    "Accept-Ranges"?: string;
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3641,7 +3684,11 @@ export interface operations {
     PreviewResource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "If-None-Match"?: string;
+                "If-Range"?: string;
+                Range?: string;
+            };
             path: {
                 id: string;
             };
@@ -3649,9 +3696,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Authorized complete file or archive */
+            /** @description Authorized complete file */
             200: {
                 headers: {
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    "Content-Length"?: number;
+                    "Content-Disposition"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3659,6 +3710,31 @@ export interface operations {
                     "application/pdf": string;
                     "*/*": string;
                 };
+            };
+            /** @description Authorized byte range */
+            206: {
+                headers: {
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    "Content-Length"?: number;
+                    "Content-Disposition"?: string;
+                    "Content-Range"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                    "application/pdf": string;
+                    "*/*": string;
+                };
+            };
+            /** @description Not modified after current authorization check */
+            304: {
+                headers: {
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Invalid request */
             400: {
@@ -3708,6 +3784,18 @@ export interface operations {
             /** @description Configured resource limit exceeded */
             413: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Range not satisfiable */
+            416: {
+                headers: {
+                    "Content-Range"?: string;
+                    "Accept-Ranges"?: string;
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
