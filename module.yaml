@@ -52,11 +52,13 @@ scenario_tests:
     - discovery_service_test.go#TestDiscoveryPublicationProposalUnlistingDeletionAndPermissions
   RES-OUTBOX-01:
     - discovery_delivery_test.go#TestDiscoveryOutboxNotificationRollbackExclusionAndConfirmation
+    - outbox_audit_test.go#TestOutboxRevisionsSchoolScopedWorkerAuditAndFIFO
   RES-DISCOVERY-02:
     - discovery_service_test.go#TestDiscoveryRejectsOtherSchoolAndDoesNotElevateOwners
     - discovery_service_test.go#TestDiscoveryRechecksPublicationAfterExternalAuthorization
   AUDIT-01:
     - audit_integration_test.go#TestAuditWritesPreserveObjectAndOperationReason
+    - outbox_audit_test.go#TestOutboxRevisionsSchoolScopedWorkerAuditAndFIFO
     - postgres/audit_query_test.go#TestPublicAuditQuery
   RES-01:
     - integration_test.go#TestConfigurableTaxonomySnapshotsAndYearFilters
@@ -66,10 +68,14 @@ scenario_tests:
     - integration_test.go#TestPublicationContinuityAndStaleReview
   RES-03:
     - integration_test.go#TestIndependentRightsCampusRevocationAndUnlisting
+    - quota_test.go#TestQuotaRechecksCommittedCapacityBeforeCommit
+    - quota_test.go#TestQuotaIsolationKeepsSafetyActionsAvailableAndEnforcesExactCaps
   RES-04:
     - integration_test.go#TestConcurrentIdempotencyAndChangedPayload
+    - idempotency_guards_test.go#TestIdempotencyGuardsConcurrentRequestPinningAndConfigValidation
   RES-05:
     - integration_test.go#TestDeniedInputsDoNotReachDependencies
+    - idempotency_guards_test.go#TestIdempotencyGuardsConcurrentRequestPinningAndConfigValidation
   RES-06:
     - integration_test.go#TestDirectoryPackagesOmitUnauthorizedAndRecheckRights
   RES-07:
@@ -82,6 +88,7 @@ scenario_tests:
     - integration_test.go#TestDatabaseIsolationAndAtomicAudit
   RES-10:
     - http_test.go#TestHTTPContractSDKAndUnknownInput
+    - contract_validation_test.go#TestContractAndInputBoundaries
   RES-11:
     - integration_test.go#TestReviewInspectionIsScopedAndGrantListsIdentifySubjects
   RES-12:
@@ -90,12 +97,17 @@ scenario_tests:
   RES-13:
     - references_test.go#TestOwnResourceNamesRequireUploadOwnershipAndKeepContentPrivate
     - references_test.go#TestComplaintTitleSnapshotRequiresAdmissionAtSubmission
+    - utf8_collation_test.go#TestUTF8CollationDatabasePreservesByteOrderForReferencesAndPagination
   RES-14:
     - file_access_test.go#TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions
+    - timeout_test.go#TestDownloadPreflightAndHTTPWriteAreBounded
+    - timeout_test.go#TestStreamProgressAndMetadataRPCTimeouts
+    - filename_safety_test.go#TestAttachFileRejectsUnsafeFilenamesAndStreamPreservesDisposition
   RES-15:
     - closure_test.go#TestClosedUploaderKeepsFilesAndCopyrightWithoutPublicAccountLink
   RES-16:
     - integration_test.go#TestListReusesRequestAuthorizationButRechecksNextRequest
+    - performance_test.go#TestBatchQueriesRequestAuthReuseAndVersionIndexes
   RES-17:
     - integration_test.go#TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting
   RS-05:

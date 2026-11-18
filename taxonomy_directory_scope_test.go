@@ -1,12 +1,20 @@
 package resources_test
 
 import (
+	"context"
 	"errors"
 	r "github.com/StuHelper/stuhelper-resources"
 	rp "github.com/StuHelper/stuhelper-resources/postgres"
 	"slices"
 	"testing"
 )
+
+type legacyDirectoryRepo struct{ r.Repository }
+type legacyDirectoryTx struct{ r.Transaction }
+
+func (repo legacyDirectoryRepo) Transaction(ctx context.Context, run func(r.Transaction) error) error {
+	return repo.Repository.Transaction(ctx, func(tx r.Transaction) error { return run(legacyDirectoryTx{tx}) })
+}
 
 func TestCategoryOrderDirectoryAdminAndCoverageScope(t *testing.T) {
 	h := newFixture(t)
@@ -42,6 +50,14 @@ func TestCategoryOrderDirectoryAdminAndCoverageScope(t *testing.T) {
 	must(t, e)
 	if len(readerDirs.Items) != 1 || readerDirs.Items[0].ID != "dir-enabled" {
 		t.Fatalf("ordinary reader saw disabled directory: %+v", readerDirs.Items)
+	}
+
+	legacy, err := r.New(legacyDirectoryRepo{h.repo}, r.Dependencies{Authority: h.auth, Catalog: h.catalog, Files: h.files, Moderation: h.moderation}, h.cfg)
+	must(t, err)
+	first, err := legacy.Directories(h.ctx, reader, "school", "course", "", 1, "")
+	must(t, err)
+	if len(first.Items) != 1 || first.Items[0].ID != "dir-enabled" {
+		t.Fatalf("enabled directory missing from legacy page: %+v", first)
 	}
 
 	h.auth.set("discover", true)
