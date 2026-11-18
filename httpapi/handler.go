@@ -14,9 +14,12 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 type Authenticator interface {
@@ -111,18 +114,36 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 	h.mount(m, "GET /api/v1/resources/review/{version}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.ReviewResource(r.Context(), p, r.PathValue("version"))
 	})
-	h.mount(m, "GET /api/v1/resources/review/{version}/file", h.reviewDownload)
+	h.mountStream(m, "GET /api/v1/resources/review/{version}/file", h.reviewDownload)
 	h.mount(m, "GET /api/v1/resources/items/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.Get(r.Context(), p, r.PathValue("id"))
 	})
 	write[resources.DraftWrite](h, m, "PUT /api/v1/resources/items/{id}", func(r *http.Request, p resources.Principal, in resources.DraftWrite) (any, error) {
 		return s.UpdateDraft(r.Context(), p, r.PathValue("id"), key(r), in)
 	})
+	h.mount(m, "DELETE /api/v1/resources/items/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		q := r.URL.Query()
+		var rev int64
+		if len(q) > 1 || len(q) == 1 && !q.Has("revision") {
+			return nil, resources.ErrInput
+		}
+		if raw := q.Get("revision"); raw != "" {
+			n, e := strconv.ParseInt(raw, 10, 64)
+			if e != nil || n < 1 {
+				return nil, resources.ErrInput
+			}
+			rev = n
+		}
+		return s.DeleteDraft(r.Context(), p, r.PathValue("id"), key(r), rev)
+	})
 	write[resources.FileLink](h, m, "POST /api/v1/resources/items/{id}/file", func(r *http.Request, p resources.Principal, in resources.FileLink) (any, error) {
 		return s.AttachFile(r.Context(), p, r.PathValue("id"), key(r), in)
 	})
 	write[resources.Command](h, m, "POST /api/v1/resources/items/{id}/submit", func(r *http.Request, p resources.Principal, in resources.Command) (any, error) {
 		return s.Submit(r.Context(), p, r.PathValue("id"), key(r), in)
+	})
+	write[resources.Command](h, m, "POST /api/v1/resources/items/{id}/withdraw", func(r *http.Request, p resources.Principal, in resources.Command) (any, error) {
+		return s.WithdrawProposal(r.Context(), p, r.PathValue("id"), key(r), in)
 	})
 	write[resources.Command](h, m, "POST /api/v1/resources/items/{id}/retry", func(r *http.Request, p resources.Principal, in resources.Command) (any, error) {
 		return s.RetryPending(r.Context(), p, r.PathValue("id"), key(r), in)
@@ -181,9 +202,9 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 		out, e := s.GetPackage(r.Context(), p, r.PathValue("id"))
 		return out.Package, e
 	})
-	h.mount(m, "GET /api/v1/resources/items/{id}/download", h.download)
-	h.mount(m, "GET /api/v1/resources/items/{id}/preview", h.preview)
-	h.mount(m, "GET /api/v1/resources/packages/{id}/parts/{part}", h.downloadPackage)
+	h.mountStream(m, "GET /api/v1/resources/items/{id}/download", h.download)
+	h.mountStream(m, "GET /api/v1/resources/items/{id}/preview", h.preview)
+	h.mountStream(m, "GET /api/v1/resources/packages/{id}/parts/{part}", h.downloadPackage)
 	return m, nil
 }
 func key(r *http.Request) string { return r.Header.Get("Idempotency-Key") }
@@ -197,9 +218,66 @@ func write[T any](h *handler, m *http.ServeMux, path string, run func(*http.Requ
 	})
 }
 func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
+	h.mountWithMode(m, path, false, run)
+}
+func (h *handler) mountStream(m *http.ServeMux, path string, run endpoint) {
+	h.mountWithMode(m, path, true, run)
+}
+
+// Streaming preflight has a fixed deadline. Once bytes start flowing, each
+// socket write gets its own idle deadline and the service monitors upstream progress.
+type streamResponseWriter struct {
+	http.ResponseWriter
+	preflight *time.Timer
+	timeout   time.Duration
+}
+
+func (w *streamResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w *streamResponseWriter) Write(p []byte) (int, error) {
+	w.preflight.Stop()
+	_ = http.NewResponseController(w.ResponseWriter).SetWriteDeadline(time.Now().Add(w.timeout))
+	return w.ResponseWriter.Write(p)
+}
+
+func (h *handler) mountWithMode(m *http.ServeMux, path string, streaming bool, run endpoint) {
 	m.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		var ctx context.Context
+		var cancel context.CancelFunc
+		if streaming {
+			ctx, cancel = context.WithCancel(r.Context())
+			timeout := h.s.OperationTimeout()
+			preflight := time.AfterFunc(timeout, cancel)
+			defer preflight.Stop()
+			w = &streamResponseWriter{ResponseWriter: w, preflight: preflight, timeout: timeout}
+		} else {
+			ctx, cancel = context.WithTimeout(r.Context(), 2*time.Minute)
+		}
+		defer cancel()
+		r = r.WithContext(ctx)
+		controller := http.NewResponseController(w)
+		initialDeadline := time.Now().Add(2 * time.Minute)
+		if deadline, ok := ctx.Deadline(); ok && deadline.Before(initialDeadline) {
+			initialDeadline = deadline
+		}
+		_ = controller.SetReadDeadline(initialDeadline)
+		_ = controller.SetWriteDeadline(initialDeadline)
+		stopped := make(chan struct{})
+		stop := context.AfterFunc(ctx, func() {
+			_ = controller.SetReadDeadline(time.Now())
+			if !streaming {
+				_ = controller.SetWriteDeadline(time.Now())
+			}
+			close(stopped)
+		})
+		defer func() {
+			if !stop() {
+				<-stopped
+			}
+			_ = controller.SetReadDeadline(time.Time{})
+			_ = controller.SetWriteDeadline(time.Time{})
+		}()
 		p, e := h.auth.Authenticate(r)
 		if e != nil || !p.Valid() {
 			if errors.Is(e, resources.ErrUnavailable) {
@@ -209,16 +287,13 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 			}
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
-		defer cancel()
-		r = r.WithContext(ctx)
-		controller := http.NewResponseController(w)
-		deadline, _ := ctx.Deadline()
-		_ = controller.SetReadDeadline(deadline)
-		_ = controller.SetWriteDeadline(deadline)
-		stop := context.AfterFunc(ctx, func() { _ = controller.SetReadDeadline(time.Now()); _ = controller.SetWriteDeadline(time.Now()) })
-		defer stop()
-		r.Body = http.MaxBytesReader(w, r.Body, 128<<10)
+
+		var bodyLimit int64 = 128 << 10
+		if path == "POST /api/v1/resources/packages" {
+			// A compact request can contain 10,000 identifiers of up to 128 ASCII bytes.
+			bodyLimit = 2 << 20
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
 		if len(r.Header.Values("Idempotency-Key")) > 1 {
 			failure(w, resources.ErrInput)
 			return
@@ -256,13 +331,17 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 			return
 		}
 		if out != nil {
-			status := 200
+			codes := []int{}
 			for code := range route.Operation.Responses.Map() {
 				n, e := strconv.Atoi(code)
 				if e == nil && n >= 200 && n < 300 {
-					status = n
-					break
+					codes = append(codes, n)
 				}
+			}
+			slices.Sort(codes)
+			status := 200
+			if len(codes) > 0 {
+				status = codes[0]
 			}
 			writeJSON(w, status, out)
 		}
@@ -304,12 +383,17 @@ func boolean(r *http.Request, key string) (bool, error) {
 func filter(r *http.Request) (resources.Filter, error) {
 	q := r.URL.Query()
 	n, e := limit(r)
-	out := resources.Filter{SchoolID: q.Get("school_id"), CourseID: q.Get("course_id"), CategoryID: q.Get("category_id"), DirectoryID: q.Get("directory_id"), Query: q.Get("query"), After: q.Get("after"), Limit: n, Sort: q.Get("sort"), FileType: q.Get("file_type")}
+	out := resources.Filter{SchoolID: q.Get("school_id"), CourseID: q.Get("course_id"), CategoryID: q.Get("category_id"), DirectoryID: q.Get("directory_id"), TeacherID: q.Get("teacher_id"), TermID: q.Get("term_id"), Tag: q.Get("tag"), Access: q.Get("access"), Query: q.Get("query"), After: q.Get("after"), Limit: n, Sort: q.Get("sort"), FileType: q.Get("file_type")}
 	if e != nil {
 		return out, e
 	}
 	if raw := q.Get("attributes"); raw != "" {
-		if len(raw) > 16000 || json.Unmarshal([]byte(raw), &out.Attributes) != nil {
+		if !utf8.ValidString(raw) || utf8.RuneCountInString(raw) > 2000 {
+			return out, resources.ErrInput
+		}
+		d := json.NewDecoder(strings.NewReader(raw))
+		d.DisallowUnknownFields()
+		if d.Decode(&out.Attributes) != nil || d.Decode(new(any)) != io.EOF || out.Attributes == nil {
 			return out, resources.ErrInput
 		}
 	}
@@ -357,6 +441,22 @@ type stream struct {
 	written    bool
 }
 
+func formatContentDisposition(disposition, name string) string {
+	cleaned := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == '/' || r == '\\' {
+			return '_'
+		}
+		return r
+	}, name)
+	cleaned = strings.TrimSpace(cleaned)
+	if cleaned != "" && cleaned != "." && cleaned != ".." {
+		if formatted := mime.FormatMediaType(disposition, map[string]string{"filename": cleaned}); formatted != "" {
+			return formatted
+		}
+	}
+	return disposition
+}
+
 func (s *stream) Write(b []byte) (int, error) {
 	if !s.written {
 		s.w.Header().Set("Content-Type", s.kind)
@@ -365,7 +465,7 @@ func (s *stream) Write(b []byte) (int, error) {
 			disposition = "inline"
 			s.w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
 		}
-		s.w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": s.name}))
+		s.w.Header().Set("Content-Disposition", formatContentDisposition(disposition, s.name))
 		s.written = true
 	}
 	return s.w.Write(b)
@@ -377,23 +477,16 @@ func (h *handler) preview(w http.ResponseWriter, r *http.Request, p resources.Pr
 	return h.file(w, r, p, true)
 }
 func (h *handler) file(w http.ResponseWriter, r *http.Request, p resources.Principal, inline bool) (any, error) {
-	resource, e := h.s.Get(r.Context(), p, r.PathValue("id"))
-	if e != nil {
-		return nil, e
-	}
-	if !resource.DownloadAllowed || resource.Current == nil || resource.Current.File == nil {
-		if resource.AccessReason == "" {
-			return nil, resources.ErrDenied
+	var out *stream
+	e := h.s.StreamDownload(r.Context(), p, r.PathValue("id"), func(f resources.File) io.Writer {
+		kind := "application/octet-stream"
+		if inline {
+			kind = f.ContentType
 		}
-		return nil, &resources.AccessFailure{Reason: resource.AccessReason, Missing: resource.MissingConditions, Unavailable: resource.UnavailableConditions, RuleVersion: resource.RuleVersion}
-	}
-	kind := "application/octet-stream"
-	if inline {
-		kind = resource.Current.File.ContentType
-	}
-	out := &stream{w: w, kind: kind, name: resource.Current.File.Filename, inline: inline}
-	_, e = h.s.Download(r.Context(), p, resource.ID, out)
-	if e != nil && out.written {
+		out = &stream{w: w, kind: kind, name: f.Filename, inline: inline}
+		return out
+	})
+	if e != nil && out != nil && out.written {
 		panic(http.ErrAbortHandler)
 	}
 	return nil, e

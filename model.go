@@ -8,7 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 var (
@@ -28,13 +31,29 @@ type Principal struct {
 }
 
 func (p Principal) Valid() bool {
-	return p.Issuer != "" && p.Subject != "" && len(p.Issuer) <= 512 && len(p.Subject) <= 256
+	if p.Issuer == "" || p.Subject == "" || len(p.Issuer) > 512 || len(p.Subject) > 256 {
+		return false
+	}
+	return utf8.ValidString(p.Issuer) && utf8.ValidString(p.Subject) && !strings.ContainsFunc(p.Issuer, unicode.IsControl) && !strings.ContainsFunc(p.Subject, unicode.IsControl)
 }
 func (p Principal) Key() string {
 	if !p.Valid() {
 		return ""
 	}
 	return base64.RawURLEncoding.EncodeToString([]byte(p.Issuer)) + ":" + base64.RawURLEncoding.EncodeToString([]byte(p.Subject))
+}
+func ParsePrincipalKey(key string) (Principal, error) {
+	if len(key) > 1100 || strings.Count(key, ":") != 1 {
+		return Principal{}, ErrInput
+	}
+	a, b, _ := strings.Cut(key, ":")
+	issuer, err1 := base64.RawURLEncoding.Strict().DecodeString(a)
+	subject, err2 := base64.RawURLEncoding.Strict().DecodeString(b)
+	p := Principal{Issuer: string(issuer), Subject: string(subject)}
+	if err1 != nil || err2 != nil || !p.Valid() || p.Key() != key {
+		return Principal{}, ErrInput
+	}
+	return p, nil
 }
 
 type Names map[string]string
@@ -112,8 +131,14 @@ type Metadata struct {
 	DirectoryID      string           `json:"directory_id,omitempty"`
 }
 type DraftWrite struct {
-	Revision int64    `json:"revision"`
-	Metadata Metadata `json:"metadata"`
+	Revision       int64    `json:"revision"`
+	Metadata       Metadata `json:"metadata"`
+	MediaVersionID string   `json:"media_version_id,omitempty"`
+	Submit         bool     `json:"submit,omitempty"`
+}
+type DeleteReceipt struct {
+	ID      string `json:"id"`
+	Deleted bool   `json:"deleted"`
 }
 type FileLink struct {
 	Revision       int64  `json:"revision"`
@@ -130,13 +155,15 @@ type File struct {
 	SHA256      string `json:"sha256"`
 }
 type Version struct {
-	ID        string    `json:"id"`
-	Number    int64     `json:"number"`
-	Metadata  Metadata  `json:"metadata"`
-	Category  Category  `json:"category"`
-	File      *File     `json:"file,omitempty"`
-	State     string    `json:"state"`
-	CreatedAt time.Time `json:"created_at"`
+	ID             string     `json:"id"`
+	Number         int64      `json:"number"`
+	Metadata       Metadata   `json:"metadata"`
+	Category       Category   `json:"category"`
+	File           *File      `json:"file,omitempty"`
+	State          string     `json:"state"`
+	DecisionReason string     `json:"decision_reason,omitempty"`
+	SubmittedAt    *time.Time `json:"submitted_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
 }
 
 // Record and VersionRecord are private repository/port models, never HTTP DTOs.
@@ -183,6 +210,7 @@ type Page struct {
 }
 type Filter struct {
 	SchoolID, CourseID, CategoryID, DirectoryID, Query, After, OwnerKey string
+	TeacherID, TermID, Tag, Access                                      string
 	EntitledKey, Sort, FileType, CursorID                               string
 	CursorTime, EntitledNow                                             *time.Time
 	CourseIDs, AllowedSchools                                           []string
@@ -315,6 +343,9 @@ type Capabilities struct {
 // Authority supplies current action eligibility and administration scope. Upload
 // and download decisions include the configured campus/phone facts. Missing facts
 // return unavailable; a permission grant cannot silently stand in for a fact.
+// Global administration (taxonomy.manage, coverage.manage) and instance-wide
+// admission pre-checks pass an empty scope (""); school-owned resources,
+// directories and coverage rules pass their concrete school_id.
 type Authority interface {
 	Check(context.Context, Principal, string, string) error
 }
