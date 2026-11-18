@@ -8,10 +8,16 @@ import (
 
 func (s *Service) PutDirectory(ctx context.Context, p Principal, id, key string, in DirectoryWrite) (Directory, error) {
 	var out Directory
-	if !validID(id) || !validID(in.SchoolID) || !optionalID(in.CourseID) || !optionalID(in.ParentID) || in.ParentID == id || in.Revision < 0 || !names(in.Names) {
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || !validID(in.SchoolID) || !optionalID(in.CourseID) || !optionalID(in.ParentID) || in.ParentID == id || in.Revision < 0 || !names(in.Names) {
 		return out, ErrInput
 	}
 	if e := s.auth(ctx, p, "directories.manage", in.SchoolID); e != nil {
+		return out, e
+	}
+	if hit, e := s.precheckReplay(ctx, p, "directories.manage", id, key, in, &out); e != nil || hit {
 		return out, e
 	}
 	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
@@ -193,6 +199,15 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 	s = s.withRequestAuthority()
 	if e := s.auth(ctx, p, "package", ""); e != nil {
 		return out, e
+	}
+	if hit, e := s.precheckReplay(ctx, p, "package", "", key, in, &out); e != nil {
+		return Package{}, e
+	} else if hit {
+		checked, e := s.GetPackage(ctx, p, out.ID)
+		if e != nil {
+			return Package{}, e
+		}
+		return checked.Package, nil
 	}
 	ids := in.ResourceIDs
 	schools := map[string]bool{}

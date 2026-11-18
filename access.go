@@ -695,12 +695,15 @@ func (s *Service) Download(ctx context.Context, p Principal, id string, w io.Wri
 }
 func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in StateChange) (Resource, error) {
 	var out Resource
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || in.Revision < 1 || !text(in.Reason, 2000) || strings.TrimSpace(in.Reason) == "" || in.State != "published" && in.State != "unlisted" && in.State != "blocked" {
+		return out, ErrInput
+	}
 	r, e := s.record(ctx, id)
 	if e != nil {
 		return out, e
-	}
-	if in.Revision < 1 || !text(in.Reason, 2000) || strings.TrimSpace(in.Reason) == "" || in.State != "published" && in.State != "unlisted" && in.State != "blocked" {
-		return out, ErrInput
 	}
 	budget := mutationBudget{exemptOps: in.State == "blocked" || in.State == "unlisted"}
 	e = s.mutationWithBudget(ctx, p, "manage", r.SchoolID, key, id, in, &budget, func(tx Transaction) (any, error) {
@@ -728,15 +731,18 @@ func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in 
 }
 func (s *Service) PutGrant(ctx context.Context, p Principal, id, grantID, key string, in GrantWrite) (Grant, error) {
 	var out Grant
-	r, e := s.record(ctx, id)
-	if e != nil {
-		return out, e
+	if !p.Valid() {
+		return out, ErrUnauthenticated
 	}
-	if !validID(grantID) || in.Revision < 0 || in.ExpiresAt != nil && !in.ExpiresAt.After(s.now()) {
+	if !validID(id) || !validID(grantID) || !validID(key) || in.Revision < 0 || in.ExpiresAt != nil && !in.ExpiresAt.After(s.now()) {
 		return out, ErrInput
 	}
 	if _, err := ParsePrincipalKey(in.SubjectKey); err != nil {
 		return out, ErrInput
+	}
+	r, e := s.record(ctx, id)
+	if e != nil {
+		return out, e
 	}
 	budget := mutationBudget{exemptOps: in.Revoked && in.Revision > 0}
 	e = s.mutationWithBudget(ctx, p, "grants.manage", r.SchoolID, key, id+":"+grantID, in, &budget, func(tx Transaction) (any, error) {
@@ -801,11 +807,10 @@ type requestCreation struct {
 
 func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string, in Request) (RequestReceipt, error) {
 	var out RequestReceipt
-	r, e := s.record(ctx, id)
-	if e != nil {
-		return out, e
+	if !p.Valid() {
+		return out, ErrUnauthenticated
 	}
-	if !text(in.Reason, 2000) || strings.TrimSpace(in.Reason) == "" || !text(in.Contact, 500) || len(in.Evidence) > 4 {
+	if !validID(id) || !validID(key) || !text(in.Reason, 2000) || strings.TrimSpace(in.Reason) == "" || !text(in.Contact, 500) || len(in.Evidence) > 4 {
 		return out, ErrInput
 	}
 	for _, evidence := range in.Evidence {
@@ -816,23 +821,24 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 	if in.Kind == "appeal" && !validID(in.PreviousTaskID) || in.Kind != "appeal" && in.PreviousTaskID != "" {
 		return out, ErrInput
 	}
-	switch in.Kind {
-	case "withdrawal", "appeal":
-		if r.Owner != p {
-			return out, ErrDenied
-		}
-	case "complaint":
-		if in.Contact == "" || len(in.Evidence) == 0 {
-			return out, ErrInput
-		}
-	default:
+	if in.Kind != "withdrawal" && in.Kind != "appeal" && in.Kind != "complaint" {
 		return out, ErrInput
+	}
+	if in.Kind == "complaint" && (in.Contact == "" || len(in.Evidence) == 0) {
+		return out, ErrInput
+	}
+	r, e := s.record(ctx, id)
+	if e != nil {
+		return out, e
+	}
+	if (in.Kind == "withdrawal" || in.Kind == "appeal") && r.Owner != p {
+		return out, ErrDenied
 	}
 	// Title disclosure is fixed at submission. A later qualification change or
 	// idempotent retry cannot add a title to a receipt created without admission.
-	includeTitle := in.Kind != "complaint" && r.Owner == p && p.Valid()
-	if !includeTitle && r.State == "published" && r.ActiveID != "" && p.Valid() {
-		includeTitle = s.auth(ctx, p, "discover", r.SchoolID) == nil
+	discoverOK := false
+	if !(in.Kind != "complaint" && r.Owner == p) {
+		discoverOK = s.auth(ctx, p, "discover", r.SchoolID) == nil
 	}
 	if err := ctx.Err(); err != nil {
 		return out, err
@@ -854,15 +860,19 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 		if e != nil {
 			return nil, e
 		}
-		if latest.Revision != r.Revision {
+		if (in.Kind == "withdrawal" || in.Kind == "appeal") && latest.Owner != p {
+			return nil, ErrDenied
+		}
+		versionID := latest.ActiveID
+		if versionID == "" {
+			versionID = latest.ProposalID
+		}
+		if versionID == "" {
 			return nil, ErrConflict
 		}
-		versionID := r.ActiveID
-		if versionID == "" {
-			versionID = r.ProposalID
-		}
-		if versionID == "" {
-			return nil, ErrConflict
+		includeTitle := in.Kind != "complaint" && latest.Owner == p && p.Valid()
+		if !includeTitle && latest.State == "published" && latest.ActiveID != "" {
+			includeTitle = discoverOK
 		}
 		out = RequestReceipt{ID: newID(), State: "pending", ResourceID: id, Kind: in.Kind, CreatedAt: s.now()}
 		if includeTitle {

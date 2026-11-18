@@ -15,8 +15,18 @@ type Service struct {
 }
 
 func New(repo Repository, deps Dependencies, cfg Config) (*Service, error) {
-	if repo == nil || deps.Authority == nil || deps.Catalog == nil || deps.Files == nil || deps.Moderation == nil || !validTerms(cfg.Terms) || len(cfg.AllowedTypes) == 0 || len(cfg.AllowedTypes) > 100 || cfg.MaxFileSize < 1 || cfg.MaxFileSize > 1<<30 || cfg.MaxPackageBytes < cfg.MaxFileSize || cfg.MaxPackageBytes > 4<<30 || cfg.MaxPackageFiles < 1 || cfg.MaxPackageFiles > 100 || cfg.MaxPackageParts < 1 || cfg.MaxPackageParts > 100 || cfg.MaxDirectoryDepth < 1 || cfg.MaxDirectoryDepth > 16 || cfg.MaxRecords < 1 || cfg.MaxRecords > 1000000 || cfg.MaxOperations < 1 || cfg.MaxOperations > 10000000 || cfg.MaxJobs < 1 || cfg.MaxJobs > 100000 || cfg.OperationTimeout < time.Second || cfg.OperationTimeout > time.Minute || cfg.PackageTTL < time.Minute || cfg.PackageTTL > time.Hour || cfg.Lease < 2*cfg.OperationTimeout || cfg.Lease > 10*time.Minute || cfg.MaxAttempts < 1 || cfg.MaxAttempts > 10 {
+	if repo == nil || deps.Authority == nil || deps.Catalog == nil || deps.Files == nil || deps.Moderation == nil || !validTerms(cfg.Terms) || len(cfg.UploadProfiles) > 100 || len(cfg.AllowedTypes) == 0 || len(cfg.AllowedTypes) > 100 || cfg.MaxFileSize < 1 || cfg.MaxFileSize > 1<<30 || cfg.MaxPackageBytes < cfg.MaxFileSize || cfg.MaxPackageBytes > 4<<30 || cfg.MaxPackageFiles < 1 || cfg.MaxPackageFiles > 100 || cfg.MaxPackageParts < 1 || cfg.MaxPackageParts > 100 || cfg.MaxDirectoryDepth < 1 || cfg.MaxDirectoryDepth > 16 || cfg.MaxRecords < 1 || cfg.MaxRecords > 1000000 || cfg.MaxOperations < 1 || cfg.MaxOperations > 10000000 || cfg.MaxJobs < 1 || cfg.MaxJobs > 100000 || cfg.OperationTimeout < time.Second || cfg.OperationTimeout > time.Minute || cfg.PackageTTL < time.Minute || cfg.PackageTTL > time.Hour || cfg.Lease < 2*cfg.OperationTimeout || cfg.Lease > 10*time.Minute || cfg.MaxAttempts < 1 || cfg.MaxAttempts > 10 {
 		return nil, ErrInput
+	}
+	seenPurpose := map[string]bool{}
+	seenBinding := map[string]bool{}
+	for _, up := range cfg.UploadProfiles {
+		binding := up.SchoolID + ":" + up.Access
+		if !optionalID(up.SchoolID) || (up.Access != "public" && up.Access != "restricted") || !validID(up.Purpose) || seenPurpose[up.Purpose] || seenBinding[binding] {
+			return nil, ErrInput
+		}
+		seenPurpose[up.Purpose] = true
+		seenBinding[binding] = true
 	}
 	for _, kind := range cfg.AllowedTypes {
 		if kind == "" || !text(kind, 200) {
@@ -63,6 +73,30 @@ func (s *Service) record(ctx context.Context, id string) (Record, error) {
 	err := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = tx.Record(id); return e })
 	return out, err
 }
+func (s *Service) precheckReplay(ctx context.Context, p Principal, action, id, key string, input any, out any) (bool, error) {
+	operation := hash([]string{p.Key(), action, id, key})
+	digest := hash(input)
+	hit := false
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
+		prior, e := tx.Replay(operation)
+		if errors.Is(e, ErrNotFound) {
+			return nil
+		}
+		if e != nil {
+			return e
+		}
+		if prior.Digest != digest {
+			return ErrConflict
+		}
+		if json.Unmarshal(prior.Result, out) != nil {
+			return ErrUnavailable
+		}
+		hit = true
+		return nil
+	})
+	return hit, err
+}
+
 func eventTargetAndRevision(id string, value any) (string, int64) {
 	target := id
 	var revision int64 = 1
