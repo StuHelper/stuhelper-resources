@@ -60,13 +60,13 @@ func resourceBrowseBase(f r.Filter, projection string) (string, []any) {
 func (t *transaction) Browse(f r.Filter) ([]r.Record, int64, error) {
 	base, args := resourceBrowseBase(f, "r.id,r.data,(v.data->'Version'->>'created_at')::timestamptz AS at")
 	bind := func(value any) string { args = append(args, value); return fmt.Sprintf("$%d", len(args)) }
-	cursor, order := "id>"+bind(f.After), "id"
+	cursor, order := `id COLLATE "C">`+bind(f.After), `id COLLATE "C"`
 	if f.Sort == "newest" {
 		// Replace the unused ID parameter instead of leaving an untyped bind.
 		args = args[:len(args)-1]
 		at := bind(f.CursorTime)
-		cursor = "(" + at + "::timestamptz IS NULL OR (at,id)<(" + at + "," + bind(f.CursorID) + "))"
-		order = "at DESC,id DESC"
+		cursor = "(" + at + `::timestamptz IS NULL OR (at,id COLLATE "C")<(` + at + "," + bind(f.CursorID) + ` COLLATE "C"))`
+		order = `at DESC,id COLLATE "C" DESC`
 	}
 	query := "WITH matched AS MATERIALIZED (" + base + "), page AS (SELECT * FROM matched WHERE " + cursor + " ORDER BY " + order + " LIMIT " + bind(f.Limit+1) + ") " +
 		"SELECT COALESCE((SELECT jsonb_agg(jsonb_build_object('record',data,'at',at) ORDER BY " + order + ") FROM page),'[]'::jsonb),(SELECT count(*) FROM matched)"
@@ -99,7 +99,7 @@ func (t *transaction) ResourceCounts(f r.Filter, references map[string][]string)
 	args = append(args, string(refs))
 	query := "WITH matched AS MATERIALIZED (" + base + "), counts AS (SELECT course_id,count(*) AS n FROM matched GROUP BY course_id), " +
 		"requested AS (SELECT key,value FROM jsonb_each($" + fmt.Sprint(len(args)) + "::jsonb)) SELECT jsonb_build_object('total',(SELECT count(*) FROM matched),'courses'," +
-		"COALESCE((SELECT jsonb_agg(jsonb_build_object('course_id',key,'count',n) ORDER BY key) FROM (SELECT req.key,COALESCE(sum(c.n),0) AS n FROM requested req " +
+		`COALESCE((SELECT jsonb_agg(jsonb_build_object('course_id',key,'count',n) ORDER BY key COLLATE "C") FROM (SELECT req.key,COALESCE(sum(c.n),0) AS n FROM requested req ` +
 		"LEFT JOIN counts c ON req.value ? c.course_id GROUP BY req.key) rows),'[]'::jsonb))"
 	return read[r.ResourceCounts](t, query, args...)
 }

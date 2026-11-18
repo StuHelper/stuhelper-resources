@@ -89,6 +89,7 @@ scenario_tests:
   RES-13:
     - references_test.go#TestOwnResourceNamesRequireUploadOwnershipAndKeepContentPrivate
     - references_test.go#TestComplaintTitleSnapshotRequiresAdmissionAtSubmission
+    - utf8_collation_test.go#TestUTF8CollationDatabasePreservesByteOrderForReferencesAndPagination
   RES-14:
     - file_access_test.go#TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions
   RES-15:
