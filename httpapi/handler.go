@@ -114,11 +114,29 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 	write[resources.DraftWrite](h, m, "PUT /api/v1/resources/items/{id}", func(r *http.Request, p resources.Principal, in resources.DraftWrite) (any, error) {
 		return s.UpdateDraft(r.Context(), p, r.PathValue("id"), key(r), in)
 	})
+	h.mount(m, "DELETE /api/v1/resources/items/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
+		q := r.URL.Query()
+		var rev int64
+		if len(q) > 1 || len(q) == 1 && !q.Has("revision") {
+			return nil, resources.ErrInput
+		}
+		if raw := q.Get("revision"); raw != "" {
+			n, e := strconv.ParseInt(raw, 10, 64)
+			if e != nil || n < 1 {
+				return nil, resources.ErrInput
+			}
+			rev = n
+		}
+		return s.DeleteDraft(r.Context(), p, r.PathValue("id"), key(r), rev)
+	})
 	write[resources.FileLink](h, m, "POST /api/v1/resources/items/{id}/file", func(r *http.Request, p resources.Principal, in resources.FileLink) (any, error) {
 		return s.AttachFile(r.Context(), p, r.PathValue("id"), key(r), in)
 	})
 	write[resources.Command](h, m, "POST /api/v1/resources/items/{id}/submit", func(r *http.Request, p resources.Principal, in resources.Command) (any, error) {
 		return s.Submit(r.Context(), p, r.PathValue("id"), key(r), in)
+	})
+	write[resources.Command](h, m, "POST /api/v1/resources/items/{id}/withdraw", func(r *http.Request, p resources.Principal, in resources.Command) (any, error) {
+		return s.WithdrawProposal(r.Context(), p, r.PathValue("id"), key(r), in)
 	})
 	write[resources.Command](h, m, "POST /api/v1/resources/items/{id}/retry", func(r *http.Request, p resources.Principal, in resources.Command) (any, error) {
 		return s.RetryPending(r.Context(), p, r.PathValue("id"), key(r), in)

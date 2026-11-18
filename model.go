@@ -131,8 +131,14 @@ type Metadata struct {
 	DirectoryID      string           `json:"directory_id,omitempty"`
 }
 type DraftWrite struct {
-	Revision int64    `json:"revision"`
-	Metadata Metadata `json:"metadata"`
+	Revision       int64    `json:"revision"`
+	Metadata       Metadata `json:"metadata"`
+	MediaVersionID string   `json:"media_version_id,omitempty"`
+	Submit         bool     `json:"submit,omitempty"`
+}
+type DeleteReceipt struct {
+	ID      string `json:"id"`
+	Deleted bool   `json:"deleted"`
 }
 type FileLink struct {
 	Revision       int64  `json:"revision"`
@@ -149,13 +155,15 @@ type File struct {
 	SHA256      string `json:"sha256"`
 }
 type Version struct {
-	ID        string    `json:"id"`
-	Number    int64     `json:"number"`
-	Metadata  Metadata  `json:"metadata"`
-	Category  Category  `json:"category"`
-	File      *File     `json:"file,omitempty"`
-	State     string    `json:"state"`
-	CreatedAt time.Time `json:"created_at"`
+	ID             string     `json:"id"`
+	Number         int64      `json:"number"`
+	Metadata       Metadata   `json:"metadata"`
+	Category       Category   `json:"category"`
+	File           *File      `json:"file,omitempty"`
+	State          string     `json:"state"`
+	DecisionReason string     `json:"decision_reason,omitempty"`
+	SubmittedAt    *time.Time `json:"submitted_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
 }
 
 // Record and VersionRecord are private repository/port models, never HTTP DTOs.

@@ -4,7 +4,48 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
+	"unicode"
 )
+
+type DeleteTransaction interface {
+	DeleteDraftRecord(Record) error
+	DeletedRecordSchool(string) (string, error)
+}
+
+func sanitizeDecisionReason(reason string) string {
+	reason = strings.ReplaceAll(reason, "\r\n", "\n")
+	cleaned := strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, reason)
+	cleaned = strings.TrimSpace(cleaned)
+	if !text(cleaned, 2000) {
+		return ""
+	}
+	return cleaned
+}
+
+func (s *Service) inspectDraftFile(ctx context.Context, p Principal, schoolID, mediaVersionID string) (FileEvidence, error) {
+	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+	defer cancel()
+	file, e := s.deps.Files.Inspect(work, p, mediaVersionID)
+	if e != nil {
+		return FileEvidence{}, normalizeDepError(ctx, e)
+	}
+	if file.SchoolID != schoolID {
+		return FileEvidence{}, ErrDenied
+	}
+	if file.Owner != p || file.Module != "resources" || file.File.VersionID != mediaVersionID || !validFilename(file.File.Filename) || file.File.Size < 1 || file.File.Size > s.cfg.MaxFileSize || !slices.Contains(s.cfg.AllowedTypes, file.File.ContentType) || !digestPattern.MatchString(file.File.SHA256) || !slices.Contains([]string{"awaiting_approval", "approved", "ready"}, file.State) {
+		return FileEvidence{}, ErrDenied
+	}
+	return file, nil
+}
 
 func (s *Service) validateDraft(ctx context.Context, m Metadata) error {
 	if e := validateMetadata(m, s.cfg.Terms); e != nil {
@@ -44,6 +85,9 @@ func (s *Service) CreateDraft(ctx context.Context, p Principal, key string, in D
 	if e := s.auth(ctx, p, "upload", in.Metadata.Associations.SchoolID); e != nil {
 		return out, e
 	}
+	if !optionalID(in.MediaVersionID) || in.Submit && in.MediaVersionID == "" {
+		return out, ErrInput
+	}
 	if e := s.checkOwnerActive(ctx, p); e != nil {
 		return out, e
 	}
@@ -53,7 +97,18 @@ func (s *Service) CreateDraft(ctx context.Context, p Principal, key string, in D
 	if e := s.validateDraft(ctx, in.Metadata); e != nil {
 		return out, e
 	}
-	e := s.mutationWithBudget(ctx, p, "upload", in.Metadata.Associations.SchoolID, key, "", in, &mutationBudget{addRecord: true}, func(tx Transaction) (any, error) {
+	var attached *FileEvidence
+	if in.MediaVersionID != "" {
+		file, e := s.inspectDraftFile(ctx, p, in.Metadata.Associations.SchoolID, in.MediaVersionID)
+		if e != nil {
+			return out, e
+		}
+		if file.Access != in.Metadata.Access {
+			return out, ErrConflict
+		}
+		attached = &file
+	}
+	e := s.mutationWithBudget(ctx, p, "upload", in.Metadata.Associations.SchoolID, key, "", in, &mutationBudget{addRecord: true, addJob: in.Submit}, func(tx Transaction) (any, error) {
 		if e := checkTxOwnerActive(tx, p); e != nil {
 			return nil, e
 		}
@@ -64,13 +119,27 @@ func (s *Service) CreateDraft(ctx context.Context, p Principal, key string, in D
 		if e = validateDirectory(tx, in.Metadata); e != nil {
 			return nil, e
 		}
-		r := Record{ID: newID(), Owner: p, SchoolID: in.Metadata.Associations.SchoolID, Revision: 1, State: "draft", ProposalID: newID(), NextVersion: 2, CreatedAt: s.now()}
-		v := VersionRecord{ResourceID: r.ID, Version: Version{ID: r.ProposalID, Number: 1, Metadata: in.Metadata, Category: category, State: "draft", CreatedAt: s.now()}}
+		now := s.now()
+		r := Record{ID: newID(), Owner: p, SchoolID: in.Metadata.Associations.SchoolID, Revision: 1, State: "draft", ProposalID: newID(), NextVersion: 2, CreatedAt: now}
+		v := VersionRecord{ResourceID: r.ID, Version: Version{ID: r.ProposalID, Number: 1, Metadata: in.Metadata, Category: category, State: "draft", CreatedAt: now}}
+		if attached != nil {
+			v.Version.File = &attached.File
+			v.FileOwner = attached.Owner
+		}
+		if in.Submit {
+			v.Version.State = "pending"
+			v.Version.SubmittedAt = &now
+		}
 		if e = tx.SaveRecord(r); e != nil {
 			return nil, e
 		}
 		if e = tx.SaveVersion(v); e != nil {
 			return nil, e
+		}
+		if in.Submit {
+			if e = s.queue(tx, "review", r.ID, v.Version.ID, "", ""); e != nil {
+				return nil, e
+			}
 		}
 		return Resource{ID: r.ID, Revision: r.Revision, State: r.State, Proposal: &v.Version, Owned: true, AccessReason: "not_published"}, nil
 	}, &out)
@@ -104,6 +173,7 @@ func (s *Service) applyProposalDecision(tx Transaction, r Record, v *VersionReco
 	}
 	v.DecisionID = in.ID
 	v.DecisionRevision = in.Revision
+	v.Version.DecisionReason = sanitizeDecisionReason(in.Reason)
 	v.Version.State = "rejected"
 	if approve {
 		v.Version.State = "preparing"
@@ -119,7 +189,7 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 	if !p.Valid() {
 		return out, ErrUnauthenticated
 	}
-	if !validID(id) || !validID(key) || in.Revision < 1 {
+	if !validID(id) || !validID(key) || in.Revision < 1 || !optionalID(in.MediaVersionID) {
 		return out, ErrInput
 	}
 	r, e := s.record(ctx, id)
@@ -139,7 +209,18 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 	if e = s.validateDraft(ctx, in.Metadata); e != nil {
 		return out, e
 	}
-	e = s.mutation(ctx, p, action, r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+	var attached *FileEvidence
+	if in.MediaVersionID != "" {
+		file, e := s.inspectDraftFile(ctx, p, r.SchoolID, in.MediaVersionID)
+		if e != nil {
+			return out, e
+		}
+		if file.Access != in.Metadata.Access {
+			return out, ErrConflict
+		}
+		attached = &file
+	}
+	e = s.mutationWithBudget(ctx, p, action, r.SchoolID, key, id, in, &mutationBudget{addJob: in.Submit}, func(tx Transaction) (any, error) {
 		if e := checkTxOwnerActive(tx, p); e != nil {
 			return nil, e
 		}
@@ -205,8 +286,21 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 			proposal.Version.File = nil
 			proposal.FileOwner = Principal{}
 		}
+		if attached != nil {
+			proposal.Version.File = &attached.File
+			proposal.FileOwner = attached.Owner
+		}
 		proposal.Version.Metadata = in.Metadata
 		proposal.Version.Category = category
+		if in.Submit {
+			if proposal.Version.File == nil {
+				return nil, ErrConflict
+			}
+			now := s.now()
+			proposal.Version.State = "pending"
+			proposal.Version.SubmittedAt = &now
+			proposal.Version.DecisionReason = ""
+		}
 		latest.ProposalID = proposal.Version.ID
 		latest.Revision++
 		if e = tx.SaveVersion(proposal); e != nil {
@@ -214,6 +308,11 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 		}
 		if e = tx.SaveRecord(latest); e != nil {
 			return nil, e
+		}
+		if in.Submit {
+			if e = s.queue(tx, "review", id, proposal.Version.ID, "", ""); e != nil {
+				return nil, e
+			}
 		}
 		return ownerView(tx, latest, p)
 	}, &out)
@@ -241,17 +340,9 @@ func (s *Service) AttachFile(ctx context.Context, p Principal, id, key string, i
 	if hit, e := s.precheckReplay(ctx, p, action, id, key, in, &out); e != nil || hit {
 		return out, e
 	}
-	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
-	defer cancel()
-	file, e := s.deps.Files.Inspect(work, p, in.MediaVersionID)
+	file, e := s.inspectDraftFile(ctx, p, r.SchoolID, in.MediaVersionID)
 	if e != nil {
 		return out, normalizeDepError(ctx, e)
-	}
-	if file.SchoolID != r.SchoolID {
-		return out, ErrDenied
-	}
-	if file.Owner != p || file.Module != "resources" || file.File.VersionID != in.MediaVersionID || !validFilename(file.File.Filename) || file.File.Size < 1 || file.File.Size > s.cfg.MaxFileSize || !slices.Contains(s.cfg.AllowedTypes, file.File.ContentType) || !digestPattern.MatchString(file.File.SHA256) || !slices.Contains([]string{"awaiting_approval", "approved", "ready"}, file.State) {
-		return out, ErrDenied
 	}
 	e = s.mutation(ctx, p, action, r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
 		if e := checkTxOwnerActive(tx, p); e != nil {
@@ -287,6 +378,12 @@ func (s *Service) AttachFile(ctx context.Context, p Principal, id, key string, i
 	}, &out)
 	return out, e
 }
+func publishedVersionView(v Version) *Version {
+	v.DecisionReason = ""
+	v.SubmittedAt = nil
+	return &v
+}
+
 func ownerView(tx Transaction, r Record, p Principal) (Resource, error) {
 	out := Resource{ID: r.ID, Revision: r.Revision, State: r.State, Owned: r.Owner == p, AccessReason: "not_checked"}
 	if r.ActiveID != "" {
@@ -294,7 +391,7 @@ func ownerView(tx Transaction, r Record, p Principal) (Resource, error) {
 		if e != nil {
 			return out, e
 		}
-		out.Current = &v.Version
+		out.Current = publishedVersionView(v.Version)
 	}
 	if r.ProposalID != "" {
 		v, e := tx.Version(r.ProposalID)
@@ -348,7 +445,10 @@ func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Co
 		if e = validateDirectory(tx, v.Version.Metadata); e != nil {
 			return nil, e
 		}
+		now := s.now()
 		v.Version.State = "pending"
+		v.Version.SubmittedAt = &now
+		v.Version.DecisionReason = ""
 		r.Revision++
 		if e = tx.SaveVersion(v); e != nil {
 			return nil, e
@@ -362,6 +462,153 @@ func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Co
 		return ownerView(tx, r, p)
 	}
 	e = s.mutationWithBudget(ctx, p, action, r.SchoolID, key, id, in, &mutationBudget{addJob: true}, returnOut, &out)
+	return out, e
+}
+func (s *Service) WithdrawProposal(ctx context.Context, p Principal, id, key string, in Command) (Resource, error) {
+	var out Resource
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || in.Revision < 1 {
+		return out, ErrInput
+	}
+	r, e := s.record(ctx, id)
+	if e != nil {
+		return out, e
+	}
+	if r.Owner != p {
+		return out, ErrDenied
+	}
+	payload := struct {
+		Op       string `json:"op"`
+		Revision int64  `json:"revision"`
+	}{Op: "withdraw", Revision: in.Revision}
+	e = s.mutation(ctx, p, "upload", r.SchoolID, key, id, payload, func(tx Transaction) (any, error) {
+		if e := checkTxOwnerActive(tx, p); e != nil {
+			return nil, e
+		}
+		if e := tx.Lock("resource:" + id); e != nil {
+			return nil, e
+		}
+		latest, e := tx.Record(id)
+		if e != nil {
+			return nil, e
+		}
+		if latest.Revision != in.Revision || latest.ProposalID == "" || latest.State == "blocked" {
+			return nil, ErrConflict
+		}
+		previous, e := tx.Version(latest.ProposalID)
+		if e != nil {
+			return nil, e
+		}
+		if previous.Version.State != "pending" {
+			return nil, ErrConflict
+		}
+		previous.Version.State = "superseded"
+		if e = tx.SaveVersion(previous); e != nil {
+			return nil, e
+		}
+		draft := VersionRecord{
+			ResourceID: id,
+			FileOwner:  previous.FileOwner,
+			Version: Version{
+				ID:        newID(),
+				Number:    latest.NextVersion,
+				Metadata:  previous.Version.Metadata,
+				Category:  previous.Version.Category,
+				File:      previous.Version.File,
+				State:     "draft",
+				CreatedAt: s.now(),
+			},
+		}
+		latest.NextVersion++
+		latest.ProposalID = draft.Version.ID
+		latest.Revision++
+		if e = tx.SaveVersion(draft); e != nil {
+			return nil, e
+		}
+		if e = tx.SaveRecord(latest); e != nil {
+			return nil, e
+		}
+		return ownerView(tx, latest, p)
+	}, &out)
+	return out, e
+}
+func (s *Service) DeleteDraft(ctx context.Context, p Principal, id, key string, revision int64) (DeleteReceipt, error) {
+	var out DeleteReceipt
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || revision < 0 {
+		return out, ErrInput
+	}
+	schoolID := ""
+	r, e := s.record(ctx, id)
+	if errors.Is(e, ErrNotFound) {
+		operation := hash([]string{p.Key(), "upload", id, key})
+		err := s.repo.Transaction(ctx, func(tx Transaction) error {
+			if _, err := tx.Replay(operation); err != nil {
+				return err
+			}
+			port, ok := tx.(DeleteTransaction)
+			if !ok {
+				return ErrUnavailable
+			}
+			var err error
+			schoolID, err = port.DeletedRecordSchool(id)
+			return err
+		})
+		if err != nil {
+			return out, err
+		}
+	} else if e != nil {
+		return out, e
+	} else {
+		if r.Owner != p {
+			return out, ErrDenied
+		}
+		schoolID = r.SchoolID
+	}
+	payload := struct {
+		Op       string `json:"op"`
+		Revision int64  `json:"revision"`
+	}{Op: "delete", Revision: revision}
+	e = s.mutation(ctx, p, "upload", schoolID, key, id, payload, func(tx Transaction) (any, error) {
+		if e := checkTxOwnerActive(tx, p); e != nil {
+			return nil, e
+		}
+		if e := tx.Lock("resource:" + id); e != nil {
+			return nil, e
+		}
+		latest, e := tx.Record(id)
+		if e != nil {
+			return nil, e
+		}
+		if latest.Owner != p {
+			return nil, ErrDenied
+		}
+		if revision > 0 && latest.Revision != revision {
+			return nil, ErrConflict
+		}
+		if latest.ActiveID != "" || latest.State != "draft" || latest.ProposalID == "" {
+			return nil, ErrConflict
+		}
+		proposal, e := tx.Version(latest.ProposalID)
+		if e != nil {
+			return nil, e
+		}
+		if proposal.Version.State != "draft" && proposal.Version.State != "rejected" {
+			return nil, ErrConflict
+		}
+		port, ok := tx.(DeleteTransaction)
+		if !ok {
+			return nil, ErrUnavailable
+		}
+		if e = port.DeleteDraftRecord(latest); e != nil {
+			return nil, e
+		}
+		return DeleteReceipt{ID: id, Deleted: true}, nil
+	}, &out)
 	return out, e
 }
 func (s *Service) ApplyDecision(ctx context.Context, p Principal, id, key string, in Decision) (Resource, error) {

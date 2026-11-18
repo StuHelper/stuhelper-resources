@@ -113,6 +113,8 @@ scenario_tests:
     - performance_test.go#TestBatchQueriesRequestAuthReuseAndVersionIndexes
   RES-17:
     - integration_test.go#TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting
+  RES-18:
+    - draft_workflow_test.go#TestDraftOneStepSubmitRejectionReasonWithdrawAndDelete
   RS-05:
     - entitlements_test.go#TestFourAccessSourceCombinations
     - entitlements_test.go#TestEntitlementSourcesCoverageExpiryRefundAndEligibility

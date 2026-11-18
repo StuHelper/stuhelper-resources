@@ -224,8 +224,7 @@ func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Re
 	}
 	out = Resource{ID: r.ID, Revision: r.Revision, State: r.State, Owned: r.Owner == p, AccessReason: "not_checked"}
 	if activeV != nil {
-		ver := activeV.Version
-		out.Current = &ver
+		out.Current = publishedVersionView(activeV.Version)
 	}
 	if privileged && proposalV != nil {
 		ver := proposalV.Version
