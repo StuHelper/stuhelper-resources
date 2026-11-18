@@ -184,14 +184,10 @@ func TestPublishMediaReferenceReleasedOnConcurrentTaxonomyChangeBlockAndFailedRe
 		t.Fatalf("expected 1 failed release job, got %d", failedReleases)
 	}
 
-	// Restore ReferenceID on superseded version or re-trigger release via block on a resource sharing that ref:
-	// re-queuing the same deterministic release job ID must reactivate the failed job.
-	_, e = h3.admin.Exec(`UPDATE resources.records SET proposal_id=$1, data=jsonb_set(data,'{ProposalID}',to_jsonb($1::text)) WHERE id=$2`, requeueProp, requeueItem.ID)
-	must(t, e)
-	_, e = h3.admin.Exec(`UPDATE resources.versions SET data=jsonb_set(jsonb_set(data,'{ReferenceID}',to_jsonb($1::text)),'{Version,state}','"preparing"') WHERE id=$2`, requeueRef, requeueProp)
-	must(t, e)
+	// The supported administrator retry must recover the release without
+	// reconstructing the superseded version in the database.
 	hf3.failRelease.Store(false)
-	_, e = h3.s.SetState(h3.ctx, manager, requeueItem.ID, "retrigger-release", r.StateChange{Revision: requeueItem.Revision, State: "blocked", Reason: "触发重入释放"})
+	_, e = h3.s.RetryPending(h3.ctx, manager, requeueItem.ID, "retry-release", r.Command{Revision: requeueItem.Revision})
 	must(t, e)
 	h3.drain(t)
 	h3.files.mu.Lock()
@@ -200,4 +196,32 @@ func TestPublishMediaReferenceReleasedOnConcurrentTaxonomyChangeBlockAndFailedRe
 	if !released3 {
 		t.Fatalf("failed release job was not reactivated for %s", requeueRef)
 	}
+}
+
+func TestTemporaryBlockKeepsPendingReviewRecoverable(t *testing.T) {
+	h := newFixture(t)
+	pub := h.publish(t, h.draft(t, "approved-original", "public"))
+	correction, err := h.s.UpdateDraft(h.ctx, uploader, pub.ID, "correct", r.DraftWrite{Revision: pub.Revision, Metadata: metadata("public")})
+	must(t, err)
+	pending, err := h.s.Submit(h.ctx, uploader, pub.ID, "resubmit", r.Command{Revision: correction.Revision})
+	must(t, err)
+	blocked, err := h.s.SetState(h.ctx, manager, pub.ID, "temporary-block", r.StateChange{Revision: pending.Revision, State: "blocked", Reason: "临时停用"})
+	must(t, err)
+	for i := 0; i < h.cfg.MaxAttempts; i++ {
+		h.clock.Add(time.Hour)
+		_, err = h.s.ProcessOne(h.ctx, "blocked-worker")
+		must(t, err)
+	}
+	restored, err := h.s.SetState(h.ctx, manager, pub.ID, "restore", r.StateChange{Revision: blocked.Revision, State: "published", Reason: "恢复"})
+	must(t, err)
+	_, err = h.s.RetryPending(h.ctx, manager, pub.ID, "resume-review", r.Command{Revision: restored.Revision})
+	must(t, err)
+	h.drain(t)
+	must(t, h.repo.Transaction(h.ctx, func(tx r.Transaction) error {
+		v, err := tx.Version(pending.Proposal.ID)
+		if err == nil && v.ModerationTaskID == "" {
+			t.Fatal("review was not delivered after restoring resource")
+		}
+		return err
+	}))
 }

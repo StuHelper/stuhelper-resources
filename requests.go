@@ -28,9 +28,11 @@ func (s *Service) RequestStatus(ctx context.Context, p Principal, id string) (Re
 	out := rec.Receipt
 	out.TaskID = rec.ExternalID
 	if rec.ExternalID != "" {
-		status, e := s.deps.Moderation.Status(ctx, p, rec.ExternalID)
+		work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+		defer cancel()
+		status, e := s.deps.Moderation.Status(work, p, rec.ExternalID)
 		if e != nil {
-			return RequestReceipt{}, e
+			return RequestReceipt{}, normalizeDepError(ctx, e)
 		}
 		out.State = status.State
 		out.DecisionReason = status.Reason
@@ -55,12 +57,18 @@ func (s *Service) RequestStatus(ctx context.Context, p Principal, id string) (Re
 
 func (s *Service) RetryRequest(ctx context.Context, p Principal, id, key string) (RequestReceipt, error) {
 	var out RequestReceipt
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) {
+		return out, ErrInput
+	}
 	var rec RequestRecord
 	e := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; rec, e = tx.Request(id); return e })
 	if e != nil {
 		return out, e
 	}
-	if rec.Reporter != p || !p.Valid() {
+	if rec.Reporter != p {
 		return out, ErrNotFound
 	}
 	r, e := s.record(ctx, rec.ResourceID)
@@ -83,6 +91,7 @@ func (s *Service) RetryRequest(ctx context.Context, p Principal, id, key string)
 		job.Attempts = 0
 		job.ErrorCode = ""
 		job.AvailableAt = s.now()
+		job.Generation++
 		if e = tx.SaveJob(job); e != nil {
 			return nil, e
 		}

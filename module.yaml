@@ -52,11 +52,13 @@ scenario_tests:
     - discovery_service_test.go#TestDiscoveryPublicationProposalUnlistingDeletionAndPermissions
   RES-OUTBOX-01:
     - discovery_delivery_test.go#TestDiscoveryOutboxNotificationRollbackExclusionAndConfirmation
+    - outbox_audit_test.go#TestOutboxRevisionsSchoolScopedWorkerAuditAndFIFO
   RES-DISCOVERY-02:
     - discovery_service_test.go#TestDiscoveryRejectsOtherSchoolAndDoesNotElevateOwners
     - discovery_service_test.go#TestDiscoveryRechecksPublicationAfterExternalAuthorization
   AUDIT-01:
     - audit_integration_test.go#TestAuditWritesPreserveObjectAndOperationReason
+    - outbox_audit_test.go#TestOutboxRevisionsSchoolScopedWorkerAuditAndFIFO
     - postgres/audit_query_test.go#TestPublicAuditQuery
   RES-01:
     - integration_test.go#TestConfigurableTaxonomySnapshotsAndYearFilters
@@ -64,6 +66,7 @@ scenario_tests:
     - integration_test.go#TestInitialCategoriesMigrationPreservesOperatorChanges
   RES-02:
     - integration_test.go#TestPublicationContinuityAndStaleReview
+    - publish_release_test.go#TestTemporaryBlockKeepsPendingReviewRecoverable
     - publish_release_test.go#TestPublishMediaReferenceReleasedOnConcurrentTaxonomyChangeBlockAndFailedReleaseRequeue
   RES-03:
     - integration_test.go#TestIndependentRightsCampusRevocationAndUnlisting
@@ -71,8 +74,10 @@ scenario_tests:
     - quota_test.go#TestQuotaIsolationKeepsSafetyActionsAvailableAndEnforcesExactCaps
   RES-04:
     - integration_test.go#TestConcurrentIdempotencyAndChangedPayload
+    - idempotency_guards_test.go#TestIdempotencyGuardsConcurrentRequestPinningAndConfigValidation
   RES-05:
     - integration_test.go#TestDeniedInputsDoNotReachDependencies
+    - idempotency_guards_test.go#TestIdempotencyGuardsConcurrentRequestPinningAndConfigValidation
   RES-06:
     - integration_test.go#TestDirectoryPackagesOmitUnauthorizedAndRecheckRights
   RES-07:
@@ -85,21 +90,41 @@ scenario_tests:
     - integration_test.go#TestDatabaseIsolationAndAtomicAudit
   RES-10:
     - http_test.go#TestHTTPContractSDKAndUnknownInput
+    - contract_validation_test.go#TestContractAndInputBoundaries
+  RES-24:
+    - http_test.go#TestCoverageHTTPAndAccessMethods
+    - collation_test.go#TestUTF8CollationPaginationAndOwnedReferences
   RES-11:
     - integration_test.go#TestReviewInspectionIsScopedAndGrantListsIdentifySubjects
   RES-12:
     - integration_test.go#TestCategoryReadsRequireContentAdmissionAndKeepScopedAdministration
+    - taxonomy_directory_scope_test.go#TestCategoryOrderDirectoryAdminAndCoverageScope
   RES-13:
     - references_test.go#TestOwnResourceNamesRequireUploadOwnershipAndKeepContentPrivate
     - references_test.go#TestComplaintTitleSnapshotRequiresAdmissionAtSubmission
+    - utf8_collation_test.go#TestUTF8CollationDatabasePreservesByteOrderForReferencesAndPagination
   RES-14:
     - file_access_test.go#TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions
+    - timeout_test.go#TestDownloadPreflightAndHTTPWriteAreBounded
+    - timeout_test.go#TestStreamProgressAndMetadataRPCTimeouts
+    - filename_safety_test.go#TestAttachFileRejectsUnsafeFilenamesAndStreamPreservesDisposition
+  RES-20:
+    - file_access_test.go#TestDownloadPinsResponseToAuthorizedVersion
+    - file_access_test.go#TestPreviewAndDownloadETagConditionalAndByteRangeDelivery
   RES-15:
     - closure_test.go#TestClosedUploaderKeepsFilesAndCopyrightWithoutPublicAccountLink
   RES-16:
     - integration_test.go#TestListReusesRequestAuthorizationButRechecksNextRequest
+    - performance_test.go#TestBatchQueriesRequestAuthReuseAndVersionIndexes
   RES-17:
     - integration_test.go#TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting
+  RES-23:
+    - observability_prune_test.go#TestPruningUsesCompletionTimeAndSkipsRenewingWindows
+    - observability_prune_test.go#TestRequestIDCorrelationOperationalReadinessStatsAndBoundedPruning
+  RES-21:
+    - dedup_instructor_test.go#TestCourseDuplicateDigestCheckAndVerifiedInstructorAttribution
+  RES-18:
+    - draft_workflow_test.go#TestDraftOneStepSubmitRejectionReasonWithdrawAndDelete
   RS-05:
     - entitlements_test.go#TestFourAccessSourceCombinations
     - entitlements_test.go#TestEntitlementSourcesCoverageExpiryRefundAndEligibility
@@ -112,9 +137,15 @@ scenario_tests:
   RS-28:
     - entitlements_test.go#TestConcurrentBillingDeliveryAndEventSchemas
     - entitlements_test.go#TestEntitlementRejectedAtomicInboxAndValidation
+  RES-22:
+    - admin_ops_test.go#TestManagedResourceStateFailedJobFiltersCoverageListAndCourseDirectoryTree
+  RES-19:
+    - entitlements_test.go#TestOwnEntitledResourceListRetainsUnlistedPurchasesAndHonorsRevocation
   RES-UI-01:
     - ui_backend_test.go#TestUIResourceVisibleCountsNewestTypesAndOwnerSummary
   RES-UI-02:
     - ui_backend_test.go#TestUIResourceAggregateHTTPAuthorizationAndBoundaries
   RES-UI-03:
     - ui_backend_test.go#TestResourceListCursorKeepsExistingLengthLimit
+  RES-UI-04:
+    - ui_backend_test.go#TestResourceBrowseFiltersAndDynamicGroupFacets

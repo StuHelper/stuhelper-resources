@@ -117,11 +117,23 @@ func (s *Service) ProcessOne(ctx context.Context, worker string) (bool, error) {
 			}
 		}
 		latest.State = "done"
+		completedAt := s.now()
+		latest.CompletedAt = &completedAt
 		latest.ErrorCode = ""
 		if e = tx.SaveJob(latest); e != nil {
 			return e
 		}
-		return tx.Event(Event{ID: hash([]string{"job", job.ID}), Type: "resources." + job.Kind + ".completed.v1", ResourceID: job.ResourceID, Actor: "worker", Time: s.now()})
+		var eventSchool string
+		var eventRevision int64 = 1
+		if job.ResourceID != "" {
+			if r, err := tx.Record(job.ResourceID); err == nil {
+				eventSchool = r.SchoolID
+				if r.Revision > 0 {
+					eventRevision = r.Revision
+				}
+			}
+		}
+		return tx.Event(Event{ID: hash([]string{"job", job.ID}), Type: "resources." + job.Kind + ".completed.v1", ResourceID: job.ResourceID, SchoolID: eventSchool, Actor: "worker", Revision: eventRevision, Time: s.now()})
 	})
 	if e != nil {
 		return true, e
@@ -142,6 +154,11 @@ func (s *Service) executeJob(ctx context.Context, job Job) (jobResult, error) {
 		v, e := s.version(ctx, job.VersionID)
 		if e != nil {
 			return result, e
+		}
+		if r.ProposalID == v.Version.ID && r.State == "blocked" && job.Kind == "review" && v.Version.State == "pending" {
+			// A temporary block defers review. Exhaustion leaves an explicit
+			// failed job that the administrator can resume after restoration.
+			return result, nil
 		}
 		if r.ProposalID != v.Version.ID || r.State == "blocked" {
 			result.obsolete = true
@@ -207,6 +224,11 @@ func (s *Service) completeJob(tx Transaction, job Job, result jobResult) (error,
 		if e != nil {
 			return nil, e
 		}
+		if job.Kind == "review" && r.ProposalID == v.Version.ID && v.Version.State == "pending" {
+			// A block that raced the external submission does not erase its receipt.
+			v.ModerationTaskID = result.externalID
+			return nil, tx.SaveVersion(v)
+		}
 		if r.ProposalID != v.Version.ID || r.State == "blocked" {
 			if r.ActiveID != v.Version.ID {
 				return nil, s.releaseVersionRefs(tx, r.ID, &v, result.reference)
@@ -214,8 +236,7 @@ func (s *Service) completeJob(tx Transaction, job Job, result jobResult) (error,
 			return nil, nil
 		}
 		if job.Kind == "review" {
-			v.ModerationTaskID = result.externalID
-			return nil, tx.SaveVersion(v)
+			return nil, nil
 		}
 		if v.Version.State != "preparing" {
 			if r.ActiveID != v.Version.ID {
@@ -280,10 +301,52 @@ func (s *Service) completeJob(tx Transaction, job Job, result jobResult) (error,
 	}
 }
 
+// Prefer the actionable proposal. A superseded or blocked version can
+// still hold a failed release independently of the current proposal.
+func retryableResourceJob(tx Transaction, r Record) (Job, error) {
+	if r.State != "blocked" && r.ProposalID != "" {
+		v, err := tx.Version(r.ProposalID)
+		if err != nil {
+			return Job{}, err
+		}
+		kind := ""
+		switch v.Version.State {
+		case "pending":
+			kind = "review"
+		case "preparing":
+			kind = "publish"
+		}
+		if kind != "" {
+			j, err := tx.Job(hash([]string{kind, r.ID, v.Version.ID, "", ""}))
+			if err != nil && !errors.Is(err, ErrNotFound) {
+				return Job{}, err
+			}
+			if err == nil && j.State == "failed" {
+				return j, nil
+			}
+		}
+	}
+	port, ok := tx.(interface{ FailedReleaseJob(string) (Job, error) })
+	if !ok {
+		return Job{}, ErrConflict
+	}
+	j, err := port.FailedReleaseJob(r.ID)
+	if errors.Is(err, ErrNotFound) {
+		return Job{}, ErrConflict
+	}
+	return j, err
+}
+
 // RetryPending resumes exhausted operations without changing their idempotency
 // keys. Providers must return the earlier result after an ambiguous timeout.
 func (s *Service) RetryPending(ctx context.Context, p Principal, id, key string, in Command) (Resource, error) {
 	var out Resource
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if !validID(id) || !validID(key) || in.Revision < 1 {
+		return out, ErrInput
+	}
 	r, e := s.record(ctx, id)
 	if e != nil {
 		return out, e
@@ -296,26 +359,12 @@ func (s *Service) RetryPending(ctx context.Context, p Principal, id, key string,
 		if e != nil {
 			return nil, e
 		}
-		if r.Revision != in.Revision || r.ProposalID == "" || r.State == "blocked" {
+		if r.Revision != in.Revision {
 			return nil, ErrConflict
 		}
-		v, e := tx.Version(r.ProposalID)
+		job, e := retryableResourceJob(tx, r)
 		if e != nil {
 			return nil, e
-		}
-		kind := "review"
-		if v.Version.State == "preparing" {
-			kind = "publish"
-		} else if v.Version.State != "pending" {
-			return nil, ErrConflict
-		}
-		jobID := hash([]string{kind, id, v.Version.ID, "", ""})
-		job, e := tx.Job(jobID)
-		if e != nil {
-			return nil, e
-		}
-		if job.State != "failed" {
-			return nil, ErrConflict
 		}
 		job.State = "pending"
 		job.Attempts = 0
@@ -325,7 +374,11 @@ func (s *Service) RetryPending(ctx context.Context, p Principal, id, key string,
 		if e = tx.SaveJob(job); e != nil {
 			return nil, e
 		}
-		return ownerView(tx, r, p)
+		view, e := ownerView(tx, r, p)
+		if e == nil {
+			e = populateAdminOperation(tx, r, &view)
+		}
+		return view, e
 	}, &out)
 	return out, e
 }

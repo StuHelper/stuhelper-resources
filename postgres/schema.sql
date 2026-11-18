@@ -5,26 +5,42 @@ CREATE TABLE IF NOT EXISTS resources.records (id text PRIMARY KEY, owner_key tex
 CREATE INDEX IF NOT EXISTS resources_records_owner ON resources.records(owner_key,id);
 CREATE INDEX IF NOT EXISTS resources_records_school ON resources.records(school_id,state,id);
 CREATE TABLE IF NOT EXISTS resources.versions (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), number bigint NOT NULL, data jsonb NOT NULL, UNIQUE(resource_id,number));
+CREATE INDEX IF NOT EXISTS resources_versions_published_sha256 ON resources.versions((data->'Version'->'metadata'->'associations'->>'school_id'),(data->'Version'->'file'->>'sha256')) WHERE data->'Version'->>'state'='published';
+CREATE INDEX IF NOT EXISTS resources_versions_course ON resources.versions ((data->'Version'->'metadata'->'associations'->>'course_id'));
+CREATE INDEX IF NOT EXISTS resources_versions_category ON resources.versions ((data->'Version'->'metadata'->>'category_id'));
+CREATE INDEX IF NOT EXISTS resources_versions_directory ON resources.versions ((data->'Version'->'metadata'->>'directory_id'));
+CREATE INDEX IF NOT EXISTS resources_versions_attributes ON resources.versions USING gin ((COALESCE(data->'Version'->'metadata'->'attributes','{}'::jsonb)) jsonb_path_ops);
 CREATE TABLE IF NOT EXISTS resources.grants (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), subject_key text NOT NULL, data jsonb NOT NULL, query_changed_at timestamptz NOT NULL DEFAULT now(), UNIQUE(resource_id,subject_key));
+CREATE INDEX IF NOT EXISTS resources_grants_subject ON resources.grants(subject_key,resource_id);
 CREATE TABLE IF NOT EXISTS resources.directories (id text PRIMARY KEY, school_id text NOT NULL, course_id text NOT NULL, parent_id text NOT NULL, data jsonb NOT NULL);
 CREATE INDEX IF NOT EXISTS resources_directories_parent ON resources.directories(school_id,parent_id,id);
+CREATE INDEX IF NOT EXISTS resources_directories_course ON resources.directories(school_id,course_id,id);
 CREATE TABLE IF NOT EXISTS resources.packages (id text PRIMARY KEY, expires_at timestamptz NOT NULL, data jsonb NOT NULL);
 CREATE INDEX IF NOT EXISTS resources_packages_expiry ON resources.packages(expires_at);
 CREATE TABLE IF NOT EXISTS resources.requests (id text PRIMARY KEY, resource_id text NOT NULL REFERENCES resources.records(id), data jsonb NOT NULL);
 CREATE TABLE IF NOT EXISTS resources.jobs (id text PRIMARY KEY, state text NOT NULL, available_at timestamptz NOT NULL, lease_until timestamptz NOT NULL, data jsonb NOT NULL);
+ALTER TABLE resources.jobs ADD COLUMN IF NOT EXISTS completed_at timestamptz;
+UPDATE resources.jobs SET completed_at=transaction_timestamp() WHERE state='done' AND completed_at IS NULL;
+CREATE INDEX IF NOT EXISTS resources_jobs_completed ON resources.jobs(completed_at,id) WHERE state='done';
+CREATE INDEX IF NOT EXISTS resources_jobs_failed_release ON resources.jobs((data->>'ResourceID'),available_at,id) WHERE state='failed' AND data->>'Kind'='release';
 CREATE INDEX IF NOT EXISTS resources_jobs_claim ON resources.jobs(state,available_at,lease_until);
+CREATE INDEX IF NOT EXISTS resources_jobs_resource ON resources.jobs((data->>'ResourceID'),state);
 CREATE TABLE IF NOT EXISTS resources.replays (key text PRIMARY KEY, data jsonb NOT NULL);
 CREATE TABLE IF NOT EXISTS resources.audit (id text PRIMARY KEY, data jsonb NOT NULL, reason text NOT NULL DEFAULT '', result text NOT NULL DEFAULT 'unknown' CHECK(result IN ('success','denied','failed','unknown')), recorded_xid xid8 NOT NULL DEFAULT pg_current_xact_id(), audit_actor text NOT NULL DEFAULT 'unknown', audit_target text NOT NULL DEFAULT 'unknown', audit_action text NOT NULL DEFAULT 'unknown', audit_school text NOT NULL DEFAULT '*', audit_group text NOT NULL DEFAULT '*', audit_time timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS resources.outbox(id text PRIMARY KEY, data jsonb NOT NULL, seq bigint GENERATED ALWAYS AS IDENTITY UNIQUE, sent_at timestamptz);
-CREATE INDEX IF NOT EXISTS resources_outbox_pending ON resources.outbox((data->>'source') COLLATE "C",(data->>'subject') COLLATE "C",seq) WHERE sent_at IS NULL;
+DROP INDEX IF EXISTS resources.resources_outbox_pending;
+CREATE INDEX IF NOT EXISTS resources_outbox_pending_seq ON resources.outbox(seq) WHERE sent_at IS NULL;
+CREATE INDEX IF NOT EXISTS resources_outbox_sent ON resources.outbox(sent_at) WHERE sent_at IS NOT NULL;
 REVOKE ALL ON SCHEMA resources FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA resources FROM PUBLIC;
 
-CREATE INDEX IF NOT EXISTS resources_requests_reporter ON resources.requests((data->'Reporter'),id);
+CREATE INDEX IF NOT EXISTS resources_requests_reporter_c ON resources.requests((data->'Reporter'),id COLLATE "C");
+DROP INDEX IF EXISTS resources.resources_requests_reporter;
 
 CREATE TABLE IF NOT EXISTS resources.closed_owners(owner_key text PRIMARY KEY,closure_id text NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
 
 CREATE TABLE IF NOT EXISTS resources.submission_limits(owner_key text PRIMARY KEY, started_at timestamptz NOT NULL, used integer NOT NULL CHECK(used>0));
+CREATE INDEX IF NOT EXISTS resources_submission_limits_started ON resources.submission_limits(started_at);
 
 
 CREATE TABLE IF NOT EXISTS resources.audit_retention(singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton), revision bigint NOT NULL DEFAULT 0);

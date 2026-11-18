@@ -15,8 +15,18 @@ type Service struct {
 }
 
 func New(repo Repository, deps Dependencies, cfg Config) (*Service, error) {
-	if repo == nil || deps.Authority == nil || deps.Catalog == nil || deps.Files == nil || deps.Moderation == nil || !validTerms(cfg.Terms) || len(cfg.AllowedTypes) == 0 || len(cfg.AllowedTypes) > 100 || cfg.MaxFileSize < 1 || cfg.MaxFileSize > 1<<30 || cfg.MaxPackageBytes < cfg.MaxFileSize || cfg.MaxPackageBytes > 4<<30 || cfg.MaxPackageFiles < 1 || cfg.MaxPackageFiles > 100 || cfg.MaxPackageParts < 1 || cfg.MaxPackageParts > 100 || cfg.MaxDirectoryDepth < 1 || cfg.MaxDirectoryDepth > 16 || cfg.MaxRecords < 1 || cfg.MaxRecords > 1000000 || cfg.MaxOperations < 1 || cfg.MaxOperations > 10000000 || cfg.MaxJobs < 1 || cfg.MaxJobs > 100000 || cfg.OperationTimeout < time.Second || cfg.OperationTimeout > time.Minute || cfg.PackageTTL < time.Minute || cfg.PackageTTL > time.Hour || cfg.Lease < 2*cfg.OperationTimeout || cfg.Lease > 10*time.Minute || cfg.MaxAttempts < 1 || cfg.MaxAttempts > 10 {
+	if repo == nil || deps.Authority == nil || deps.Catalog == nil || deps.Files == nil || deps.Moderation == nil || !validTerms(cfg.Terms) || len(cfg.UploadProfiles) > 100 || len(cfg.AllowedTypes) == 0 || len(cfg.AllowedTypes) > 100 || cfg.MaxFileSize < 1 || cfg.MaxFileSize > 1<<30 || cfg.MaxPackageBytes < cfg.MaxFileSize || cfg.MaxPackageBytes > 4<<30 || cfg.MaxPackageFiles < 1 || cfg.MaxPackageFiles > 100 || cfg.MaxPackageParts < 1 || cfg.MaxPackageParts > 100 || cfg.MaxDirectoryDepth < 1 || cfg.MaxDirectoryDepth > 16 || cfg.MaxRecords < 1 || cfg.MaxRecords > 1000000 || cfg.MaxOperations < 1 || cfg.MaxOperations > 10000000 || cfg.MaxJobs < 1 || cfg.MaxJobs > 100000 || cfg.OperationTimeout < time.Second || cfg.OperationTimeout > time.Minute || cfg.PackageTTL < time.Minute || cfg.PackageTTL > time.Hour || cfg.Lease < 2*cfg.OperationTimeout || cfg.Lease > 10*time.Minute || cfg.MaxAttempts < 1 || cfg.MaxAttempts > 10 {
 		return nil, ErrInput
+	}
+	seenPurpose := map[string]bool{}
+	seenBinding := map[string]bool{}
+	for _, up := range cfg.UploadProfiles {
+		binding := up.SchoolID + ":" + up.Access
+		if !optionalID(up.SchoolID) || (up.Access != "public" && up.Access != "restricted") || !validID(up.Purpose) || seenPurpose[up.Purpose] || seenBinding[binding] {
+			return nil, ErrInput
+		}
+		seenPurpose[up.Purpose] = true
+		seenBinding[binding] = true
 	}
 	for _, kind := range cfg.AllowedTypes {
 		if kind == "" || !text(kind, 200) {
@@ -29,8 +39,46 @@ func New(repo Repository, deps Dependencies, cfg Config) (*Service, error) {
 	}
 	return &Service{repo: repo, deps: deps, cfg: cfg, now: func() time.Time { return clock().UTC() }}, nil
 }
+
+// OperationTimeout bounds stream preflight and a single stalled transfer operation.
+func (s *Service) OperationTimeout() time.Duration { return s.cfg.OperationTimeout }
+
 func (s *Service) Capabilities() Capabilities {
 	return Capabilities{UploadProfiles: append([]UploadProfile{}, s.cfg.UploadProfiles...), Terms: s.cfg.Terms, AllowedTypes: append([]string{}, s.cfg.AllowedTypes...), MaxFileSize: s.cfg.MaxFileSize, MaxPackageBytes: s.cfg.MaxPackageBytes, MaxPackageFiles: s.cfg.MaxPackageFiles, PurchaseAvailable: true}
+}
+func (s *Service) Ready(ctx context.Context) error {
+	port, ok := s.repo.(OperationalReader)
+	if !ok {
+		return ErrUnavailable
+	}
+	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+	defer cancel()
+	return port.Ready(work)
+}
+func (s *Service) OperationalStats(ctx context.Context) (OperationalStats, error) {
+	port, ok := s.repo.(OperationalReader)
+	if !ok {
+		return OperationalStats{}, ErrUnavailable
+	}
+	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+	defer cancel()
+	stats, err := port.OperationalStats(work, s.now())
+	if err != nil {
+		return OperationalStats{}, err
+	}
+	stats.MaxRecords = s.cfg.MaxRecords
+	stats.MaxOperations = s.cfg.MaxOperations
+	stats.MaxJobs = s.cfg.MaxJobs
+	if s.cfg.MaxRecords > 0 {
+		stats.RecordUtilization = float64(stats.Records) / float64(s.cfg.MaxRecords)
+	}
+	if s.cfg.MaxOperations > 0 {
+		stats.OperationUtilization = float64(stats.Operations) / float64(s.cfg.MaxOperations)
+	}
+	if s.cfg.MaxJobs > 0 {
+		stats.JobUtilization = float64(stats.ActiveJobs) / float64(s.cfg.MaxJobs)
+	}
+	return stats, nil
 }
 func (s *Service) auth(ctx context.Context, p Principal, action, scope string) error {
 	if !p.Valid() && action != "discover" {
@@ -58,6 +106,113 @@ func (s *Service) record(ctx context.Context, id string) (Record, error) {
 	}
 	err := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = tx.Record(id); return e })
 	return out, err
+}
+
+// Replay uses the original result and the owner's current disclosure state.
+func decodeReplay(tx Transaction, data []byte, out any) error {
+	resource, ok := out.(*Resource)
+	if !ok {
+		if json.Unmarshal(data, out) != nil {
+			return ErrUnavailable
+		}
+		return nil
+	}
+	var saved Resource
+	if json.Unmarshal(data, &saved) != nil {
+		return ErrUnavailable
+	}
+	if hasInstructor(&saved) {
+		record, err := tx.Record(saved.ID)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			clearInstructor(&saved)
+		case err != nil:
+			return err
+		default:
+			if err := redactClosedInstructor(tx, record.Owner, &saved); err != nil {
+				return err
+			}
+		}
+	}
+	*resource = saved
+	return nil
+}
+
+func (s *Service) precheckReplay(ctx context.Context, p Principal, action, id, key string, input any, out any) (bool, error) {
+	operation := hash([]string{p.Key(), action, id, key})
+	digest := hash(input)
+	hit := false
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
+		prior, e := tx.Replay(operation)
+		if errors.Is(e, ErrNotFound) {
+			return nil
+		}
+		if e != nil {
+			return e
+		}
+		if prior.Digest != digest {
+			return ErrConflict
+		}
+		if err := decodeReplay(tx, prior.Result, out); err != nil {
+			return err
+		}
+		hit = true
+		return nil
+	})
+	return hit, err
+}
+
+func eventTargetAndRevision(id string, value any) (string, int64) {
+	target := id
+	var revision int64 = 1
+	switch v := value.(type) {
+	case Resource:
+		if target == "" {
+			target = v.ID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Category:
+		if target == "" {
+			target = v.ID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Directory:
+		if target == "" {
+			target = v.ID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Grant:
+		if target == "" {
+			target = v.ID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Coverage:
+		if target == "" {
+			target = v.PlanID
+		}
+		if v.Revision > 0 {
+			revision = v.Revision
+		}
+	case Package:
+		if target == "" {
+			target = v.ID
+		}
+	case requestCreation:
+		target, revision = v.ResourceID, v.resourceRevision
+	case RequestReceipt:
+		if target == "" {
+			target = v.ID
+		}
+	}
+	return target, revision
 }
 
 type mutationBudget struct {
@@ -89,18 +244,24 @@ func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key,
 }
 
 func (s *Service) mutationWithBudget(ctx context.Context, p Principal, action, scope, key, id string, input any, budget *mutationBudget, apply func(Transaction) (any, error), out any) error {
+	_, err := s.mutationWithReplay(ctx, p, action, scope, scope, key, id, input, budget, apply, out)
+	return err
+}
+
+func (s *Service) mutationWithReplay(ctx context.Context, p Principal, action, scope, auditSchool, key, id string, input any, budget *mutationBudget, apply func(Transaction) (any, error), out any) (bool, error) {
 	if !p.Valid() {
-		return ErrUnauthenticated
+		return false, ErrUnauthenticated
 	}
 	if !validID(key) {
-		return ErrInput
+		return false, ErrInput
 	}
 	if e := s.auth(ctx, p, action, scope); e != nil {
-		return e
+		return false, e
 	}
 	operation := hash([]string{p.Key(), action, id, key})
 	digest := hash(input)
-	return s.repo.Transaction(ctx, func(tx Transaction) error {
+	replayed := false
+	err := s.repo.Transaction(ctx, func(tx Transaction) error {
 		if e := tx.Lock("operation:" + operation); e != nil {
 			return e
 		}
@@ -109,9 +270,10 @@ func (s *Service) mutationWithBudget(ctx context.Context, p Principal, action, s
 			if prior.Digest != digest {
 				return ErrConflict
 			}
-			if json.Unmarshal(prior.Result, out) != nil {
-				return ErrUnavailable
+			if err := decodeReplay(tx, prior.Result, out); err != nil {
+				return err
 			}
+			replayed = true
 			return nil
 		}
 		if !errors.Is(e, ErrNotFound) {
@@ -128,11 +290,8 @@ func (s *Service) mutationWithBudget(ctx context.Context, p Principal, action, s
 		if e != nil {
 			return ErrUnavailable
 		}
-		auditTarget := id
-		if created, ok := value.(Resource); ok && auditTarget == "" {
-			auditTarget = created.ID
-		}
-		if e = tx.Event(Event{Reason: auditReason(input), ID: operation, Type: "resources." + action + ".v1", ResourceID: auditTarget, SchoolID: scope, Actor: p.Key(), Time: s.now()}); e != nil {
+		auditTarget, revision := eventTargetAndRevision(id, value)
+		if e = tx.Event(Event{Reason: auditReason(input), ID: operation, Type: "resources." + action + ".v1", ResourceID: auditTarget, SchoolID: auditSchool, Actor: p.Key(), Revision: revision, Time: s.now()}); e != nil {
 			return e
 		}
 		if e = tx.SaveReplay(Replay{Key: operation, Digest: digest, Result: data}); e != nil {
@@ -152,6 +311,7 @@ func (s *Service) mutationWithBudget(ctx context.Context, p Principal, action, s
 		}
 		return nil
 	})
+	return replayed, err
 }
 func (s *Service) PutCategory(ctx context.Context, p Principal, id, key string, input CategoryWrite) (Category, error) {
 	var out Category

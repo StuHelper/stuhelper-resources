@@ -8,6 +8,9 @@ import (
 func (t *transaction) Coverage(id string) (m.Coverage, error) {
 	return read[m.Coverage](t, `SELECT data FROM resources.coverage WHERE id=$1`, id)
 }
+func (t *transaction) Coverages(limit int, after string) ([]m.Coverage, error) {
+	return list[m.Coverage](t, `SELECT data FROM resources.coverage WHERE id COLLATE "C">$1 COLLATE "C" ORDER BY id COLLATE "C" LIMIT $2`, after, limit)
+}
 func (t *transaction) SaveCoverage(v m.Coverage) error {
 	return t.save(`INSERT INTO resources.coverage(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=excluded.data`, v, v.PlanID)
 }
@@ -41,4 +44,25 @@ func (t *transaction) Rights(owner, id, school, directory, category string, now 
  WHERE m.owner_key=$1 AND (m.data->>'valid_from')::timestamptz<=$6 AND (m.data->>'valid_until')::timestamptz>$6
  AND rule->>'school_id'=$3 AND (COALESCE(rule->>'directory_id','')='' OR rule->>'directory_id'=$4) AND (COALESCE(rule->>'category_id','')='' OR rule->>'category_id'=$5))`, owner, id, school, directory, category, now).Scan(&out.Purchased, &out.Member)
 	return out, safe(e)
+}
+
+func (t *transaction) EntitledSchools(owner string, now time.Time) ([]string, error) {
+	rows, e := t.tx.QueryContext(t.ctx, `SELECT r.school_id FROM resources.records r WHERE r.active_id<>'' AND (
+ (r.state IN ('published','unlisted') AND EXISTS(SELECT 1 FROM resources.purchases p WHERE p.owner_key=$1 AND p.resource_id=r.id AND p.data->>'revoked'='false'))
+ OR
+ (r.state='published' AND EXISTS(SELECT 1 FROM resources.grants g WHERE g.subject_key=$1 AND g.resource_id=r.id AND COALESCE(g.data->'Grant'->>'revoked','false')<>'true' AND (g.data->'Grant'->>'expires_at' IS NULL OR (g.data->'Grant'->>'expires_at')::timestamptz>$2)))
+ ) GROUP BY r.school_id ORDER BY r.school_id COLLATE "C"`, owner, now)
+	if e != nil {
+		return nil, safe(e)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var s string
+		if e = rows.Scan(&s); e != nil {
+			return nil, safe(e)
+		}
+		out = append(out, s)
+	}
+	return out, safe(rows.Err())
 }
