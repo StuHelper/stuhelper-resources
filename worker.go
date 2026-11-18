@@ -228,7 +228,7 @@ func (s *Service) RetryPending(ctx context.Context, p Principal, id, key string,
 	if e != nil {
 		return out, e
 	}
-	e = s.mutation(ctx, p, "manage", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+	e = s.mutationWithBudget(ctx, p, "manage", r.SchoolID, key, id, in, &mutationBudget{addJob: true}, func(tx Transaction) (any, error) {
 		if e := tx.Lock("resource:" + id); e != nil {
 			return nil, e
 		}

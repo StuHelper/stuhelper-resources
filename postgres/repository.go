@@ -39,7 +39,7 @@ func safe(e error) error {
 	return resources.ErrUnavailable
 }
 func (r *Repository) Transaction(ctx context.Context, run func(resources.Transaction) error) error {
-	tx, e := r.DB.BeginTx(ctx, nil)
+	tx, e := r.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if e != nil {
 		return safe(e)
 	}
@@ -142,7 +142,7 @@ func (t *transaction) List(f resources.Filter) ([]resources.Record, error) {
  ORDER BY r.id LIMIT $10`, f.IncludeUnpublished, f.After, f.SchoolID, f.OwnerKey, f.CourseID, f.CategoryID, f.DirectoryID, f.Query, string(attrs), f.Limit)
 }
 func (t *transaction) Counts() (a, b, c int, e error) {
-	e = t.tx.QueryRowContext(t.ctx, `SELECT (SELECT count(*) FROM resources.records),(SELECT count(*) FROM resources.replays),(SELECT count(*) FROM resources.jobs WHERE state IN ('pending','working'))`).Scan(&a, &b, &c)
+	e = t.tx.QueryRowContext(t.ctx, `SELECT COALESCE(sum(delta) FILTER(WHERE name='records'),0),COALESCE(sum(delta) FILTER(WHERE name='replays'),0),COALESCE(sum(delta) FILTER(WHERE name='active_jobs'),0) FROM resources.counter_shards`).Scan(&a, &b, &c)
 	return a, b, c, safe(e)
 }
 func (t *transaction) Replay(key string) (resources.Replay, error) {
