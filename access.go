@@ -324,7 +324,10 @@ func (s *Service) PutGrant(ctx context.Context, p Principal, id, grantID, key st
 	if e != nil {
 		return out, e
 	}
-	if !validID(grantID) || in.Revision < 0 || in.SubjectKey == "" || !text(in.SubjectKey, 1100) || in.ExpiresAt != nil && !in.ExpiresAt.After(s.now()) {
+	if !validID(grantID) || in.Revision < 0 || in.ExpiresAt != nil && !in.ExpiresAt.After(s.now()) {
+		return out, ErrInput
+	}
+	if _, err := ParsePrincipalKey(in.SubjectKey); err != nil {
 		return out, ErrInput
 	}
 	budget := mutationBudget{exemptOps: in.Revoked && in.Revision > 0}

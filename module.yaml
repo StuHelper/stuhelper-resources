@@ -84,6 +84,7 @@ scenario_tests:
     - integration_test.go#TestDatabaseIsolationAndAtomicAudit
   RES-10:
     - http_test.go#TestHTTPContractSDKAndUnknownInput
+    - contract_validation_test.go#TestContractAndInputBoundaries
   RES-11:
     - integration_test.go#TestReviewInspectionIsScopedAndGrantListsIdentifySubjects
   RES-12:

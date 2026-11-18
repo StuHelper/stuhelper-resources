@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type Authenticator interface {
@@ -260,7 +261,12 @@ func (h *handler) mountWithMode(m *http.ServeMux, path string, streaming bool, r
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, 128<<10)
+		var bodyLimit int64 = 128 << 10
+		if path == "POST /api/v1/resources/packages" {
+			// A compact request can contain 10,000 identifiers of up to 128 ASCII bytes.
+			bodyLimit = 2 << 20
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
 		if len(r.Header.Values("Idempotency-Key")) > 1 {
 			failure(w, resources.ErrInput)
 			return
@@ -351,7 +357,12 @@ func filter(r *http.Request) (resources.Filter, error) {
 		return out, e
 	}
 	if raw := q.Get("attributes"); raw != "" {
-		if len(raw) > 16000 || json.Unmarshal([]byte(raw), &out.Attributes) != nil {
+		if !utf8.ValidString(raw) || utf8.RuneCountInString(raw) > 2000 {
+			return out, resources.ErrInput
+		}
+		d := json.NewDecoder(strings.NewReader(raw))
+		d.DisallowUnknownFields()
+		if d.Decode(&out.Attributes) != nil || d.Decode(new(any)) != io.EOF || out.Attributes == nil {
 			return out, resources.ErrInput
 		}
 	}
