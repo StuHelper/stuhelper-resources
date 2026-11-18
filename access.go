@@ -140,7 +140,6 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 	s = s.withRequestAuthority()
 	var r Record
 	var activeV, proposalV *VersionRecord
-	var facts *AccessFacts
 	err := s.repo.Transaction(ctx, func(tx Transaction) error {
 		var e error
 		r, e = tx.Record(id)
@@ -153,13 +152,6 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 				return e
 			}
 			activeV = &v
-			if p.Valid() && !(r.State == "published" && v.Version.Metadata.Access == "public") {
-				f, e := loadSingleAccessFacts(tx, p.Key(), r, v, s.now())
-				if e != nil {
-					return e
-				}
-				facts = &f
-			}
 		}
 		if r.ProposalID != "" {
 			if activeV != nil && r.ProposalID == activeV.Version.ID {
@@ -178,12 +170,11 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 	if err != nil {
 		return Resource{}, err
 	}
-	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, facts)
+	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil)
 }
 
 func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resource, error) {
 	var activeV, proposalV *VersionRecord
-	var facts *AccessFacts
 	err := s.repo.Transaction(ctx, func(tx Transaction) error {
 		if r.ActiveID != "" {
 			v, e := tx.Version(r.ActiveID)
@@ -191,13 +182,6 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 				return e
 			}
 			activeV = &v
-			if p.Valid() && !(r.State == "published" && v.Version.Metadata.Access == "public") {
-				f, e := loadSingleAccessFacts(tx, p.Key(), r, v, s.now())
-				if e != nil {
-					return e
-				}
-				facts = &f
-			}
 		}
 		if r.ProposalID != "" {
 			if activeV != nil && r.ProposalID == activeV.Version.ID {
@@ -216,7 +200,7 @@ func (s *Service) getRecord(ctx context.Context, p Principal, r Record) (Resourc
 	if err != nil {
 		return Resource{}, err
 	}
-	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, facts)
+	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil)
 }
 
 func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Record, activeV, proposalV *VersionRecord, facts *AccessFacts) (Resource, error) {
@@ -485,9 +469,14 @@ func (s *Service) hydrateRecords(ctx context.Context, p Principal, records []Rec
 	return out, nil
 }
 
-func (s *Service) selectBatch(ctx context.Context, p Principal, ids []string) (map[string]Selection, map[string]error, error) {
+type schoolSelection struct {
+	Selection
+	schoolID string
+}
+
+func (s *Service) selectBatch(ctx context.Context, p Principal, ids []string) (map[string]schoolSelection, map[string]error, error) {
 	s = s.withRequestAuthority()
-	selections := make(map[string]Selection, len(ids))
+	selections := make(map[string]schoolSelection, len(ids))
 	itemErrs := make(map[string]error, len(ids))
 	const chunkSize = 200
 	for start := 0; start < len(ids); start += chunkSize {
@@ -549,11 +538,11 @@ func (s *Service) selectBatch(ctx context.Context, p Principal, ids []string) (m
 		}
 		for _, id := range chunk {
 			if !batched {
-				sel, e := s.selection(ctx, p, id)
+				sel, school, e := s.selectionWithSchool(ctx, p, id)
 				if e != nil {
 					itemErrs[id] = e
 				} else {
-					selections[id] = sel
+					selections[id] = schoolSelection{Selection: sel, schoolID: school}
 				}
 				continue
 			}
@@ -580,16 +569,20 @@ func (s *Service) selectBatch(ctx context.Context, p Principal, ids []string) (m
 				itemErrs[id] = ErrUnavailable
 				continue
 			}
-			selections[id] = Selection{ResourceID: rec.ID, VersionID: ver.Version.ID, ReferenceID: ver.ReferenceID, File: *ver.Version.File}
+			selections[id] = schoolSelection{Selection: Selection{ResourceID: rec.ID, VersionID: ver.Version.ID, ReferenceID: ver.ReferenceID, File: *ver.Version.File}, schoolID: rec.SchoolID}
 		}
 	}
 	return selections, itemErrs, nil
 }
 
 func (s *Service) selection(ctx context.Context, p Principal, id string) (Selection, error) {
+	sel, _, err := s.selectionWithSchool(ctx, p, id)
+	return sel, err
+}
+func (s *Service) selectionWithSchool(ctx context.Context, p Principal, id string) (Selection, string, error) {
 	var out Selection
 	if !validID(id) {
-		return out, ErrInput
+		return out, "", ErrInput
 	}
 	var r Record
 	var v VersionRecord
@@ -616,18 +609,18 @@ func (s *Service) selection(ctx context.Context, p Principal, id string) (Select
 		return nil
 	})
 	if err != nil {
-		return out, err
+		return out, "", err
 	}
 	if r.ActiveID == "" {
-		return out, ErrDenied
+		return out, "", ErrDenied
 	}
 	if e := s.accessWithFacts(ctx, p, r, v, &facts); e != nil {
-		return out, e
+		return out, "", e
 	}
 	if v.Version.File == nil {
-		return out, ErrUnavailable
+		return out, "", ErrUnavailable
 	}
-	return Selection{ResourceID: r.ID, VersionID: v.Version.ID, ReferenceID: v.ReferenceID, File: *v.Version.File}, nil
+	return Selection{ResourceID: r.ID, VersionID: v.Version.ID, ReferenceID: v.ReferenceID, File: *v.Version.File}, r.SchoolID, nil
 }
 
 func (s *Service) StreamDownload(ctx context.Context, p Principal, id string, open func(File) io.Writer) error {
@@ -637,7 +630,6 @@ func (s *Service) StreamDownload(ctx context.Context, p Principal, id string, op
 	s = s.withRequestAuthority()
 	var r Record
 	var activeV *VersionRecord
-	var facts AccessFacts
 	err := s.repo.Transaction(ctx, func(tx Transaction) error {
 		var e error
 		r, e = tx.Record(id)
@@ -650,12 +642,6 @@ func (s *Service) StreamDownload(ctx context.Context, p Principal, id string, op
 				return e
 			}
 			activeV = &v
-			if p.Valid() && !(r.State == "published" && v.Version.Metadata.Access == "public") {
-				facts, e = loadSingleAccessFacts(tx, p.Key(), r, v, s.now())
-				if e != nil {
-					return e
-				}
-			}
 		}
 		return nil
 	})
@@ -681,15 +667,19 @@ func (s *Service) StreamDownload(ctx context.Context, p Principal, id string, op
 	if activeV == nil || activeV.Version.File == nil {
 		return &AccessFailure{Reason: "resource_unavailable"}
 	}
-	if e := s.accessWithFacts(ctx, p, r, *activeV, &facts); e != nil {
+	if e := s.accessWithFacts(ctx, p, r, *activeV, nil); e != nil {
 		if r.State == "unlisted" && !privileged && denied(e) {
 			return ErrNotFound
 		}
+		var detail *AccessFailure
+		if denied(e) && !errors.As(e, &detail) {
+			return &AccessFailure{Reason: "permission_denied"}
+		}
 		return e
 	}
-	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
-	defer cancel()
-	return s.deps.Files.Download(work, p, activeV.ReferenceID, open(*activeV.Version.File))
+	return s.withStreamIdleTimeout(ctx, open(*activeV.Version.File), func(streamCtx context.Context, out io.Writer) error {
+		return s.deps.Files.Download(streamCtx, p, activeV.ReferenceID, out)
+	})
 }
 
 func (s *Service) Download(ctx context.Context, p Principal, id string, w io.Writer) (File, error) {
@@ -698,9 +688,9 @@ func (s *Service) Download(ctx context.Context, p Principal, id string, w io.Wri
 	if e != nil {
 		return File{}, e
 	}
-	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
-	defer cancel()
-	e = s.deps.Files.Download(work, p, selected.ReferenceID, w)
+	e = s.withStreamIdleTimeout(ctx, w, func(streamCtx context.Context, out io.Writer) error {
+		return s.deps.Files.Download(streamCtx, p, selected.ReferenceID, out)
+	})
 	return selected.File, e
 }
 func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in StateChange) (Resource, error) {
@@ -712,7 +702,8 @@ func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in 
 	if in.Revision < 1 || !text(in.Reason, 2000) || strings.TrimSpace(in.Reason) == "" || in.State != "published" && in.State != "unlisted" && in.State != "blocked" {
 		return out, ErrInput
 	}
-	e = s.mutation(ctx, p, "manage", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+	budget := mutationBudget{exemptOps: in.State == "blocked" || in.State == "unlisted"}
+	e = s.mutationWithBudget(ctx, p, "manage", r.SchoolID, key, id, in, &budget, func(tx Transaction) (any, error) {
 		if e := tx.Lock("resource:" + id); e != nil {
 			return nil, e
 		}
@@ -741,10 +732,14 @@ func (s *Service) PutGrant(ctx context.Context, p Principal, id, grantID, key st
 	if e != nil {
 		return out, e
 	}
-	if !validID(grantID) || in.Revision < 0 || in.SubjectKey == "" || !text(in.SubjectKey, 1100) || in.ExpiresAt != nil && !in.ExpiresAt.After(s.now()) {
+	if !validID(grantID) || in.Revision < 0 || in.ExpiresAt != nil && !in.ExpiresAt.After(s.now()) {
 		return out, ErrInput
 	}
-	e = s.mutation(ctx, p, "grants.manage", r.SchoolID, key, id+":"+grantID, in, func(tx Transaction) (any, error) {
+	if _, err := ParsePrincipalKey(in.SubjectKey); err != nil {
+		return out, ErrInput
+	}
+	budget := mutationBudget{exemptOps: in.Revoked && in.Revision > 0}
+	e = s.mutationWithBudget(ctx, p, "grants.manage", r.SchoolID, key, id+":"+grantID, in, &budget, func(tx Transaction) (any, error) {
 		if e := tx.Lock("grant:" + id + ":" + in.SubjectKey); e != nil {
 			return nil, e
 		}
@@ -758,6 +753,8 @@ func (s *Service) PutGrant(ctx context.Context, p Principal, id, grantID, key st
 		} else if old.ResourceID != id || old.SubjectKey != in.SubjectKey || old.Grant.Revision != in.Revision {
 			return nil, ErrConflict
 		}
+		// A new key for an already revoked grant is an ordinary update.
+		budget.exemptOps = budget.exemptOps && !old.Grant.Revoked
 		out = Grant{SubjectKey: in.SubjectKey, ID: grantID, Revision: in.Revision + 1, ExpiresAt: in.ExpiresAt, Revoked: in.Revoked}
 		if e = tx.SaveGrant(GrantRecord{Grant: out, ResourceID: id, SubjectKey: in.SubjectKey}); e != nil {
 			return nil, e
@@ -794,6 +791,14 @@ func (s *Service) Grants(ctx context.Context, p Principal, id string, n int, aft
 	}
 	return out, e
 }
+
+// requestCreation keeps the resource revision for the event while encoding
+// exactly the public receipt in the idempotency record.
+type requestCreation struct {
+	RequestReceipt
+	resourceRevision int64
+}
+
 func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string, in Request) (RequestReceipt, error) {
 	var out RequestReceipt
 	r, e := s.record(ctx, id)
@@ -832,7 +837,7 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 	if err := ctx.Err(); err != nil {
 		return out, err
 	}
-	e = s.mutation(ctx, p, "request", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+	e = s.mutationWithBudget(ctx, p, "request", r.SchoolID, key, id, in, &mutationBudget{addJob: true}, func(tx Transaction) (any, error) {
 		if in.Kind == "complaint" {
 			limiter, ok := tx.(interface{ LimitSubmission(string, time.Time) error })
 			if !ok {
@@ -841,6 +846,16 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 			if err := limiter.LimitSubmission(p.Key(), s.now()); err != nil {
 				return nil, err
 			}
+		}
+		if e := tx.Lock("resource:" + id); e != nil {
+			return nil, e
+		}
+		latest, e := tx.Record(id)
+		if e != nil {
+			return nil, e
+		}
+		if latest.Revision != r.Revision {
+			return nil, ErrConflict
 		}
 		versionID := r.ActiveID
 		if versionID == "" {
@@ -863,7 +878,7 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 		if e := s.queue(tx, "request", id, "", out.ID, ""); e != nil {
 			return nil, e
 		}
-		return out, nil
+		return requestCreation{RequestReceipt: out, resourceRevision: latest.Revision}, nil
 	}, &out)
 	return out, e
 }

@@ -3,10 +3,13 @@ package resources_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	r "github.com/StuHelper/stuhelper-resources"
 	"github.com/StuHelper/stuhelper-resources/httpapi"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -129,6 +132,47 @@ func TestBatchQueriesRequestAuthReuseAndVersionIndexes(t *testing.T) {
 			t.Fatalf("HTTP %s duplicated checks: discover=%d download=%d txs=%d", action, disc, dl, countedRepo.txs.Load())
 		}
 	}
+
+	t.Run("download denial reason", func(t *testing.T) {
+		h.auth.set("download.public", true)
+		defer h.auth.set("download.public", false)
+		req := httptest.NewRequest("GET", "/api/v1/resources/items/"+ids[1]+"/download", nil)
+		req.Header.Set("Authorization", "Bearer reader")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		var problem struct {
+			Reason string `json:"access_reason"`
+		}
+		must(t, json.Unmarshal(w.Body.Bytes(), &problem))
+		if w.Code != 403 || problem.Reason != "permission_denied" {
+			t.Fatalf("status=%d reason=%s", w.Code, problem.Reason)
+		}
+	})
+	t.Run("visibility before entitlement facts", func(t *testing.T) {
+		h.auth.set("discover", true)
+		defer h.auth.set("discover", false)
+		var role string
+		must(t, h.db.QueryRow("SELECT current_user").Scan(&role))
+		_, err := h.admin.Exec("REVOKE SELECT ON resources.purchases FROM " + role)
+		must(t, err)
+		defer func() { _, err := h.admin.Exec("GRANT SELECT ON resources.purchases TO " + role); must(t, err) }()
+		_, err = h.s.Get(h.ctx, reader, ids[0])
+		if !errors.Is(err, r.ErrDenied) {
+			t.Fatalf("denied details depended on entitlement facts: %v", err)
+		}
+	})
+	t.Run("attributes index serves browse predicate", func(t *testing.T) {
+		tx, err := h.db.Begin()
+		must(t, err)
+		defer tx.Rollback()
+		_, err = tx.Exec("SET LOCAL enable_seqscan = off")
+		must(t, err)
+		var plan string
+		must(t, tx.QueryRow(`EXPLAIN (FORMAT JSON) SELECT id FROM resources.versions v WHERE COALESCE(v.data->'Version'->'metadata'->'attributes','{}'::jsonb) @> '{"year":{"number":2025}}'::jsonb`).Scan(&plan))
+		if !strings.Contains(plan, `"Index Name": "resources_versions_attributes"`) {
+			t.Fatalf("no attribute index in plan: %s", plan)
+		}
+	})
 
 	// A-09: Verify version filter indexes exist in schema.
 	for _, idx := range []string{

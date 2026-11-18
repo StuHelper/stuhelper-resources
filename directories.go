@@ -17,7 +17,13 @@ func (s *Service) PutDirectory(ctx context.Context, p Principal, id, key string,
 	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
 	defer cancel()
 	if e := s.deps.Catalog.Validate(work, Associations{SchoolID: in.SchoolID, CourseID: in.CourseID}); e != nil {
-		return out, e
+		if ctx.Err() != nil {
+			return out, ctx.Err()
+		}
+		if errors.Is(e, ErrInput) || errors.Is(e, ErrNotFound) {
+			return out, ErrInput
+		}
+		return out, ErrUnavailable
 	}
 	e := s.mutation(ctx, p, "directories.manage", in.SchoolID, key, id, in, func(tx Transaction) (any, error) {
 		if e := tx.Lock("directories:" + in.SchoolID); e != nil {
@@ -117,8 +123,9 @@ func (s *Service) Directories(ctx context.Context, p Principal, school, course, 
 	}
 	return out, e
 }
-func (s *Service) directoryResources(ctx context.Context, id string) ([]string, error) {
+func (s *Service) directoryResources(ctx context.Context, id string) ([]string, string, error) {
 	ids := []string{}
+	school := ""
 	e := s.repo.Transaction(ctx, func(tx Transaction) error {
 		root, e := tx.Directory(id)
 		if e != nil {
@@ -127,6 +134,7 @@ func (s *Service) directoryResources(ctx context.Context, id string) ([]string, 
 		if !root.Enabled {
 			return ErrNotFound
 		}
+		school = root.SchoolID
 		queue := []string{id}
 		seen := map[string]bool{}
 		maxFiles := s.cfg.MaxPackageFiles * s.cfg.MaxPackageParts
@@ -172,7 +180,7 @@ func (s *Service) directoryResources(ctx context.Context, id string) ([]string, 
 		}
 		return nil
 	})
-	return ids, e
+	return ids, school, e
 }
 func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in PackageRequest) (Package, error) {
 	var out Package
@@ -187,11 +195,16 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 		return out, e
 	}
 	ids := in.ResourceIDs
+	schools := map[string]bool{}
 	if in.DirectoryID != "" {
 		var e error
-		ids, e = s.directoryResources(ctx, in.DirectoryID)
+		var dirSchool string
+		ids, dirSchool, e = s.directoryResources(ctx, in.DirectoryID)
 		if e != nil {
 			return out, e
+		}
+		if dirSchool != "" {
+			schools[dirSchool] = true
 		}
 	}
 	seen := map[string]bool{}
@@ -214,7 +227,10 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 			}
 			return out, e
 		}
-		file := selections[id]
+		file := selections[id].Selection
+		if schoolID := selections[id].schoolID; schoolID != "" {
+			schools[schoolID] = true
+		}
 		if file.File.Size > s.cfg.MaxPackageBytes {
 			return out, ErrCapacity
 		}
@@ -233,7 +249,13 @@ func (s *Service) CreatePackage(ctx context.Context, p Principal, key string, in
 	if len(parts) == 0 {
 		return out, ErrNotFound
 	}
-	replayed, e := s.mutationWithReplay(ctx, p, "package", "", key, "", in, func(tx Transaction) (any, error) {
+	auditSchool := ""
+	if len(schools) == 1 {
+		for sc := range schools {
+			auditSchool = sc
+		}
+	}
+	replayed, e := s.mutationWithReplay(ctx, p, "package", "", auditSchool, key, "", in, &mutationBudget{}, func(tx Transaction) (any, error) {
 		out = Package{ID: newID(), Parts: parts, ExpiresAt: s.now().Add(s.cfg.PackageTTL)}
 		if e := tx.SavePackage(PackageRecord{Package: out, Owner: p, Selections: selected}); e != nil {
 			return nil, e
@@ -330,7 +352,7 @@ func (s *Service) DownloadPackage(ctx context.Context, p Principal, id string, p
 	if e = s.verifyPackageSelections(ctx, p, [][]Selection{bundle.Selections[part-1]}); e != nil {
 		return e
 	}
-	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
-	defer cancel()
-	return s.deps.Files.Archive(work, p, bundle.Selections[part-1], w)
+	return s.withStreamIdleTimeout(ctx, w, func(streamCtx context.Context, out io.Writer) error {
+		return s.deps.Files.Archive(streamCtx, p, bundle.Selections[part-1], out)
+	})
 }
