@@ -29,6 +29,7 @@ func TestAttachFileRejectsUnsafeFilenamesAndStreamPreservesDisposition(t *testin
 		"bad\x7fname.pdf",
 		"bad\x00name.pdf",
 		strings.Repeat("a", 252) + ".pdf",
+		strings.Repeat("课", 252) + ".pdf",
 		string([]byte{0xff, 0xfe, '.', 'p', 'd', 'f'}),
 	}
 	for i, bad := range badNames {
@@ -59,7 +60,7 @@ func TestAttachFileRejectsUnsafeFilenamesAndStreamPreservesDisposition(t *testin
 	goodID := "good-rtl-media"
 	h.files.mu.Lock()
 	h.files.items[goodID] = r.FileEvidence{
-		File:     r.File{VersionID: goodID, Filename: "محاضرات_2025.pdf", ContentType: "application/pdf", Size: 60, SHA256: strings.Repeat("c", 64)},
+		File:     r.File{VersionID: goodID, Filename: strings.Repeat("课", 255-len([]rune("محاضرات_2025.pdf"))) + "محاضرات_2025.pdf", ContentType: "application/pdf", Size: 60, SHA256: strings.Repeat("c", 64)},
 		Owner:    uploader,
 		Module:   "resources",
 		SchoolID: "school",

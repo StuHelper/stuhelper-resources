@@ -25,7 +25,7 @@ func text(s string, max int) bool {
 }
 func validFilename(s string) bool {
 	trimmed := strings.TrimSpace(s)
-	if trimmed == "" || s == "." || s == ".." || len(s) > 255 || !utf8.ValidString(s) {
+	if trimmed == "" || s == "." || s == ".." || !text(s, 255) {
 		return false
 	}
 	if strings.ContainsAny(s, `/\`) || strings.ContainsFunc(s, unicode.IsControl) {
