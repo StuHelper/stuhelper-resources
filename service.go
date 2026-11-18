@@ -29,6 +29,10 @@ func New(repo Repository, deps Dependencies, cfg Config) (*Service, error) {
 	}
 	return &Service{repo: repo, deps: deps, cfg: cfg, now: func() time.Time { return clock().UTC() }}, nil
 }
+
+// OperationTimeout bounds stream preflight and a single stalled transfer operation.
+func (s *Service) OperationTimeout() time.Duration { return s.cfg.OperationTimeout }
+
 func (s *Service) Capabilities() Capabilities {
 	return Capabilities{UploadProfiles: append([]UploadProfile{}, s.cfg.UploadProfiles...), Terms: s.cfg.Terms, AllowedTypes: append([]string{}, s.cfg.AllowedTypes...), MaxFileSize: s.cfg.MaxFileSize, MaxPackageBytes: s.cfg.MaxPackageBytes, MaxPackageFiles: s.cfg.MaxPackageFiles, PurchaseAvailable: true}
 }
@@ -59,7 +63,36 @@ func (s *Service) record(ctx context.Context, id string) (Record, error) {
 	err := s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = tx.Record(id); return e })
 	return out, err
 }
+
+type mutationBudget struct {
+	exemptOps bool
+	addRecord bool
+	addJob    bool
+}
+
+// pending is one before the mutation and zero once its changes are visible
+// to this transaction. The final check runs under the budget lock at commit.
+func (s *Service) checkBudget(tx Transaction, b mutationBudget, pending int) error {
+	if b.exemptOps && !b.addRecord && !b.addJob {
+		return nil
+	}
+	records, operations, jobs, err := tx.Counts()
+	if err != nil {
+		return err
+	}
+	if !b.exemptOps && operations > s.cfg.MaxOperations-pending ||
+		b.addRecord && records > s.cfg.MaxRecords-pending ||
+		b.addJob && jobs > s.cfg.MaxJobs-pending {
+		return ErrCapacity
+	}
+	return nil
+}
+
 func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key, id string, input any, apply func(Transaction) (any, error), out any) error {
+	return s.mutationWithBudget(ctx, p, action, scope, key, id, input, &mutationBudget{}, apply, out)
+}
+
+func (s *Service) mutationWithBudget(ctx context.Context, p Principal, action, scope, key, id string, input any, budget *mutationBudget, apply func(Transaction) (any, error), out any) error {
 	if !p.Valid() {
 		return ErrUnauthenticated
 	}
@@ -88,15 +121,8 @@ func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key,
 		if !errors.Is(e, ErrNotFound) {
 			return e
 		}
-		if e = tx.Lock("budget"); e != nil {
+		if e = s.checkBudget(tx, *budget, 1); e != nil {
 			return e
-		}
-		records, operations, jobs, e := tx.Counts()
-		if e != nil {
-			return e
-		}
-		if records > s.cfg.MaxRecords || operations >= s.cfg.MaxOperations || jobs >= s.cfg.MaxJobs {
-			return ErrCapacity
 		}
 		value, e := apply(tx)
 		if e != nil {
@@ -114,6 +140,15 @@ func (s *Service) mutation(ctx context.Context, p Principal, action, scope, key,
 			return e
 		}
 		if e = tx.SaveReplay(Replay{Key: operation, Digest: digest, Result: data}); e != nil {
+			return e
+		}
+		// All business writes have finished. Hold the shared quota's exclusive
+		// lock only for the final counter read and commit. READ COMMITTED makes
+		// the previous holder's committed counters visible after we acquire it.
+		if e = tx.Lock("budget"); e != nil {
+			return e
+		}
+		if e = s.checkBudget(tx, *budget, 0); e != nil {
 			return e
 		}
 		if json.Unmarshal(data, out) != nil {

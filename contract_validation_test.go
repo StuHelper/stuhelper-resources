@@ -25,8 +25,8 @@ import (
 func TestContractAndInputBoundaries(t *testing.T) {
 	h := uiResourceFixture(t)
 	cfg := h.cfg
-	cfg.MaxPackageFiles = 60
-	cfg.MaxPackageParts = 2
+	cfg.MaxPackageFiles = 100
+	cfg.MaxPackageParts = 100
 	var e error
 	h.s, e = r.New(h.repo, r.Dependencies{Authority: h.auth, Catalog: countCatalog{h.catalog}, Files: h.files, Moderation: h.moderation}, cfg)
 	must(t, e)
@@ -145,6 +145,32 @@ func TestContractAndInputBoundaries(t *testing.T) {
 		t.Fatalf("expected 200 for 101-item package request, got %d %s", resp.StatusCode, string(raw))
 	}
 	validateResp(req, resp, raw)
+
+	t.Run("maximum explicit package reaches service authorization", func(t *testing.T) {
+		ids := make([]string, 10000)
+		for i := range ids {
+			ids[i] = fmt.Sprintf("%0128d", i)
+		}
+		payload, err := json.Marshal(r.PackageRequest{ResourceIDs: ids})
+		must(t, err)
+		h.auth.set("package", true)
+		defer h.auth.set("package", false)
+		_, resp, _ := do("POST", "/api/v1/resources/packages", string(payload), "Bearer reader")
+		if resp.StatusCode != 403 {
+			t.Fatalf("expected package permission check, got %d", resp.StatusCode)
+		}
+	})
+	t.Run("multibyte attribute filter", func(t *testing.T) {
+		_, err := h.s.PutCategory(h.ctx, global, "notes", "cv-notes", r.CategoryWrite{Enabled: true, Names: r.Names{"zh-CN": "笔记"}, Fields: []r.Field{{Key: "label", Names: r.Names{"zh-CN": "标签"}, Kind: "text", Filterable: true, MaxLength: 1000}}})
+		must(t, err)
+		value := strings.Repeat("课", 700)
+		attrs, err := json.Marshal(map[string]r.Value{"label": {Text: &value}})
+		must(t, err)
+		_, resp, _ := do("GET", "/api/v1/resources?school_id=school&category_id=notes&attributes="+url.QueryEscape(string(attrs)), "", "Bearer reader")
+		if resp.StatusCode != 200 {
+			t.Fatalf("expected valid Unicode filter, got %d", resp.StatusCode)
+		}
+	})
 
 	// A-13.4: Boundary-length valid Principal.Key() (1026 chars) accepted in GrantWrite, while non-canonical subject_key & control/invalid-UTF8 Principal rejected.
 	maxPrincipal := r.Principal{Issuer: "https://" + strings.Repeat("a", 504), Subject: strings.Repeat("b", 256)}

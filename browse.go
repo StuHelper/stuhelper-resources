@@ -106,9 +106,11 @@ func (s *Service) courseReferences(ctx context.Context, p Principal, school stri
 	if !ok {
 		return nil, ErrUnavailable
 	}
-	refs, err := port.CourseReferences(ctx, p, school, ids)
+	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
+	defer cancel()
+	refs, err := port.CourseReferences(work, p, school, ids)
 	if err != nil {
-		return nil, err
+		return nil, normalizeDepError(ctx, err)
 	}
 	for _, id := range ids {
 		if len(refs[id]) == 0 || len(refs[id]) > 1000 {

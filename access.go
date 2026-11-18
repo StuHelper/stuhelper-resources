@@ -280,9 +280,9 @@ func (s *Service) Download(ctx context.Context, p Principal, id string, w io.Wri
 	if e != nil {
 		return File{}, e
 	}
-	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
-	defer cancel()
-	e = s.deps.Files.Download(work, p, selected.ReferenceID, w)
+	e = s.withStreamIdleTimeout(ctx, w, func(streamCtx context.Context, out io.Writer) error {
+		return s.deps.Files.Download(streamCtx, p, selected.ReferenceID, out)
+	})
 	return selected.File, e
 }
 func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in StateChange) (Resource, error) {
@@ -294,7 +294,8 @@ func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in 
 	if in.Revision < 1 || !text(in.Reason, 2000) || strings.TrimSpace(in.Reason) == "" || in.State != "published" && in.State != "unlisted" && in.State != "blocked" {
 		return out, ErrInput
 	}
-	e = s.mutation(ctx, p, "manage", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+	budget := mutationBudget{exemptOps: in.State == "blocked" || in.State == "unlisted"}
+	e = s.mutationWithBudget(ctx, p, "manage", r.SchoolID, key, id, in, &budget, func(tx Transaction) (any, error) {
 		if e := tx.Lock("resource:" + id); e != nil {
 			return nil, e
 		}
@@ -329,7 +330,8 @@ func (s *Service) PutGrant(ctx context.Context, p Principal, id, grantID, key st
 	if _, err := ParsePrincipalKey(in.SubjectKey); err != nil {
 		return out, ErrInput
 	}
-	e = s.mutation(ctx, p, "grants.manage", r.SchoolID, key, id+":"+grantID, in, func(tx Transaction) (any, error) {
+	budget := mutationBudget{exemptOps: in.Revoked && in.Revision > 0}
+	e = s.mutationWithBudget(ctx, p, "grants.manage", r.SchoolID, key, id+":"+grantID, in, &budget, func(tx Transaction) (any, error) {
 		if e := tx.Lock("grant:" + id + ":" + in.SubjectKey); e != nil {
 			return nil, e
 		}
@@ -343,6 +345,8 @@ func (s *Service) PutGrant(ctx context.Context, p Principal, id, grantID, key st
 		} else if old.ResourceID != id || old.SubjectKey != in.SubjectKey || old.Grant.Revision != in.Revision {
 			return nil, ErrConflict
 		}
+		// A new key for an already revoked grant is an ordinary update.
+		budget.exemptOps = budget.exemptOps && !old.Grant.Revoked
 		out = Grant{SubjectKey: in.SubjectKey, ID: grantID, Revision: in.Revision + 1, ExpiresAt: in.ExpiresAt, Revoked: in.Revoked}
 		if e = tx.SaveGrant(GrantRecord{Grant: out, ResourceID: id, SubjectKey: in.SubjectKey}); e != nil {
 			return nil, e
@@ -417,7 +421,7 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 	if err := ctx.Err(); err != nil {
 		return out, err
 	}
-	e = s.mutation(ctx, p, "request", r.SchoolID, key, id, in, func(tx Transaction) (any, error) {
+	e = s.mutationWithBudget(ctx, p, "request", r.SchoolID, key, id, in, &mutationBudget{addJob: true}, func(tx Transaction) (any, error) {
 		if in.Kind == "complaint" {
 			limiter, ok := tx.(interface{ LimitSubmission(string, time.Time) error })
 			if !ok {

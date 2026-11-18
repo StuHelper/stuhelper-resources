@@ -93,7 +93,8 @@ func (s *Service) ApplyContentDecision(ctx context.Context, p Principal, in Deci
 	if e != nil {
 		return out, e
 	}
-	e = s.mutation(ctx, p, "moderation.execute", r.SchoolID, in.ID, r.ID, in, func(tx Transaction) (any, error) {
+	budget := mutationBudget{exemptOps: in.Action == "hide" || in.Action == "delete"}
+	e = s.mutationWithBudget(ctx, p, "moderation.execute", r.SchoolID, in.ID, r.ID, in, &budget, func(tx Transaction) (any, error) {
 		if e := tx.Lock("resource:" + r.ID); e != nil {
 			return nil, e
 		}
@@ -119,6 +120,10 @@ func (s *Service) ApplyContentDecision(ctx context.Context, p Principal, in Deci
 			current.DecisionRevision = in.Revision
 			current.Version.State = "rejected"
 			if in.Action == "publish" {
+				budget.addJob = true
+				if e = s.checkBudget(tx, budget, 1); e != nil {
+					return nil, e
+				}
 				current.Version.State = "preparing"
 				if e = s.queue(tx, "publish", r.ID, in.VersionID, "", ""); e != nil {
 					return nil, e
@@ -176,7 +181,9 @@ func (s *Service) DownloadReviewFile(ctx context.Context, p Principal, versionID
 	if v.Version.File == nil {
 		return ErrNotFound
 	}
-	return s.deps.Files.ReviewDownload(ctx, p, versionID, v.Version.File.VersionID, w)
+	return s.withStreamIdleTimeout(ctx, w, func(streamCtx context.Context, out io.Writer) error {
+		return s.deps.Files.ReviewDownload(streamCtx, p, versionID, v.Version.File.VersionID, out)
+	})
 }
 
 // InspectComplaint returns only target routing metadata. The caller must have

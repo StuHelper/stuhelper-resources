@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type Authenticator interface {
@@ -104,7 +105,7 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 	h.mount(m, "GET /api/v1/resources/review/{version}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.ReviewResource(r.Context(), p, r.PathValue("version"))
 	})
-	h.mount(m, "GET /api/v1/resources/review/{version}/file", h.reviewDownload)
+	h.mountStream(m, "GET /api/v1/resources/review/{version}/file", h.reviewDownload)
 	h.mount(m, "GET /api/v1/resources/items/{id}", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.Get(r.Context(), p, r.PathValue("id"))
 	})
@@ -174,9 +175,9 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 		out, e := s.GetPackage(r.Context(), p, r.PathValue("id"))
 		return out.Package, e
 	})
-	h.mount(m, "GET /api/v1/resources/items/{id}/download", h.download)
-	h.mount(m, "GET /api/v1/resources/items/{id}/preview", h.preview)
-	h.mount(m, "GET /api/v1/resources/packages/{id}/parts/{part}", h.downloadPackage)
+	h.mountStream(m, "GET /api/v1/resources/items/{id}/download", h.download)
+	h.mountStream(m, "GET /api/v1/resources/items/{id}/preview", h.preview)
+	h.mountStream(m, "GET /api/v1/resources/packages/{id}/parts/{part}", h.downloadPackage)
 	return m, nil
 }
 func key(r *http.Request) string { return r.Header.Get("Idempotency-Key") }
@@ -190,9 +191,66 @@ func write[T any](h *handler, m *http.ServeMux, path string, run func(*http.Requ
 	})
 }
 func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
+	h.mountWithMode(m, path, false, run)
+}
+func (h *handler) mountStream(m *http.ServeMux, path string, run endpoint) {
+	h.mountWithMode(m, path, true, run)
+}
+
+// Streaming preflight has a fixed deadline. Once bytes start flowing, each
+// socket write gets its own idle deadline and the service monitors upstream progress.
+type streamResponseWriter struct {
+	http.ResponseWriter
+	preflight *time.Timer
+	timeout   time.Duration
+}
+
+func (w *streamResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w *streamResponseWriter) Write(p []byte) (int, error) {
+	w.preflight.Stop()
+	_ = http.NewResponseController(w.ResponseWriter).SetWriteDeadline(time.Now().Add(w.timeout))
+	return w.ResponseWriter.Write(p)
+}
+
+func (h *handler) mountWithMode(m *http.ServeMux, path string, streaming bool, run endpoint) {
 	m.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		var ctx context.Context
+		var cancel context.CancelFunc
+		if streaming {
+			ctx, cancel = context.WithCancel(r.Context())
+			timeout := h.s.OperationTimeout()
+			preflight := time.AfterFunc(timeout, cancel)
+			defer preflight.Stop()
+			w = &streamResponseWriter{ResponseWriter: w, preflight: preflight, timeout: timeout}
+		} else {
+			ctx, cancel = context.WithTimeout(r.Context(), 2*time.Minute)
+		}
+		defer cancel()
+		r = r.WithContext(ctx)
+		controller := http.NewResponseController(w)
+		initialDeadline := time.Now().Add(2 * time.Minute)
+		if deadline, ok := ctx.Deadline(); ok && deadline.Before(initialDeadline) {
+			initialDeadline = deadline
+		}
+		_ = controller.SetReadDeadline(initialDeadline)
+		_ = controller.SetWriteDeadline(initialDeadline)
+		stopped := make(chan struct{})
+		stop := context.AfterFunc(ctx, func() {
+			_ = controller.SetReadDeadline(time.Now())
+			if !streaming {
+				_ = controller.SetWriteDeadline(time.Now())
+			}
+			close(stopped)
+		})
+		defer func() {
+			if !stop() {
+				<-stopped
+			}
+			_ = controller.SetReadDeadline(time.Time{})
+			_ = controller.SetWriteDeadline(time.Time{})
+		}()
 		p, e := h.auth.Authenticate(r)
 		if e != nil || !p.Valid() {
 			if errors.Is(e, resources.ErrUnavailable) {
@@ -202,16 +260,13 @@ func (h *handler) mount(m *http.ServeMux, path string, run endpoint) {
 			}
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
-		defer cancel()
-		r = r.WithContext(ctx)
-		controller := http.NewResponseController(w)
-		deadline, _ := ctx.Deadline()
-		_ = controller.SetReadDeadline(deadline)
-		_ = controller.SetWriteDeadline(deadline)
-		stop := context.AfterFunc(ctx, func() { _ = controller.SetReadDeadline(time.Now()); _ = controller.SetWriteDeadline(time.Now()) })
-		defer stop()
-		r.Body = http.MaxBytesReader(w, r.Body, 128<<10)
+
+		var bodyLimit int64 = 128 << 10
+		if path == "POST /api/v1/resources/packages" {
+			// A compact request can contain 10,000 identifiers of up to 128 ASCII bytes.
+			bodyLimit = 2 << 20
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
 		if len(r.Header.Values("Idempotency-Key")) > 1 {
 			failure(w, resources.ErrInput)
 			return
@@ -302,7 +357,7 @@ func filter(r *http.Request) (resources.Filter, error) {
 		return out, e
 	}
 	if raw := q.Get("attributes"); raw != "" {
-		if len(raw) > 2000 {
+		if !utf8.ValidString(raw) || utf8.RuneCountInString(raw) > 2000 {
 			return out, resources.ErrInput
 		}
 		d := json.NewDecoder(strings.NewReader(raw))
