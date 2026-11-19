@@ -201,6 +201,9 @@ func (t *transaction) SaveRequest(v resources.RequestRecord) error {
 func (t *transaction) Job(id string) (resources.Job, error) {
 	return read[resources.Job](t, `SELECT data FROM resources.jobs WHERE id=$1`, id)
 }
+func (t *transaction) FailedReleaseJob(resourceID string) (resources.Job, error) {
+	return read[resources.Job](t, `SELECT data FROM resources.jobs WHERE data->>'ResourceID'=$1 AND data->>'Kind' IN ('release','retire_publication') AND state='failed' ORDER BY available_at,id LIMIT 1`, resourceID)
+}
 func (t *transaction) SaveJob(v resources.Job) error {
 	return t.save(`INSERT INTO resources.jobs(id,state,available_at,lease_until,completed_at,data) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET state=excluded.state,available_at=excluded.available_at,lease_until=excluded.lease_until,completed_at=excluded.completed_at,data=excluded.data`, v, v.ID, v.State, v.AvailableAt, v.LeaseUntil, v.CompletedAt)
 }
@@ -398,4 +401,15 @@ func (t *transaction) DeletedRecordSchool(id string) (string, error) {
 	var school string
 	e := t.tx.QueryRowContext(t.ctx, `SELECT data->>'school_id' FROM resources.discovery_history WHERE id=$1 ORDER BY revision DESC LIMIT 1`, id).Scan(&school)
 	return school, safe(e)
+}
+
+func (t *transaction) RetainsSource(mediaVersionID string) (bool, error) {
+	var keep bool
+	err := t.tx.QueryRowContext(t.ctx, `SELECT EXISTS (
+        SELECT 1 FROM resources.versions v JOIN resources.records r ON r.id=v.resource_id
+        WHERE v.data->'Version'->'file'->>'version_id'=$1 AND r.data->>'ProposalID'=v.id
+        AND v.data->'Version'->>'state' IN ('pending','preparing')
+        AND (r.state='blocked' OR COALESCE((v.data->>'RestoreRevision')::bigint,0)>0)
+    )`, mediaVersionID).Scan(&keep)
+	return keep, safe(err)
 }

@@ -36,9 +36,11 @@ func (s *Service) InspectReview(ctx context.Context, p Principal, versionID stri
 	return Inspection{ResourceID: r.ID, VersionID: versionID, SchoolID: r.SchoolID, Owner: r.Owner.Key(), Title: v.Version.Metadata.Title, Description: v.Version.Metadata.Description, State: v.Version.State, Revision: r.Revision, Visible: r.ActiveID == versionID && r.State == "published"}, nil
 }
 
-// AuthorizeFile is used by the media adapter before every file action. Reference
-// ownership comes from the persisted resources version; clients cannot supply it.
-func (s *Service) AuthorizeFile(ctx context.Context, p Principal, versionID, mediaVersionID, action string) error {
+type FileBinding struct{ VersionID, MediaVersionID, ReferenceID, PublicationID string }
+
+// AuthorizeFile checks the binding against the current proposal or published version.
+func (s *Service) AuthorizeFile(ctx context.Context, p Principal, b FileBinding, action string) error {
+	versionID, mediaVersionID := b.VersionID, b.MediaVersionID
 	if !validID(versionID) || !validID(mediaVersionID) {
 		return ErrInput
 	}
@@ -55,12 +57,15 @@ func (s *Service) AuthorizeFile(ctx context.Context, p Principal, versionID, med
 	}
 	switch action {
 	case "download":
+		if b.ReferenceID == "" || b.ReferenceID != v.ReferenceID {
+			return ErrDenied
+		}
 		return s.access(ctx, p, r, v)
 	case "publish":
 		if e = s.auth(ctx, p, "media.publish", r.SchoolID); e != nil {
 			return e
 		}
-		if r.State == "blocked" || r.ProposalID != versionID || v.Version.State != "preparing" {
+		if !publicationCurrent(r, v, b.PublicationID) {
 			return ErrDenied
 		}
 		return s.repo.Transaction(ctx, func(tx Transaction) error { _, e := currentCategory(tx, v.Version.Metadata); return e })
@@ -68,7 +73,7 @@ func (s *Service) AuthorizeFile(ctx context.Context, p Principal, versionID, med
 		if e = s.auth(ctx, p, "media.release", r.SchoolID); e != nil {
 			return e
 		}
-		if r.ActiveID == versionID || r.ProposalID == versionID {
+		if b.ReferenceID == "" || (v.ReferenceID == b.ReferenceID && (r.ActiveID == versionID || (r.ProposalID == versionID && r.State != "blocked" && v.Version.State == "preparing"))) {
 			return ErrDenied
 		}
 		return nil
@@ -110,7 +115,7 @@ func (s *Service) ApplyContentDecision(ctx context.Context, p Principal, in Deci
 			return nil, ErrConflict
 		}
 		if latest.ProposalID == in.VersionID && current.Version.State == "pending" {
-			if in.Action == "restore" {
+			if latest.State == "blocked" || in.Action == "restore" {
 				return nil, ErrConflict
 			}
 			if in.Action == "publish" {
@@ -126,13 +131,30 @@ func (s *Service) ApplyContentDecision(ctx context.Context, p Principal, in Deci
 			if latest.ActiveID != in.VersionID || current.Version.State != "published" {
 				return nil, ErrConflict
 			}
+			var state string
 			switch in.Action {
 			case "hide":
-				latest.State = "blocked"
+				state = "blocked"
 			case "delete":
-				latest.State = "unlisted"
+				if latest.State == "blocked" && latest.ProposalID != "" && latest.ProposalID != latest.ActiveID {
+					proposal, err := tx.Version(latest.ProposalID)
+					if err != nil {
+						return nil, err
+					}
+					proposal.Version.State = "superseded"
+					if err = tx.SaveVersion(proposal); err != nil {
+						return nil, err
+					}
+					latest.ProposalID = ""
+				}
+				state = "unlisted"
 			case "restore", "publish":
-				latest.State = "published"
+				state = "published"
+			}
+			if state != "" {
+				if err := s.changeState(tx, &latest, state); err != nil {
+					return nil, err
+				}
 			}
 		}
 		latest.Revision++
