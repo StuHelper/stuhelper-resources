@@ -58,7 +58,7 @@ func (f *hookedFiles) Release(ctx context.Context, ref, key string) error {
 		binding, ok := f.refBindings[ref]
 		f.mu.Unlock()
 		if ok {
-			if e := (*f.svc).AuthorizeFile(ctx, manager, binding.versionID, binding.mediaID, "release"); e != nil {
+			if e := (*f.svc).AuthorizeFile(ctx, manager, r.FileBinding{VersionID: binding.versionID, MediaVersionID: binding.mediaID, ReferenceID: ref}, "release"); e != nil {
 				return e
 			}
 		}
@@ -186,6 +186,10 @@ func TestPublishMediaReferenceReleasedOnConcurrentTaxonomyChangeBlockAndFailedRe
 
 	// The supported administrator retry must recover the release without
 	// reconstructing the superseded version in the database.
+	adminView, err := h3.s.Get(h3.ctx, manager, requeueItem.ID)
+	if err != nil || adminView.OperationState != "failed" {
+		t.Fatal("failed release is not visible to the administrator", err, adminView.OperationState)
+	}
 	hf3.failRelease.Store(false)
 	_, e = h3.s.RetryPending(h3.ctx, manager, requeueItem.ID, "retry-release", r.Command{Revision: requeueItem.Revision})
 	must(t, e)
@@ -212,10 +216,9 @@ func TestTemporaryBlockKeepsPendingReviewRecoverable(t *testing.T) {
 		_, err = h.s.ProcessOne(h.ctx, "blocked-worker")
 		must(t, err)
 	}
-	restored, err := h.s.SetState(h.ctx, manager, pub.ID, "restore", r.StateChange{Revision: blocked.Revision, State: "published", Reason: "恢复"})
+	_, err = h.s.SetState(h.ctx, manager, pub.ID, "restore", r.StateChange{Revision: blocked.Revision, State: "published", Reason: "恢复"})
 	must(t, err)
-	_, err = h.s.RetryPending(h.ctx, manager, pub.ID, "resume-review", r.Command{Revision: restored.Revision})
-	must(t, err)
+	// Restoring the resource automatically requeues the waiting review.
 	h.drain(t)
 	must(t, h.repo.Transaction(h.ctx, func(tx r.Transaction) error {
 		v, err := tx.Version(pending.Proposal.ID)
@@ -224,4 +227,138 @@ func TestTemporaryBlockKeepsPendingReviewRecoverable(t *testing.T) {
 		}
 		return err
 	}))
+}
+
+func TestBlockedApprovedProposalRestartsWithFreshOperationAndSourceRetention(t *testing.T) {
+	for _, path := range []string{"admin", "moderation"} {
+		t.Run(path, func(t *testing.T) {
+			h := newFixture(t)
+			pub := h.publish(t, h.draft(t, "current", "public"))
+			next, err := h.s.UpdateDraft(h.ctx, uploader, pub.ID, "new-version", r.DraftWrite{Revision: pub.Revision, Metadata: metadata("public")})
+			must(t, err)
+			next, err = h.s.Submit(h.ctx, uploader, pub.ID, "submit-new", r.Command{Revision: next.Revision})
+			must(t, err)
+			h.drain(t)
+			version := next.Proposal.ID
+			file := next.Proposal.File.VersionID
+			next, err = h.s.ApplyDecision(h.ctx, manager, pub.ID, "approve-new", r.Decision{ID: "approved", Revision: next.Revision, VersionID: version, Action: "approve"})
+			must(t, err)
+			f := &hookedFiles{files: h.files}
+			f.asyncOnce.Store(true)
+			h.s, err = r.New(h.repo, r.Dependencies{Authority: h.auth, Catalog: h.catalog, Files: f, Moderation: h.moderation}, h.cfg)
+			must(t, err)
+			_, err = h.s.ProcessOne(h.ctx, "first-publish")
+			must(t, err)
+			readVersion := func() r.VersionRecord {
+				t.Helper()
+				var v r.VersionRecord
+				must(t, h.repo.Transaction(h.ctx, func(tx r.Transaction) error { var e error; v, e = tx.Version(version); return e }))
+				return v
+			}
+			old := readVersion().ReferenceID
+			if old == "" {
+				t.Fatal("first publication did not attach its reference")
+			}
+			change := func(in r.Resource, blocked bool) r.Resource {
+				t.Helper()
+				action, state := "restore", "published"
+				if blocked {
+					action, state = "hide", "blocked"
+				}
+				if path == "admin" {
+					out, e := h.s.SetState(h.ctx, manager, pub.ID, action, r.StateChange{Revision: in.Revision, State: state, Reason: "policy"})
+					must(t, e)
+					return out
+				}
+				out, e := h.s.ApplyContentDecision(h.ctx, manager, r.Decision{ID: action, VersionID: pub.Current.ID, Revision: in.Revision, Action: action, Reason: "policy"})
+				must(t, e)
+				return out
+			}
+			blocked := change(next, true)
+			keep, err := h.s.RetainsSource(h.ctx, manager, file)
+			if err != nil || !keep {
+				t.Fatal("blocked proposal lost its source", err)
+			}
+			h.drain(t)
+			if !h.files.released[old] || readVersion().ReferenceID != "" {
+				t.Fatal("blocked publication kept the old reference")
+			}
+			_ = change(blocked, false)
+			h.drain(t)
+			got, err := h.s.Get(h.ctx, uploader, pub.ID)
+			must(t, err)
+			active := readVersion()
+			if got.Current == nil || got.Current.ID != version || got.Proposal != nil || active.ReferenceID == "" || active.ReferenceID == old || h.files.released[active.ReferenceID] {
+				t.Fatal("unblock did not publish a fresh live reference")
+			}
+			keep, err = h.s.RetainsSource(h.ctx, manager, file)
+			if err != nil || keep {
+				t.Fatal("completed proposal still holds the source", err)
+			}
+		})
+	}
+}
+
+func TestPublishResultArrivingAfterUnblockCannotReplaceNewReference(t *testing.T) {
+	h := newFixture(t)
+	draft := h.draft(t, "late-publication", "public")
+	pending, err := h.s.Submit(h.ctx, uploader, draft.ID, "submit", r.Command{Revision: draft.Revision})
+	must(t, err)
+	h.drain(t)
+	approved, err := h.s.ApplyDecision(h.ctx, manager, draft.ID, "approve", r.Decision{ID: "approved", VersionID: draft.Proposal.ID, Revision: pending.Revision, Action: "approve"})
+	must(t, err)
+	files := &hookedFiles{files: h.files}
+	var late string
+	files.onPublish = func(_ r.Publication, ref string) {
+		late = ref
+		blocked, e := h.s.SetState(h.ctx, manager, draft.ID, "block", r.StateChange{Revision: approved.Revision, State: "blocked", Reason: "manual"})
+		must(t, e)
+		_, e = h.s.SetState(h.ctx, manager, draft.ID, "restore", r.StateChange{Revision: blocked.Revision, State: "published", Reason: "restore"})
+		must(t, e)
+	}
+	h.s, err = r.New(h.repo, r.Dependencies{Authority: h.auth, Catalog: h.catalog, Files: files, Moderation: h.moderation}, h.cfg)
+	must(t, err)
+	h.drain(t)
+	must(t, h.repo.Transaction(h.ctx, func(tx r.Transaction) error {
+		v, e := tx.Version(draft.Proposal.ID)
+		if e != nil {
+			return e
+		}
+		if late == "" || !h.files.released[late] || v.Version.State != "published" || v.ReferenceID == late || h.files.released[v.ReferenceID] {
+			t.Fatal("late publish result escaped retirement", v.Version.State)
+		}
+		return nil
+	}))
+}
+
+func TestWithdrawnOrDeletedProposalStopsRetainingSource(t *testing.T) {
+	for _, action := range []string{"withdraw", "delete"} {
+		t.Run(action, func(t *testing.T) {
+			h := newFixture(t)
+			pub := h.publish(t, h.draft(t, "current", "public"))
+			correction, err := h.s.UpdateDraft(h.ctx, uploader, pub.ID, "new", r.DraftWrite{Revision: pub.Revision, Metadata: metadata("public")})
+			must(t, err)
+			pending, err := h.s.Submit(h.ctx, uploader, pub.ID, "submit-new", r.Command{Revision: correction.Revision})
+			must(t, err)
+			blocked, err := h.s.SetState(h.ctx, manager, pub.ID, "block", r.StateChange{Revision: pending.Revision, State: "blocked", Reason: "hold"})
+			must(t, err)
+			file := pending.Proposal.File.VersionID
+			keep, err := h.s.RetainsSource(h.ctx, manager, file)
+			if err != nil || !keep {
+				t.Fatal("missing hold on pending proposal", err)
+			}
+			if action == "delete" {
+				_, err = h.s.ApplyContentDecision(h.ctx, manager, r.Decision{ID: "delete", VersionID: pub.Current.ID, Revision: blocked.Revision, Action: "delete", Reason: "removed"})
+			} else {
+				restored, e := h.s.SetState(h.ctx, manager, pub.ID, "restore", r.StateChange{Revision: blocked.Revision, State: "published", Reason: "restore"})
+				must(t, e)
+				_, err = h.s.WithdrawProposal(h.ctx, uploader, pub.ID, "withdraw", r.Command{Revision: restored.Revision})
+			}
+			must(t, err)
+			keep, err = h.s.RetainsSource(h.ctx, manager, file)
+			if err != nil || keep {
+				t.Fatal("obsolete version still holds the source", err)
+			}
+		})
+	}
 }

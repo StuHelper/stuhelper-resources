@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"time"
 )
 
@@ -68,6 +69,28 @@ func (s *Service) ProcessOne(ctx context.Context, worker string) (bool, error) {
 		}
 		latest.Owner = ""
 		latest.LeaseUntil = time.Time{}
+		if job.Kind == "publish" {
+			if e = tx.Lock("resource:" + job.ResourceID); e != nil {
+				return e
+			}
+			r, err := tx.Record(job.ResourceID)
+			if err != nil {
+				return err
+			}
+			v, err := tx.Version(job.VersionID)
+			if err != nil {
+				return err
+			}
+			if !publicationCurrent(r, v, job.ID) {
+				if result.reference != "" && !(r.ActiveID == v.Version.ID && v.ReferenceID == result.reference) {
+					if err = s.queue(tx, "release", r.ID, v.Version.ID, "", result.reference); err != nil {
+						return err
+					}
+				}
+				result = jobResult{obsolete: true}
+				operationErr = nil
+			}
+		}
 		if operationErr != nil || !result.ready && !result.obsolete {
 			latest.State = "pending"
 			latest.ErrorCode = "resources_dependency_pending"
@@ -91,26 +114,7 @@ func (s *Service) ProcessOne(ctx context.Context, worker string) (bool, error) {
 			}
 			return tx.SaveJob(latest)
 		}
-		if result.obsolete {
-			if job.Kind == "publish" && job.ResourceID != "" && job.VersionID != "" {
-				if e = tx.Lock("resource:" + job.ResourceID); e != nil {
-					return e
-				}
-				r, e := tx.Record(job.ResourceID)
-				if e != nil {
-					return e
-				}
-				v, e := tx.Version(job.VersionID)
-				if e != nil {
-					return e
-				}
-				if r.ActiveID != v.Version.ID && (r.ProposalID != v.Version.ID || r.State == "blocked" || v.Version.State != "preparing") {
-					if e = s.releaseVersionRefs(tx, r.ID, &v, result.reference); e != nil {
-						return e
-					}
-				}
-			}
-		} else {
+		if !result.obsolete {
 			postCommitErr, e = s.completeJob(tx, job, result)
 			if e != nil {
 				return e
@@ -123,6 +127,9 @@ func (s *Service) ProcessOne(ctx context.Context, worker string) (bool, error) {
 		if e = tx.SaveJob(latest); e != nil {
 			return e
 		}
+		if result.obsolete {
+			return nil
+		}
 		var eventSchool string
 		var eventRevision int64 = 1
 		if job.ResourceID != "" {
@@ -133,7 +140,7 @@ func (s *Service) ProcessOne(ctx context.Context, worker string) (bool, error) {
 				}
 			}
 		}
-		return tx.Event(Event{ID: hash([]string{"job", job.ID}), Type: "resources." + job.Kind + ".completed.v1", ResourceID: job.ResourceID, SchoolID: eventSchool, Actor: "worker", Revision: eventRevision, Time: s.now()})
+		return tx.Event(Event{ID: hash([]string{"job", job.ID, strconv.FormatInt(job.Generation, 10)}), Type: "resources." + job.Kind + ".completed.v1", ResourceID: job.ResourceID, SchoolID: eventSchool, Actor: "worker", Revision: eventRevision, Time: s.now()})
 	})
 	if e != nil {
 		return true, e
@@ -155,11 +162,6 @@ func (s *Service) executeJob(ctx context.Context, job Job) (jobResult, error) {
 		if e != nil {
 			return result, e
 		}
-		if r.ProposalID == v.Version.ID && r.State == "blocked" && job.Kind == "review" && v.Version.State == "pending" {
-			// A temporary block defers review. Exhaustion leaves an explicit
-			// failed job that the administrator can resume after restoration.
-			return result, nil
-		}
 		if r.ProposalID != v.Version.ID || r.State == "blocked" {
 			result.obsolete = true
 			return result, nil
@@ -169,14 +171,18 @@ func (s *Service) executeJob(ctx context.Context, job Job) (jobResult, error) {
 				result.obsolete = true
 				return result, nil
 			}
-			result.externalID, e = s.deps.Moderation.Submit(ctx, job.ID, ReviewSubmission{ResourceID: r.ID, VersionID: v.Version.ID, SchoolID: r.SchoolID, Title: v.Version.Metadata.Title, Description: v.Version.Metadata.Description, Revision: r.Revision})
+			submissionRevision, err := s.reviewRevision(ctx, r.ID, v.Version.ID)
+			if err != nil {
+				return result, err
+			}
+			result.externalID, e = s.deps.Moderation.Submit(ctx, job.ID, ReviewSubmission{ResourceID: r.ID, VersionID: v.Version.ID, SchoolID: r.SchoolID, Title: v.Version.Metadata.Title, Description: v.Version.Metadata.Description, Revision: r.Revision, SubmittedRevision: submissionRevision})
 			if e == nil && !validID(result.externalID) {
 				e = ErrUnavailable
 			}
 			result.ready = e == nil
 			return result, e
 		}
-		if v.Version.State != "preparing" || v.Version.File == nil {
+		if !publicationCurrent(r, v, job.ID) || v.Version.File == nil {
 			result.obsolete = true
 			return result, nil
 		}
@@ -190,6 +196,17 @@ func (s *Service) executeJob(ctx context.Context, job Job) (jobResult, error) {
 			e = ErrUnavailable
 		}
 		return result, e
+	case "retire_publication":
+		v, err := s.version(ctx, job.VersionID)
+		if err != nil {
+			return result, err
+		}
+		if v.Version.File == nil {
+			return result, ErrConflict
+		}
+		err = s.deps.Files.RetirePublication(ctx, Publication{ResourceID: job.ResourceID, VersionID: job.VersionID, MediaVersionID: v.Version.File.VersionID, OperationID: job.RequestID}, job.ID)
+		result.ready = err == nil
+		return result, err
 	case "release":
 		e := s.deps.Files.Release(ctx, job.ReferenceID, job.ID)
 		result.ready = e == nil
@@ -294,7 +311,7 @@ func (s *Service) completeJob(tx Transaction, job Job, result jobResult) (error,
 		request.ExternalID = result.externalID
 		request.Receipt.State = "submitted"
 		return nil, tx.SaveRequest(request)
-	case "release":
+	case "release", "retire_publication":
 		return nil, nil
 	default:
 		return nil, ErrInput
@@ -317,7 +334,11 @@ func retryableResourceJob(tx Transaction, r Record) (Job, error) {
 			kind = "publish"
 		}
 		if kind != "" {
-			j, err := tx.Job(hash([]string{kind, r.ID, v.Version.ID, "", ""}))
+			id := hash([]string{kind, r.ID, v.Version.ID, "", ""})
+			if kind == "publish" {
+				id = publicationJobID(r.ID, v)
+			}
+			j, err := tx.Job(id)
 			if err != nil && !errors.Is(err, ErrNotFound) {
 				return Job{}, err
 			}
@@ -326,11 +347,7 @@ func retryableResourceJob(tx Transaction, r Record) (Job, error) {
 			}
 		}
 	}
-	port, ok := tx.(interface{ FailedReleaseJob(string) (Job, error) })
-	if !ok {
-		return Job{}, ErrConflict
-	}
-	j, err := port.FailedReleaseJob(r.ID)
+	j, err := tx.FailedReleaseJob(r.ID)
 	if errors.Is(err, ErrNotFound) {
 		return Job{}, ErrConflict
 	}

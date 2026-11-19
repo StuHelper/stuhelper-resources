@@ -256,7 +256,7 @@ func (s *Service) applyProposalDecision(tx Transaction, r Record, v *VersionReco
 	v.Version.State = "rejected"
 	if approve {
 		v.Version.State = "preparing"
-		if e := s.queue(tx, "publish", r.ID, v.Version.ID, "", ""); e != nil {
+		if e := s.queuePublish(tx, r.ID, *v); e != nil {
 			return e
 		}
 	}
@@ -794,7 +794,10 @@ func (s *Service) ApplyDecision(ctx context.Context, p Principal, id, key string
 }
 func (s *Service) queue(tx Transaction, kind, resource, version, request, reference string) error {
 	id := hash([]string{kind, resource, version, request, reference})
-	old, e := tx.Job(id)
+	return s.queueJob(tx, Job{ID: id, Kind: kind, ResourceID: resource, VersionID: version, RequestID: request, ReferenceID: reference})
+}
+func (s *Service) queueJob(tx Transaction, job Job) error {
+	old, e := tx.Job(job.ID)
 	if e == nil {
 		if old.State == "failed" {
 			old.State = "pending"
@@ -811,5 +814,8 @@ func (s *Service) queue(tx Transaction, kind, resource, version, request, refere
 	if !errors.Is(e, ErrNotFound) {
 		return e
 	}
-	return tx.SaveJob(Job{ID: id, Kind: kind, ResourceID: resource, VersionID: version, RequestID: request, ReferenceID: reference, State: "pending", Generation: 1, AvailableAt: s.now()})
+	job.State = "pending"
+	job.Generation = 1
+	job.AvailableAt = s.now()
+	return tx.SaveJob(job)
 }

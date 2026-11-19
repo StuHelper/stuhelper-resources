@@ -125,6 +125,15 @@ func (f *files) Publish(_ context.Context, in resources.Publication) (string, bo
 	}
 	return ref, true, nil
 }
+func (f *files) RetirePublication(ctx context.Context, in resources.Publication, key string) error {
+	f.mu.Lock()
+	ref := f.refs[in.OperationID]
+	f.mu.Unlock()
+	if ref == "" {
+		return nil
+	}
+	return f.Release(ctx, ref, key)
+}
 func (f *files) Release(_ context.Context, id, key string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

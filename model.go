@@ -196,6 +196,8 @@ type Record struct {
 	CreatedAt   time.Time
 }
 type VersionRecord struct {
+	RestoreRevision  int64
+	ReviewRevision   int64
 	Version          Version
 	ResourceID       string
 	FileOwner        Principal
@@ -393,6 +395,7 @@ type Files interface {
 	Inspect(context.Context, Principal, string) (FileEvidence, error)
 	Publish(context.Context, Publication) (reference string, ready bool, err error)
 	Release(context.Context, string, string) error
+	RetirePublication(context.Context, Publication, string) error
 	Download(context.Context, Principal, string, io.Writer) error
 	Archive(context.Context, Principal, []Selection, io.Writer) error
 	ReviewDownload(context.Context, Principal, string, string, io.Writer) error
@@ -403,6 +406,7 @@ type RangeFiles interface {
 	DownloadRange(context.Context, Principal, string, ByteRange, io.Writer) error
 }
 type ReviewSubmission struct {
+	SubmittedRevision                                   int64
 	ResourceID, VersionID, SchoolID, Title, Description string
 	Revision                                            int64
 }
@@ -489,6 +493,8 @@ type Repository interface {
 	OutboxReader
 }
 type Transaction interface {
+	RetainsSource(mediaVersionID string) (bool, error)
+	FailedReleaseJob(resourceID string) (Job, error)
 	Coverage(string) (Coverage, error)
 	SaveCoverage(Coverage) error
 	Purchase(string) (PurchaseSource, error)

@@ -170,9 +170,18 @@ func (s *Service) Get(ctx context.Context, p Principal, id string) (Resource, er
 	if err != nil {
 		return Resource{}, err
 	}
-	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil, false)
+	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil, false, true)
 }
 func populateAdminOperation(tx Transaction, r Record, out *Resource) error {
+	cleanup, err := tx.FailedReleaseJob(r.ID)
+	if err == nil {
+		out.OperationState = cleanup.State
+		out.OperationErrorCode = cleanup.ErrorCode
+		return nil
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return err
+	}
 	if out.Proposal == nil || (out.Proposal.State != "pending" && out.Proposal.State != "preparing") {
 		return nil
 	}
@@ -180,7 +189,15 @@ func populateAdminOperation(tx Transaction, r Record, out *Resource) error {
 	if out.Proposal.State == "preparing" {
 		kind = "publish"
 	}
-	job, err := tx.Job(hash([]string{kind, r.ID, out.Proposal.ID, "", ""}))
+	jobID := hash([]string{kind, r.ID, out.Proposal.ID, "", ""})
+	if kind == "publish" {
+		v, err := tx.Version(out.Proposal.ID)
+		if err != nil {
+			return err
+		}
+		jobID = publicationJobID(r.ID, v)
+	}
+	job, err := tx.Job(jobID)
 	if errors.Is(err, ErrNotFound) {
 		return nil
 	}
@@ -226,10 +243,10 @@ func (s *Service) getRecordWithEntitlement(ctx context.Context, p Principal, r R
 	if err != nil {
 		return Resource{}, err
 	}
-	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil, entitledPurchaser)
+	return s.evaluatePreloadedRecord(ctx, p, r, activeV, proposalV, nil, entitledPurchaser, false)
 }
 
-func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Record, activeV, proposalV *VersionRecord, facts *AccessFacts, entitledPurchaser bool) (Resource, error) {
+func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Record, activeV, proposalV *VersionRecord, facts *AccessFacts, entitledPurchaser, detail bool) (Resource, error) {
 	var out Resource
 	var e error
 	isManager := false
@@ -262,7 +279,7 @@ func (s *Service) evaluatePreloadedRecord(ctx context.Context, p Principal, r Re
 		ver := proposalV.Version
 		out.Proposal = &ver
 	}
-	needJob := isManager && out.Proposal != nil && (out.Proposal.State == "pending" || out.Proposal.State == "preparing")
+	needJob := isManager && (detail || out.Proposal != nil && (out.Proposal.State == "pending" || out.Proposal.State == "preparing"))
 	if hasInstructor(&out) || needJob {
 		if err := s.repo.Transaction(ctx, func(tx Transaction) error {
 			if needJob {
@@ -505,7 +522,7 @@ func (s *Service) hydrateRecords(ctx context.Context, p Principal, records []Rec
 				}
 				proposalPtr = &pv
 			}
-			v, e = s.evaluatePreloadedRecord(ctx, p, record, activePtr, proposalPtr, factsPtr, false)
+			v, e = s.evaluatePreloadedRecord(ctx, p, record, activePtr, proposalPtr, factsPtr, false, false)
 		}
 		if errors.Is(e, ErrNotFound) || denied(e) {
 			continue
@@ -869,20 +886,13 @@ func (s *Service) SetState(ctx context.Context, p Principal, id, key string, in 
 		if r.Revision != in.Revision {
 			return nil, ErrConflict
 		}
-		if in.State != "blocked" && r.ActiveID == "" {
+		if in.State != "blocked" && r.ActiveID == "" && (r.State != "blocked" || r.ProposalID == "") {
 			return nil, ErrConflict
 		}
-		r.State = in.State
-		r.Revision++
-		if in.State == "blocked" && r.ProposalID != "" && r.ProposalID != r.ActiveID {
-			prop, err := tx.Version(r.ProposalID)
-			if err != nil {
-				return nil, err
-			}
-			if err = s.releaseVersionRefs(tx, r.ID, &prop, ""); err != nil {
-				return nil, err
-			}
+		if err := s.changeState(tx, &r, in.State); err != nil {
+			return nil, err
 		}
+		r.Revision++
 		if e = tx.SaveRecord(r); e != nil {
 			return nil, e
 		}
