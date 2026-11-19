@@ -19,6 +19,19 @@ func (t *transaction) CloseOwner(p r.Principal, id string) error {
 	}
 	return nil
 }
+func (t *transaction) OwnerClosed(p r.Principal) (bool, error) {
+	if !p.Valid() {
+		return false, nil
+	}
+	if e := t.Lock("closure-owner:" + p.Key()); e != nil {
+		return false, e
+	}
+	var closed bool
+	if e := t.tx.QueryRowContext(t.ctx, `SELECT EXISTS(SELECT 1 FROM resources.closed_owners WHERE owner_key=$1)`, p.Key()).Scan(&closed); e != nil {
+		return false, safe(e)
+	}
+	return closed, nil
+}
 func (t *transaction) closedRecord(v r.Record) error {
 	if e := t.Lock("closure-owner:" + v.Owner.Key()); e != nil {
 		return e
@@ -32,4 +45,9 @@ func (t *transaction) closedRecord(v r.Record) error {
 		return r.ErrDenied
 	}
 	return nil
+}
+func (t *transaction) IsClosedOwner(p r.Principal) (bool, error) {
+	var closed bool
+	e := t.tx.QueryRowContext(t.ctx, `SELECT EXISTS(SELECT 1 FROM resources.closed_owners WHERE owner_key=$1)`, p.Key()).Scan(&closed)
+	return closed, safe(e)
 }

@@ -32,10 +32,61 @@ func (authenticator) Authenticate(r *http.Request) (resources.Principal, error) 
 		return resources.Principal{}, resources.ErrUnauthenticated
 	}
 }
+func contractValidatingHandler(t *testing.T, inner http.Handler) http.Handler {
+	t.Helper()
+	doc, e := openapi3.NewLoader().LoadFromData(contracts.Document())
+	must(t, e)
+	router, e := legacy.NewRouter(doc)
+	must(t, e)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody []byte
+		if r.Body != nil {
+			reqBody, _ = io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewReader(reqBody))
+		}
+		rec := httptest.NewRecorder()
+		inner.ServeHTTP(rec, r)
+
+		routeReq := r.Clone(r.Context())
+		routeReq.Body = io.NopCloser(bytes.NewReader(reqBody))
+		if route, params, routeErr := router.FindRoute(routeReq); routeErr == nil {
+			reqInput := &openapi3filter.RequestValidationInput{
+				Request:    routeReq,
+				PathParams: params,
+				Route:      route,
+				Options: &openapi3filter.Options{
+					AuthenticationFunc:    openapi3filter.NoopAuthenticationFunc,
+					SkipSettingDefaults:   true,
+					IncludeResponseStatus: true,
+				},
+			}
+			respBytes := rec.Body.Bytes()
+			if valErr := openapi3filter.ValidateResponse(r.Context(), &openapi3filter.ResponseValidationInput{
+				RequestValidationInput: reqInput,
+				Status:                 rec.Code,
+				Header:                 rec.Header(),
+				Body:                   io.NopCloser(bytes.NewReader(respBytes)),
+				Options:                reqInput.Options,
+			}); valErr != nil {
+				t.Errorf("%s %s (%d) violated OpenAPI response schema: %v\nbody: %s", r.Method, r.URL.String(), rec.Code, valErr, string(respBytes))
+			}
+		}
+
+		for k, vals := range rec.Header() {
+			for _, v := range vals {
+				w.Header().Add(k, v)
+			}
+		}
+		w.WriteHeader(rec.Code)
+		_, _ = w.Write(rec.Body.Bytes())
+	})
+}
+
 func TestHTTPContractSDKAndUnknownInput(t *testing.T) {
 	h := newFixture(t)
-	handler, e := httpapi.New(h.s, authenticator{})
+	rawHandler, e := httpapi.New(h.s, authenticator{})
 	must(t, e)
+	handler := contractValidatingHandler(t, rawHandler)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	client, e := sdk.NewClientWithResponses(server.URL)
@@ -146,8 +197,9 @@ func TestReceiptHTTPStatesMatchGeneratedContract(t *testing.T) {
 
 func TestCoverageHTTPAndAccessMethods(t *testing.T) {
 	h := newFixture(t)
-	handler, e := httpapi.New(h.s, authenticator{})
+	rawHandler, e := httpapi.New(h.s, authenticator{})
 	must(t, e)
+	handler := contractValidatingHandler(t, rawHandler)
 	body := `{"plan_id":"plan","revision":0,"rules":[{"school_id":"school","category_id":"exam"}]}`
 	call := func(method, token, body string, want int) {
 		t.Helper()
@@ -184,5 +236,32 @@ func TestCoverageHTTPAndAccessMethods(t *testing.T) {
 	must(t, e)
 	if !got.DownloadAllowed || len(got.AvailableMethods) != 1 || got.AvailableMethods[0] != "download" {
 		t.Fatal(got)
+	}
+	// Exercise newest pagination, preview, package archive, capabilities and upload profile contract validation.
+	h.publish(t, h.draft(t, "second-page-item", "public"))
+	pkg, e := h.s.CreatePackage(h.ctx, reader, "pkg-contract", resources.PackageRequest{ResourceIDs: []string{item.ID}})
+	must(t, e)
+	for _, tc := range []struct {
+		path, token string
+		want        int
+	}{
+		{"/api/v1/resources?school_id=school&sort=newest&limit=1", "Bearer reader", 200},
+		{"/api/v1/resources/items/" + item.ID + "/preview", "Bearer reader", 200},
+		{"/api/v1/resources/packages/" + pkg.ID + "/parts/1", "Bearer reader", 200},
+		{"/api/v1/resources/capabilities", "Bearer reader", 200},
+		{"/api/v1/resources/me/summary", "Bearer owner", 200},
+	} {
+		req := httptest.NewRequest("GET", tc.path, nil)
+		req.Header.Set("Authorization", tc.token)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != tc.want {
+			t.Fatalf("%s: got %d, want %d (%s)", tc.path, w.Code, tc.want, w.Body.String())
+		}
+	}
+	doc, e := openapi3.NewLoader().LoadFromData(contracts.Document())
+	must(t, e)
+	if err := doc.Components.Schemas["UploadProfile"].Value.VisitJSON(map[string]any{"school_id": "school", "access": "public", "purpose": "resources", "extra": true}); err == nil {
+		t.Fatal("UploadProfile accepted unknown property")
 	}
 }

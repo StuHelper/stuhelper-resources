@@ -3,7 +3,6 @@ package resources
 import (
 	"context"
 	"slices"
-	"time"
 )
 
 type Reference struct {
@@ -42,6 +41,7 @@ func (s *Service) MyReferences(ctx context.Context, p Principal, ids []string) (
 		if e != nil {
 			return e
 		}
+		slices.Sort(owned)
 		if !slices.Equal(owned, ids) {
 			return ErrNotFound
 		}
@@ -54,11 +54,11 @@ func (s *Service) MyReferences(ctx context.Context, p Principal, ids []string) (
 	if !ok {
 		return References{}, ErrUnavailable
 	}
-	call, cancel := context.WithTimeout(ctx, 3*time.Second)
+	call, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
 	defer cancel()
 	out, err := port.ReferenceNames(call, ids)
 	if err != nil {
-		return References{}, err
+		return References{}, normalizeDepError(ctx, err)
 	}
 	seen := map[string]bool{}
 	for _, item := range out.Items {

@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	r "github.com/StuHelper/stuhelper-resources"
 	"github.com/StuHelper/stuhelper-resources/httpapi"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -94,4 +97,208 @@ func TestPreviewAndDownloadShareCurrentRightsAndExactMissingConditions(t *testin
 	// Scope-authorized administrators retain the same exception for both routes.
 	call("preview", "Bearer global", 200)
 	call("download", "Bearer global", 200)
+}
+
+type directRangeFiles struct {
+	*files
+	rangeCalls int
+}
+
+func (d *directRangeFiles) DownloadRange(_ context.Context, _ r.Principal, id string, br r.ByteRange, w io.Writer) error {
+	d.mu.Lock()
+	d.rangeCalls++
+	d.mu.Unlock()
+	full := d.payload(id)
+	_, err := io.WriteString(w, full[br.Offset:br.Offset+br.Length])
+	return err
+}
+
+func TestPreviewAndDownloadETagConditionalAndByteRangeDelivery(t *testing.T) {
+	h := newFixture(t)
+	item := h.publish(t, h.draft(t, "range-etag", "restricted"))
+	grant, err := h.s.PutGrant(h.ctx, manager, item.ID, "range-grant", "grant-range", r.GrantWrite{SubjectKey: reader.Key()})
+	must(t, err)
+
+	handler, err := httpapi.New(h.s, authenticator{})
+	must(t, err)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	doReq := func(action, token string, headers map[string]string) (*http.Response, string) {
+		t.Helper()
+		req, err := http.NewRequest("GET", server.URL+"/api/v1/resources/items/"+item.ID+"/"+action, nil)
+		must(t, err)
+		if token != "" {
+			req.Header.Set("Authorization", token)
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		resp, err := server.Client().Do(req)
+		must(t, err)
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		must(t, err)
+		return resp, string(body)
+	}
+
+	wantETag := `"` + item.Current.File.SHA256 + `"`
+	resp200, fullBody := doReq("download", "Bearer reader", nil)
+	if resp200.StatusCode != 200 || len(fullBody) != 60 || resp200.Header.Get("ETag") != wantETag || resp200.Header.Get("Content-Length") != "60" || resp200.Header.Get("Accept-Ranges") != "bytes" {
+		t.Fatalf("200 headers/body mismatch: status=%d len=%d headers=%v", resp200.StatusCode, len(fullBody), resp200.Header)
+	}
+
+	// Conditional 304 Not Modified without reading file bytes.
+	downloadsBefore := h.files.downloads
+	for _, inm := range []string{wantETag, "W/" + wantETag, `"other", ` + wantETag} {
+		resp304, body304 := doReq("preview", "Bearer reader", map[string]string{"If-None-Match": inm})
+		if resp304.StatusCode != 304 || body304 != "" || resp304.Header.Get("ETag") != wantETag || resp304.Header.Get("Content-Security-Policy") == "" {
+			t.Fatalf("304 mismatch for %s: status=%d body=%q headers=%v", inm, resp304.StatusCode, body304, resp304.Header)
+		}
+	}
+	if h.files.downloads != downloadsBefore {
+		t.Fatal("304 response read file bytes")
+	}
+
+	// Fallback byte-range slicing on legacy Files port.
+	respRange, bodyRange := doReq("preview", "Bearer reader", map[string]string{"Range": "bytes=0-9"})
+	if respRange.StatusCode != 206 || bodyRange != fullBody[:10] || respRange.Header.Get("Content-Range") != "bytes 0-9/60" || respRange.Header.Get("Content-Length") != "10" {
+		t.Fatalf("fallback 206 mismatch: status=%d range=%q body=%q", respRange.StatusCode, respRange.Header.Get("Content-Range"), bodyRange)
+	}
+
+	// Direct RangeFiles port implementation.
+	rf := &directRangeFiles{files: h.files}
+	svcRange, err := r.New(h.repo, r.Dependencies{Authority: h.auth, Catalog: h.catalog, Files: rf, Moderation: h.moderation}, h.cfg)
+	must(t, err)
+	handlerRange, err := httpapi.New(svcRange, authenticator{})
+	must(t, err)
+	serverRange := httptest.NewServer(handlerRange)
+	defer serverRange.Close()
+
+	doDirect := func(headers map[string]string) (*http.Response, string) {
+		t.Helper()
+		req, err := http.NewRequest("GET", serverRange.URL+"/api/v1/resources/items/"+item.ID+"/download", nil)
+		must(t, err)
+		req.Header.Set("Authorization", "Bearer reader")
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		resp, err := serverRange.Client().Do(req)
+		must(t, err)
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		must(t, err)
+		return resp, string(body)
+	}
+
+	downloadsBefore = h.files.downloads
+	for _, tc := range []struct {
+		rng, wantCR, wantBody string
+	}{
+		{"bytes=5-14", "bytes 5-14/60", fullBody[5:15]},
+		{"bytes=50-", "bytes 50-59/60", fullBody[50:]},
+		{"bytes=-8", "bytes 52-59/60", fullBody[52:]},
+		{"bytes=55-999", "bytes 55-59/60", fullBody[55:]},
+	} {
+		resp, body := doDirect(map[string]string{"Range": tc.rng, "If-Range": wantETag})
+		if resp.StatusCode != 206 || resp.Header.Get("Content-Range") != tc.wantCR || resp.Header.Get("Content-Length") != strconv.Itoa(len(tc.wantBody)) || body != tc.wantBody {
+			t.Fatalf("direct range %s: status=%d cr=%q body=%q", tc.rng, resp.StatusCode, resp.Header.Get("Content-Range"), body)
+		}
+	}
+	if rf.rangeCalls != 4 || h.files.downloads != downloadsBefore {
+		t.Fatalf("expected 4 direct range calls and 0 full downloads, got range=%d full=%d", rf.rangeCalls, h.files.downloads-downloadsBefore)
+	}
+
+	// Mismatched If-Range falls back to 200 full body.
+	respIfRange, bodyIfRange := doDirect(map[string]string{"Range": "bytes=0-9", "If-Range": `"stale-etag"`})
+	if respIfRange.StatusCode != 200 || bodyIfRange != fullBody {
+		t.Fatalf("mismatched If-Range expected 200 full body, got %d len=%d", respIfRange.StatusCode, len(bodyIfRange))
+	}
+
+	respMixed, bodyMixed := doDirect(map[string]string{"Range": "bytes=0-9,60-70"})
+	if respMixed.StatusCode != 200 || bodyMixed != fullBody {
+		t.Fatalf("mixed multi-range fallback: status=%d bytes=%d", respMixed.StatusCode, len(bodyMixed))
+	}
+
+	// Unsatisfiable / invalid Range returns 416 with Content-Range: bytes */60.
+	for _, bad := range []string{"bytes=60-70", "bytes=20-10", "bytes=-0", "bytes=invalid"} {
+		resp416, _ := doDirect(map[string]string{"Range": bad})
+		if resp416.StatusCode != 416 || resp416.Header.Get("Content-Range") != "bytes */60" {
+			t.Fatalf("bad range %s: status=%d cr=%q", bad, resp416.StatusCode, resp416.Header.Get("Content-Range"))
+		}
+	}
+
+	// Revoking entitlement immediately denies both If-None-Match and Range (never returns 304 or 206).
+	_, err = h.s.PutGrant(h.ctx, manager, item.ID, grant.ID, "revoke-range", r.GrantWrite{Revision: grant.Revision, SubjectKey: reader.Key(), Revoked: true})
+	must(t, err)
+	respDenied304, _ := doDirect(map[string]string{"If-None-Match": wantETag})
+	respDenied206, _ := doDirect(map[string]string{"Range": "bytes=0-9"})
+	if respDenied304.StatusCode != 403 || respDenied206.StatusCode != 403 {
+		t.Fatalf("revoked user got %d / %d on conditional/range request", respDenied304.StatusCode, respDenied206.StatusCode)
+	}
+}
+
+type publishDuringDownload struct {
+	*authority
+	publish func()
+}
+
+func (a *publishDuringDownload) Check(ctx context.Context, p r.Principal, action, scope string) error {
+	if action == "download.public" && a.publish != nil {
+		publish := a.publish
+		a.publish = nil
+		publish()
+	}
+	return a.authority.Check(ctx, p, action, scope)
+}
+
+func TestDownloadPinsResponseToAuthorizedVersion(t *testing.T) {
+	for _, partial := range []bool{false, true} {
+		h := newFixture(t)
+		old := h.publish(t, h.draft(t, "first-body", "public"))
+		var oldRef string
+		must(t, h.repo.Transaction(h.ctx, func(tx r.Transaction) error {
+			v, err := tx.Version(old.Current.ID)
+			oldRef = v.ReferenceID
+			return err
+		}))
+		d, err := h.s.UpdateDraft(h.ctx, uploader, old.ID, "edit-for-replacement", r.DraftWrite{Revision: old.Revision, Metadata: metadata("public")})
+		must(t, err)
+		newFile := *old.Current.File
+		newFile.VersionID = "second-body"
+		newFile.SHA256 = strings.Repeat("c", 64)
+		h.files.items[newFile.VersionID] = r.FileEvidence{File: newFile, Owner: uploader, Module: "resources", SchoolID: "school", State: "awaiting_approval", Access: "public"}
+		d, err = h.s.AttachFile(h.ctx, uploader, d.ID, "attach-replacement", r.FileLink{Revision: d.Revision, MediaVersionID: newFile.VersionID})
+		must(t, err)
+		d, err = h.s.Submit(h.ctx, uploader, d.ID, "submit-replacement", r.Command{Revision: d.Revision})
+		must(t, err)
+		h.drain(t)
+		_, err = h.s.ApplyDecision(h.ctx, manager, d.ID, "accept-replacement", r.Decision{ID: "decision-replacement", Revision: d.Revision, VersionID: d.Proposal.ID, Action: "approve"})
+		must(t, err)
+		auth := &publishDuringDownload{authority: h.auth, publish: func() {
+			ran, err := h.s.ProcessOne(h.ctx, "switch-version")
+			must(t, err)
+			if !ran {
+				t.Fatal("replacement did not publish")
+			}
+		}}
+		svc, err := r.New(h.repo, r.Dependencies{Authority: auth, Catalog: h.catalog, Files: h.files, Moderation: h.moderation}, h.cfg)
+		must(t, err)
+		handler, err := httpapi.New(svc, authenticator{})
+		must(t, err)
+		req := httptest.NewRequest("GET", "/api/v1/resources/items/"+old.ID+"/download", nil)
+		req.Header.Set("Authorization", "Bearer reader")
+		want := h.files.payload(oldRef)
+		status := 200
+		if partial {
+			req.Header.Set("Range", "bytes=0-23")
+			status = 206
+			want = want[:24]
+		}
+		out := httptest.NewRecorder()
+		handler.ServeHTTP(out, req)
+		if auth.publish != nil || out.Code != status || out.Header().Get("ETag") != strconv.Quote(old.Current.File.SHA256) || out.Body.String() != want {
+			t.Fatalf("response mixed versions: status=%d body=%q want=%q", out.Code, out.Body.String(), want)
+		}
+	}
 }

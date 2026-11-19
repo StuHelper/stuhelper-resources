@@ -8,7 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 var (
@@ -28,13 +31,29 @@ type Principal struct {
 }
 
 func (p Principal) Valid() bool {
-	return p.Issuer != "" && p.Subject != "" && len(p.Issuer) <= 512 && len(p.Subject) <= 256
+	if p.Issuer == "" || p.Subject == "" || len(p.Issuer) > 512 || len(p.Subject) > 256 {
+		return false
+	}
+	return utf8.ValidString(p.Issuer) && utf8.ValidString(p.Subject) && !strings.ContainsFunc(p.Issuer, unicode.IsControl) && !strings.ContainsFunc(p.Subject, unicode.IsControl)
 }
 func (p Principal) Key() string {
 	if !p.Valid() {
 		return ""
 	}
 	return base64.RawURLEncoding.EncodeToString([]byte(p.Issuer)) + ":" + base64.RawURLEncoding.EncodeToString([]byte(p.Subject))
+}
+func ParsePrincipalKey(key string) (Principal, error) {
+	if len(key) > 1100 || strings.Count(key, ":") != 1 {
+		return Principal{}, ErrInput
+	}
+	a, b, _ := strings.Cut(key, ":")
+	issuer, err1 := base64.RawURLEncoding.Strict().DecodeString(a)
+	subject, err2 := base64.RawURLEncoding.Strict().DecodeString(b)
+	p := Principal{Issuer: string(issuer), Subject: string(subject)}
+	if err1 != nil || err2 != nil || !p.Valid() || p.Key() != key {
+		return Principal{}, ErrInput
+	}
+	return p, nil
 }
 
 type Names map[string]string
@@ -93,11 +112,12 @@ type Consent struct {
 	Digest   string `json:"digest"`
 }
 type Origin struct {
-	Kind    string   `json:"kind"`
-	Source  string   `json:"source,omitempty"`
-	Author  string   `json:"author,omitempty"`
-	License string   `json:"license,omitempty"`
-	Consent *Consent `json:"consent,omitempty"`
+	Kind               string   `json:"kind"`
+	Source             string   `json:"source,omitempty"`
+	Author             string   `json:"author,omitempty"`
+	License            string   `json:"license,omitempty"`
+	Consent            *Consent `json:"consent,omitempty"`
+	VerifiedInstructor bool     `json:"verified_instructor,omitempty"`
 }
 type Metadata struct {
 	Title            string           `json:"title"`
@@ -112,8 +132,14 @@ type Metadata struct {
 	DirectoryID      string           `json:"directory_id,omitempty"`
 }
 type DraftWrite struct {
-	Revision int64    `json:"revision"`
-	Metadata Metadata `json:"metadata"`
+	Revision       int64    `json:"revision"`
+	Metadata       Metadata `json:"metadata"`
+	MediaVersionID string   `json:"media_version_id,omitempty"`
+	Submit         bool     `json:"submit,omitempty"`
+}
+type DeleteReceipt struct {
+	ID      string `json:"id"`
+	Deleted bool   `json:"deleted"`
 }
 type FileLink struct {
 	Revision       int64  `json:"revision"`
@@ -130,13 +156,30 @@ type File struct {
 	SHA256      string `json:"sha256"`
 }
 type Version struct {
-	ID        string    `json:"id"`
-	Number    int64     `json:"number"`
-	Metadata  Metadata  `json:"metadata"`
-	Category  Category  `json:"category"`
-	File      *File     `json:"file,omitempty"`
-	State     string    `json:"state"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                 string     `json:"id"`
+	Number             int64      `json:"number"`
+	Metadata           Metadata   `json:"metadata"`
+	Category           Category   `json:"category"`
+	File               *File      `json:"file,omitempty"`
+	State              string     `json:"state"`
+	DecisionReason     string     `json:"decision_reason,omitempty"`
+	SubmittedAt        *time.Time `json:"submitted_at,omitempty"`
+	VerifiedInstructor bool       `json:"verified_instructor,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+}
+type DuplicateResource struct {
+	ID         string    `json:"id"`
+	VersionID  string    `json:"version_id"`
+	Title      string    `json:"title"`
+	CategoryID string    `json:"category_id"`
+	Access     string    `json:"access"`
+	Filename   string    `json:"filename"`
+	Size       int64     `json:"size"`
+	Owned      bool      `json:"owned"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+type DuplicateResourceList struct {
+	Items []DuplicateResource `json:"items"`
 }
 
 // Record and VersionRecord are private repository/port models, never HTTP DTOs.
@@ -153,6 +196,8 @@ type Record struct {
 	CreatedAt   time.Time
 }
 type VersionRecord struct {
+	RestoreRevision  int64
+	ReviewRevision   int64
 	Version          Version
 	ResourceID       string
 	FileOwner        Principal
@@ -167,6 +212,8 @@ type Resource struct {
 	MissingConditions     []string `json:"missing_conditions,omitempty"`
 	UnavailableConditions []string `json:"unavailable_conditions,omitempty"`
 	RuleVersion           string   `json:"rule_version,omitempty"`
+	OperationState        string   `json:"operation_state,omitempty"`
+	OperationErrorCode    string   `json:"operation_error_code,omitempty"`
 	ID                    string   `json:"id"`
 	Revision              int64    `json:"revision"`
 	State                 string   `json:"state"`
@@ -183,12 +230,13 @@ type Page struct {
 }
 type Filter struct {
 	SchoolID, CourseID, CategoryID, DirectoryID, Query, After, OwnerKey string
-	Sort, FileType, CursorID                                            string
-	CursorTime                                                          *time.Time
-	CourseIDs                                                           []string
+	State, ProposalState, TeacherID, TermID, Tag, Access                string
+	EntitledKey, Sort, FileType, CursorID                               string
+	CursorTime, EntitledNow                                             *time.Time
+	CourseIDs, AllowedSchools                                           []string
 	Attributes                                                          map[string]Value
 	Limit                                                               int
-	IncludeUnpublished                                                  bool
+	IncludeUnpublished, FailedOnly                                      bool
 }
 type Decision struct {
 	ID        string `json:"id"`
@@ -315,11 +363,20 @@ type Capabilities struct {
 // Authority supplies current action eligibility and administration scope. Upload
 // and download decisions include the configured campus/phone facts. Missing facts
 // return unavailable; a permission grant cannot silently stand in for a fact.
+// Global administration (taxonomy.manage, coverage.manage) and instance-wide
+// admission pre-checks pass an empty scope (""); school-owned resources,
+// directories and coverage rules pass their concrete school_id.
 type Authority interface {
 	Check(context.Context, Principal, string, string) error
 }
 type Catalog interface {
 	Validate(context.Context, Associations) error
+}
+
+// InstructorCatalog is an optional Catalog extension confirming that Principal
+// holds a verified instructor binding for the specified school and course.
+type InstructorCatalog interface {
+	VerifyCourseInstructor(context.Context, Principal, Associations) error
 }
 type FileEvidence struct {
 	File                            File
@@ -330,15 +387,26 @@ type Publication struct {
 	ResourceID, VersionID, MediaVersionID, OperationID, Access string
 	Owner                                                      Principal
 }
+type ByteRange struct {
+	Offset int64
+	Length int64
+}
 type Files interface {
 	Inspect(context.Context, Principal, string) (FileEvidence, error)
 	Publish(context.Context, Publication) (reference string, ready bool, err error)
 	Release(context.Context, string, string) error
+	RetirePublication(context.Context, Publication, string) error
 	Download(context.Context, Principal, string, io.Writer) error
 	Archive(context.Context, Principal, []Selection, io.Writer) error
 	ReviewDownload(context.Context, Principal, string, string, io.Writer) error
 }
+
+// RangeFiles is an optional Files extension for direct byte-range delivery.
+type RangeFiles interface {
+	DownloadRange(context.Context, Principal, string, ByteRange, io.Writer) error
+}
 type ReviewSubmission struct {
+	SubmittedRevision                                   int64
 	ResourceID, VersionID, SchoolID, Title, Description string
 	Revision                                            int64
 }
@@ -388,10 +456,35 @@ type Event struct {
 	Time                                  time.Time
 }
 type Job struct {
+	CompletedAt                                                                      *time.Time `json:",omitempty"`
 	ID, Kind, ResourceID, VersionID, RequestID, ReferenceID, State, Owner, ErrorCode string
 	Generation                                                                       int64
 	Attempts                                                                         int
 	LeaseUntil, AvailableAt                                                          time.Time
+}
+
+type OperationalStats struct {
+	Records                int           `json:"records"`
+	MaxRecords             int           `json:"max_records,omitempty"`
+	RecordUtilization      float64       `json:"record_utilization,omitempty"`
+	Operations             int           `json:"operations"`
+	MaxOperations          int           `json:"max_operations,omitempty"`
+	OperationUtilization   float64       `json:"operation_utilization,omitempty"`
+	ActiveJobs             int           `json:"active_jobs"`
+	MaxJobs                int           `json:"max_jobs,omitempty"`
+	JobUtilization         float64       `json:"job_utilization,omitempty"`
+	PendingJobs            int           `json:"pending_jobs"`
+	WorkingJobs            int           `json:"working_jobs"`
+	FailedJobs             int           `json:"failed_jobs"`
+	DoneJobs               int           `json:"done_jobs"`
+	PendingOutbox          int           `json:"pending_outbox"`
+	OldestPendingOutboxAt  *time.Time    `json:"oldest_pending_outbox_at,omitempty"`
+	OldestPendingOutboxAge time.Duration `json:"oldest_pending_outbox_age,omitempty"`
+}
+
+type OperationalReader interface {
+	Ready(context.Context) error
+	OperationalStats(context.Context, time.Time) (OperationalStats, error)
 }
 
 type Repository interface {
@@ -400,6 +493,8 @@ type Repository interface {
 	OutboxReader
 }
 type Transaction interface {
+	RetainsSource(mediaVersionID string) (bool, error)
+	FailedReleaseJob(resourceID string) (Job, error)
 	Coverage(string) (Coverage, error)
 	SaveCoverage(Coverage) error
 	Purchase(string) (PurchaseSource, error)

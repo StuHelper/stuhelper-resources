@@ -21,6 +21,13 @@ type Coverage struct {
 	Revision int64          `json:"revision"`
 	Rules    []CoverageRule `json:"rules"`
 }
+type CoveragePage struct {
+	Items      []Coverage `json:"items"`
+	NextCursor string     `json:"next_cursor"`
+}
+type CoverageListTransaction interface {
+	Coverages(int, string) ([]Coverage, error)
+}
 type PurchaseSource struct {
 	OrderID    string    `json:"order_id"`
 	Owner      Principal `json:"owner"`
@@ -40,6 +47,151 @@ type UnlockDecision struct {
 	Reason   string `json:"reason"`
 }
 
+func (s *Service) ListCoverage(ctx context.Context, p Principal, limit int, after string) (CoveragePage, error) {
+	out := CoveragePage{Items: []Coverage{}}
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if limit < 1 || limit > 100 || !optionalID(after) {
+		return out, ErrInput
+	}
+	if e := s.auth(ctx, p, "coverage.manage", ""); e != nil {
+		return out, e
+	}
+	e := s.repo.Transaction(ctx, func(tx Transaction) error {
+		port, ok := tx.(CoverageListTransaction)
+		if !ok {
+			return ErrUnavailable
+		}
+		rows, err := port.Coverages(limit+1, after)
+		if err != nil {
+			return err
+		}
+		if len(rows) > limit {
+			out.NextCursor = rows[limit-1].PlanID
+			rows = rows[:limit]
+		}
+		out.Items = rows
+		return nil
+	})
+	return out, e
+}
+
+type EntitledSchoolsTransaction interface {
+	EntitledSchools(string, time.Time) ([]string, error)
+}
+
+func (s *Service) ListEntitled(ctx context.Context, p Principal, f Filter) (Page, error) {
+	copy := *s
+	copy.deps.Authority = &requestAuthority{source: s.deps.Authority, results: map[authorizationKey]error{}}
+	s = &copy
+	out := Page{Items: []Resource{}}
+	if !p.Valid() {
+		return out, ErrUnauthenticated
+	}
+	if f.Limit < 1 || f.Limit > 100 || !optionalID(f.SchoolID) || !optionalID(f.CourseID) || !optionalID(f.CategoryID) || !optionalID(f.DirectoryID) || !text(f.Query, 200) {
+		return out, ErrInput
+	}
+	f.OwnerKey = ""
+	f.EntitledKey = p.Key()
+	f.IncludeUnpublished = false
+	if e := prepareBrowse(&f); e != nil {
+		return out, e
+	}
+	now := s.now()
+	f.EntitledNow = &now
+	f.AllowedSchools = nil
+	if f.SchoolID != "" {
+		if e := s.auth(ctx, p, "discover", f.SchoolID); e != nil {
+			return out, e
+		}
+		f.AllowedSchools = []string{f.SchoolID}
+	} else {
+		var schools []string
+		e := s.repo.Transaction(ctx, func(tx Transaction) error {
+			port, ok := tx.(EntitledSchoolsTransaction)
+			if !ok {
+				return ErrUnavailable
+			}
+			var err error
+			schools, err = port.EntitledSchools(p.Key(), now)
+			return err
+		})
+		if e != nil {
+			return out, e
+		}
+		for _, school := range schools {
+			e := s.auth(ctx, p, "discover", school)
+			if e == nil {
+				f.AllowedSchools = append(f.AllowedSchools, school)
+				continue
+			}
+			if !denied(e) {
+				return out, e
+			}
+		}
+		if len(f.AllowedSchools) == 0 {
+			return out, nil
+		}
+	}
+	f.CourseIDs = nil
+	if f.CourseID != "" && f.SchoolID != "" {
+		if _, ok := s.deps.Catalog.(CourseCountCatalog); ok {
+			refs, e := s.courseReferences(ctx, p, f.SchoolID, []string{f.CourseID})
+			if e != nil {
+				return out, e
+			}
+			f.CourseIDs = refs[f.CourseID]
+		}
+	}
+	var records []Record
+	e := s.repo.Transaction(ctx, func(tx Transaction) error {
+		if len(f.Attributes) > 0 {
+			if f.CategoryID == "" {
+				return ErrInput
+			}
+			category, e := tx.Category(f.CategoryID, 0)
+			if e != nil {
+				return e
+			}
+			if e = ValidateAttributes(category, f.Attributes, true); e != nil {
+				return e
+			}
+		}
+		port, ok := tx.(BrowseTransaction)
+		if !ok {
+			return ErrUnavailable
+		}
+		var e error
+		records, out.Total, e = port.Browse(f)
+		return e
+	})
+	if e != nil {
+		return out, e
+	}
+	more := len(records) > f.Limit
+	if more {
+		records = records[:f.Limit]
+	}
+	for _, record := range records {
+		v, e := s.getRecordWithEntitlement(ctx, p, record, record.State == "unlisted")
+		if errors.Is(e, ErrNotFound) || denied(e) {
+			continue
+		}
+		if e != nil {
+			return Page{}, e
+		}
+		out.Items = append(out.Items, v)
+	}
+	if more {
+		out.NextCursor, e = encodeBrowseCursor(f, records[len(records)-1])
+		if e != nil {
+			return Page{}, e
+		}
+	}
+	return out, nil
+}
+
 func (s *Service) GetCoverage(ctx context.Context, p Principal, id string) (Coverage, error) {
 	var out Coverage
 	if !validID(id) {
@@ -48,17 +200,32 @@ func (s *Service) GetCoverage(ctx context.Context, p Principal, id string) (Cove
 	if !p.Valid() {
 		return out, ErrUnauthenticated
 	}
+	admin := true
 	e := s.auth(ctx, p, "coverage.manage", "")
 	if e != nil {
 		if !denied(e) {
 			return out, e
 		}
+		admin = false
 		if e = s.auth(ctx, p, "discover", ""); e != nil {
 			return out, e
 		}
 	}
 	e = s.repo.Transaction(ctx, func(tx Transaction) error { var e error; out, e = tx.Coverage(id); return e })
-	return out, e
+	if e != nil || admin {
+		return out, e
+	}
+	seenSchools := map[string]bool{}
+	for _, rule := range out.Rules {
+		if rule.SchoolID == "" || seenSchools[rule.SchoolID] {
+			continue
+		}
+		seenSchools[rule.SchoolID] = true
+		if err := s.auth(ctx, p, "discover", rule.SchoolID); err != nil {
+			return Coverage{}, err
+		}
+	}
+	return out, nil
 }
 func (s *Service) PutCoverage(ctx context.Context, p Principal, id, key string, in Coverage) (Coverage, error) {
 	var out Coverage
