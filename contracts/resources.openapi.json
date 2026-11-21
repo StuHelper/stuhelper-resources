@@ -10,6 +10,7 @@
       "get": {
         "operationId": "GetCapabilities",
         "summary": "GetCapabilities",
+        "description": "Returns the current original-upload license reference. With a managed legal source, the URL is pinned to the same version as the digest. An unavailable current license returns 503.",
         "parameters": [],
         "responses": {
           "200": {
@@ -5502,6 +5503,11 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "document_id": {
+            "type": "string",
+            "enum": ["upload-license"],
+            "description": "The server records this identifier when validating original-upload consent against managed legal documents. Clients may omit it on writes. Older records may omit it."
+          },
           "accepted": {
             "type": "boolean"
           },
@@ -6383,6 +6389,11 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "document_id": {
+            "type": "string",
+            "enum": ["upload-license"],
+            "description": "Document identifier for a managed original-upload license."
+          },
           "version": {
             "type": "string",
             "maxLength": 128

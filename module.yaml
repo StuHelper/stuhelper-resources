@@ -19,6 +19,8 @@ optional:
     api: 1
   - id: identity
     api: 1
+  - id: legal
+    api: 1
 capabilities:
   - resources.unlock-eligibility
   - resources.entitlements.consume
@@ -87,6 +89,9 @@ scenario_tests:
     - integration_test.go#TestOriginConsentAndRequestsUseOutbox
     - draft_workflow_test.go#TestTermsRotationRequiresCurrentOriginalConsentForDraftSubmission
     - http_test.go#TestReceiptHTTPStatesMatchGeneratedContract
+  RES-26:
+    - terms_integration_test.go#TestManagedTermsRotationPinsReceiptAndRejectsStaleOriginal
+    - terms_integration_test.go#TestManagedTermsOutagePreservesReplaysAndReposts
   RES-25:
     - managed_consent_test.go#TestManagerMaintainsPublishedMetadataWithoutReplacingConsent
     - managed_consent_test.go#TestManagerCannotGrantConsentOrSubmitUnpublishedStaleDraft

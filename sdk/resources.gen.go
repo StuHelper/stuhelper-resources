@@ -17,6 +17,21 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for ConsentDocumentId.
+const (
+	ConsentDocumentIdUploadLicense ConsentDocumentId = "upload-license"
+)
+
+// Valid indicates whether the value is a known member of the ConsentDocumentId enum.
+func (e ConsentDocumentId) Valid() bool {
+	switch e {
+	case ConsentDocumentIdUploadLicense:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DecisionAction.
 const (
 	Approve DecisionAction = "approve"
@@ -413,6 +428,21 @@ func (e StateChangeState) Valid() bool {
 	}
 }
 
+// Defines values for TermsDocumentId.
+const (
+	TermsDocumentIdUploadLicense TermsDocumentId = "upload-license"
+)
+
+// Valid indicates whether the value is a known member of the TermsDocumentId enum.
+func (e TermsDocumentId) Valid() bool {
+	switch e {
+	case TermsDocumentIdUploadLicense:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UploadProfileAccess.
 const (
 	UploadProfileAccessPublic     UploadProfileAccess = "public"
@@ -801,8 +831,14 @@ type Command struct {
 type Consent struct {
 	Accepted bool   `json:"accepted"`
 	Digest   string `json:"digest"`
-	Version  string `json:"version"`
+
+	// DocumentId The server records this identifier when validating original-upload consent against managed legal documents. Clients may omit it on writes. Older records may omit it.
+	DocumentId *ConsentDocumentId `json:"document_id,omitempty"`
+	Version    string             `json:"version"`
 }
+
+// ConsentDocumentId The server records this identifier when validating original-upload consent against managed legal documents. Clients may omit it on writes. Older records may omit it.
+type ConsentDocumentId string
 
 // CourseResourceCount defines model for CourseResourceCount.
 type CourseResourceCount struct {
@@ -1178,10 +1214,16 @@ type StateChangeState string
 
 // Terms defines model for Terms.
 type Terms struct {
-	Digest  string `json:"digest"`
-	Url     string `json:"url"`
-	Version string `json:"version"`
+	Digest string `json:"digest"`
+
+	// DocumentId Document identifier for a managed original-upload license.
+	DocumentId *TermsDocumentId `json:"document_id,omitempty"`
+	Url        string           `json:"url"`
+	Version    string           `json:"version"`
 }
+
+// TermsDocumentId Document identifier for a managed original-upload license.
+type TermsDocumentId string
 
 // UploadProfile defines model for UploadProfile.
 type UploadProfile struct {
@@ -1629,6 +1671,8 @@ type ClientInterface interface {
 
 	// GetCapabilities GetCapabilities
 	//
+	// Returns the current original-upload license reference. With a managed legal source, the URL is pinned to the same version as the digest. An unavailable current license returns 503.
+	//
 	// Corresponds with GET /api/v1/resources/capabilities (the `GetCapabilities` operationId).
 	GetCapabilities(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -2013,6 +2057,8 @@ func (c *Client) CreateDraft(ctx context.Context, params *CreateDraftParams, bod
 }
 
 // GetCapabilities GetCapabilities
+//
+// Returns the current original-upload license reference. With a managed legal source, the URL is pinned to the same version as the digest. An unavailable current license returns 503.
 //
 // Corresponds with GET /api/v1/resources/capabilities (the `GetCapabilities` operationId).
 func (c *Client) GetCapabilities(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -5854,6 +5900,8 @@ type ClientWithResponsesInterface interface {
 	CreateDraftWithResponse(ctx context.Context, params *CreateDraftParams, body CreateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateDraftResponse, error)
 
 	// GetCapabilitiesWithResponse GetCapabilities
+	//
+	// Returns the current original-upload license reference. With a managed legal source, the URL is pinned to the same version as the digest. An unavailable current license returns 503.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -9851,6 +9899,8 @@ func (c *ClientWithResponses) CreateDraftWithResponse(ctx context.Context, param
 }
 
 // GetCapabilitiesWithResponse GetCapabilities
+//
+// Returns the current original-upload license reference. With a managed legal source, the URL is pinned to the same version as the digest. An unavailable current license returns 503.
 //
 // Returns a wrapper object for the known response body format(s).
 //

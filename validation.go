@@ -61,16 +61,15 @@ func hash(value any) string {
 }
 func validTerms(t Terms) bool {
 	u, e := url.Parse(t.URL)
-	return validID(t.Version) && digestPattern.MatchString(t.Digest) && e == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && len(t.URL) <= 2000
-}
-
-func requiresCurrentConsent(origin Origin, terms Terms) bool {
-	c := origin.Consent
-	return origin.Kind == "original" && (c == nil || !c.Accepted || c.Version != terms.Version || c.Digest != terms.Digest)
+	return validID(t.Version) && digestPattern.MatchString(t.Digest) && validConsentDocument(t.DocumentID) && e == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && len(t.URL) <= 2000
 }
 
 func validConsent(c *Consent) bool {
-	return c != nil && c.Accepted && validID(c.Version) && digestPattern.MatchString(c.Digest)
+	return c != nil && c.Accepted && validID(c.Version) && digestPattern.MatchString(c.Digest) && validConsentDocument(c.DocumentID)
+}
+
+func validConsentDocument(id string) bool {
+	return id == "" || id == UploadLicenseDocumentID
 }
 
 func sameOriginLicense(a, b Origin) bool {

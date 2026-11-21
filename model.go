@@ -107,9 +107,10 @@ type Associations struct {
 	TeacherID  string `json:"teacher_id,omitempty"`
 }
 type Consent struct {
-	Accepted bool   `json:"accepted"`
-	Version  string `json:"version"`
-	Digest   string `json:"digest"`
+	Accepted   bool   `json:"accepted"`
+	Version    string `json:"version"`
+	Digest     string `json:"digest"`
+	DocumentID string `json:"document_id,omitempty"`
 }
 type Origin struct {
 	Kind               string   `json:"kind"`
@@ -348,9 +349,10 @@ type PackageRecord struct {
 	Selections [][]Selection
 }
 type Terms struct {
-	Version string `json:"version"`
-	Digest  string `json:"digest"`
-	URL     string `json:"url"`
+	Version    string `json:"version"`
+	Digest     string `json:"digest"`
+	URL        string `json:"url"`
+	DocumentID string `json:"document_id,omitempty"`
 }
 type Capabilities struct {
 	UploadProfiles    []UploadProfile `json:"upload_profiles"`
@@ -432,10 +434,11 @@ type Entitlement struct {
 	Member    bool
 }
 type Dependencies struct {
-	Authority  Authority
-	Catalog    Catalog
-	Files      Files
-	Moderation Moderation
+	Authority   Authority
+	Catalog     Catalog
+	Files       Files
+	Moderation  Moderation
+	TermsSource TermsSource
 }
 type Config struct {
 	UploadProfiles                                                                          []UploadProfile

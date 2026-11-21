@@ -136,8 +136,8 @@ func New(s *resources.Service, auth Authenticator) (http.Handler, error) {
 	h.mount(m, "GET /api/v1/resources/me/references", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		return s.MyReferences(r.Context(), p, strings.Split(r.URL.Query().Get("ids"), ","))
 	})
-	h.mount(m, "GET /api/v1/resources/capabilities", func(_ http.ResponseWriter, _ *http.Request, _ resources.Principal) (any, error) {
-		return s.Capabilities(), nil
+	h.mount(m, "GET /api/v1/resources/capabilities", func(_ http.ResponseWriter, r *http.Request, _ resources.Principal) (any, error) {
+		return s.CurrentCapabilities(r.Context())
 	})
 	h.mount(m, "GET /api/v1/resources/categories", func(_ http.ResponseWriter, r *http.Request, p resources.Principal) (any, error) {
 		n, e := limit(r)
