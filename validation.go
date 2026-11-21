@@ -69,6 +69,19 @@ func requiresCurrentConsent(origin Origin, terms Terms) bool {
 	return origin.Kind == "original" && (c == nil || !c.Accepted || c.Version != terms.Version || c.Digest != terms.Digest)
 }
 
+func validConsent(c *Consent) bool {
+	return c != nil && c.Accepted && validID(c.Version) && digestPattern.MatchString(c.Digest)
+}
+
+func sameOriginLicense(a, b Origin) bool {
+	if (a.Consent == nil) != (b.Consent == nil) || a.Consent != nil && *a.Consent != *b.Consent {
+		return false
+	}
+	a.Consent = b.Consent
+	a.VerifiedInstructor = b.VerifiedInstructor
+	return a == b
+}
+
 // ValidateCategory checks the configurable schema, never a category name or ID.
 func ValidateCategory(c CategoryWrite) error {
 	if c.Revision < 0 || !names(c.Names) || c.Order < 0 || c.Order > 10000 || len(c.Fields) > 20 {
@@ -177,7 +190,7 @@ func ValidateAttributes(c Category, values map[string]Value, filter bool) error 
 	}
 	return nil
 }
-func validateMetadata(m Metadata, terms Terms) error {
+func validateMetadata(m Metadata) error {
 	if strings.TrimSpace(m.Title) == "" || !text(m.Title, 200) || !text(m.Description, 8000) || len(m.Tags) > 20 || !validID(m.CategoryID) || m.CategoryRevision < 1 || !optionalID(m.DirectoryID) || !slices.Contains([]string{"public", "restricted"}, m.Access) {
 		return ErrInput
 	}
@@ -209,7 +222,7 @@ func validateMetadata(m Metadata, terms Terms) error {
 	}
 	switch o.Kind {
 	case "original":
-		if o.Source != "" || o.License != "" || requiresCurrentConsent(o, terms) {
+		if o.Source != "" || o.License != "" || !validConsent(o.Consent) {
 			return ErrInput
 		}
 	case "known":
