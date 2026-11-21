@@ -107,19 +107,33 @@ func TestLegacyComplaintCategoryMigrationPreservesReplay(t *testing.T) {
 
 	old, err := h.s.CreateRequest(h.ctx, reader, item.ID, "old-category", valid)
 	must(t, err)
-	// Seed the pre-classification row, queued job and exact original replay digest.
+	// Seed the pre-classification row and original replay with a receipt that
+	// predates kind and resource_id. The queued job still reads the request row.
 	original := valid
 	original.Category = ""
 	raw, err := json.Marshal(original)
 	must(t, err)
 	digest := sha256.Sum256(raw)
-	_, err = h.admin.ExecContext(h.ctx, `UPDATE resources.requests SET data=data #- '{Request,category}' #- '{Receipt,category}' WHERE id=$1`, old.ID)
+	_, err = h.admin.ExecContext(h.ctx, `UPDATE resources.requests
+		SET data=data #- '{Request,category}' #- '{Receipt,category}' #- '{Receipt,kind}' #- '{Receipt,resource_id}'
+		WHERE id=$1`, old.ID)
 	must(t, err)
-	_, err = h.admin.ExecContext(h.ctx, `UPDATE resources.replays SET data=jsonb_set(data #- '{Result,category}','{Digest}',to_jsonb($2::text)) WHERE data#>>'{Result,id}'=$1`,
+	_, err = h.admin.ExecContext(h.ctx, `UPDATE resources.replays
+		SET data=jsonb_set(data #- '{Result,category}' #- '{Result,kind}' #- '{Result,resource_id}','{Digest}',to_jsonb($2::text))
+		WHERE data#>>'{Result,id}'=$1`,
 		old.ID, hex.EncodeToString(digest[:]))
+	must(t, err)
+	_, err = h.admin.ExecContext(h.ctx, `INSERT INTO resources.replays(key,data)
+		VALUES ('other-operation',jsonb_build_object('Result',jsonb_build_object('id',$1::text,'state','published')))`, old.ID)
 	must(t, err)
 	for i := 0; i < 2; i++ {
 		must(t, postgres.Migrate(h.ctx, h.admin))
+	}
+	var hasCategory bool
+	must(t, h.admin.QueryRowContext(h.ctx, `SELECT data->'Result' ? 'category'
+		FROM resources.replays WHERE key='other-operation'`).Scan(&hasCategory))
+	if hasCategory {
+		t.Fatal("migration wrote a complaint category into another operation result")
 	}
 	replay, err := h.s.CreateRequest(h.ctx, reader, item.ID, "old-category", original)
 	must(t, err)

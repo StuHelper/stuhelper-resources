@@ -43,11 +43,16 @@ UPDATE resources.requests
 SET data=jsonb_set(data,'{Receipt,category}',data#>'{Request,category}')
 WHERE data#>>'{Request,kind}'='complaint'
   AND data#>>'{Receipt,category}' IS DISTINCT FROM data#>>'{Request,category}';
+
+-- Older receipt snapshots omit kind and resource_id. Match the saved complaint
+-- receipt's ID and creation time so other operation results stay intact.
 UPDATE resources.replays AS replay
 SET data=jsonb_set(replay.data,'{Result,category}',request.data#>'{Request,category}')
 FROM resources.requests AS request
 WHERE request.id=replay.data#>>'{Result,id}'
-  AND replay.data#>>'{Result,kind}'='complaint'
+  AND replay.data#>'{Result,created_at}'=request.data#>'{Receipt,created_at}'
+  AND COALESCE(replay.data#>>'{Result,kind}','complaint')='complaint'
+  AND COALESCE(replay.data#>>'{Result,resource_id}',request.resource_id)=request.resource_id
   AND request.data#>>'{Request,kind}'='complaint'
   AND replay.data#>>'{Result,category}' IS DISTINCT FROM request.data#>>'{Request,category}';
 
