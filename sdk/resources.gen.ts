@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GetCapabilities */
+        /**
+         * GetCapabilities
+         * @description Returns the current original-upload license reference. With a managed legal source, the URL is pinned to the same version as the digest. An unavailable current license returns 503.
+         */
         get: operations["GetCapabilities"];
         put?: never;
         post?: never;
@@ -715,6 +718,11 @@ export interface components {
             teacher_id?: string;
         };
         Consent: {
+            /**
+             * @description The server records this identifier when validating original-upload consent against managed legal documents. Clients may omit it on writes. Older records may omit it.
+             * @enum {string}
+             */
+            document_id?: "upload-license";
             accepted: boolean;
             version: string;
             digest: string;
@@ -932,6 +940,11 @@ export interface components {
             expires_at: string;
         };
         Terms: {
+            /**
+             * @description Document identifier for a managed original-upload license.
+             * @enum {string}
+             */
+            document_id?: "upload-license";
             version: string;
             digest: string;
             /** Format: uri */

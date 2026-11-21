@@ -120,10 +120,7 @@ func (s *Service) inspectDraftFile(ctx context.Context, p Principal, schoolID, m
 	return file, nil
 }
 
-func (s *Service) validateDraft(ctx context.Context, m Metadata, ownerWrite bool) error {
-	if ownerWrite && requiresCurrentConsent(m.Origin, s.cfg.Terms) {
-		return ErrInput
-	}
+func (s *Service) validateDraft(ctx context.Context, m Metadata) error {
 	if e := validateMetadata(m); e != nil {
 		return e
 	}
@@ -170,7 +167,7 @@ func (s *Service) CreateDraft(ctx context.Context, p Principal, key string, in D
 	if hit, e := s.precheckReplay(ctx, p, "upload", "", key, in, &out); e != nil || hit {
 		return out, e
 	}
-	if e := s.validateDraft(ctx, in.Metadata, true); e != nil {
+	if e := s.validateDraft(ctx, in.Metadata); e != nil {
 		return out, e
 	}
 	if in.Metadata.Origin.VerifiedInstructor {
@@ -200,9 +197,14 @@ func (s *Service) CreateDraft(ctx context.Context, p Principal, key string, in D
 		if e = validateDirectory(tx, in.Metadata); e != nil {
 			return nil, e
 		}
+		metadata := in.Metadata
+		metadata.Origin, e = s.bindCurrentConsent(ctx, metadata.Origin)
+		if e != nil {
+			return nil, e
+		}
 		now := s.now()
 		r := Record{ID: newID(), Owner: p, SchoolID: in.Metadata.Associations.SchoolID, Revision: 1, State: "draft", ProposalID: newID(), NextVersion: 2, CreatedAt: now}
-		v := VersionRecord{ResourceID: r.ID, Version: Version{ID: r.ProposalID, Number: 1, Metadata: in.Metadata, Category: category, State: "draft", CreatedAt: now}}
+		v := VersionRecord{ResourceID: r.ID, Version: Version{ID: r.ProposalID, Number: 1, Metadata: metadata, Category: category, State: "draft", CreatedAt: now}}
 		if attached != nil {
 			v.Version.File = &attached.File
 			v.FileOwner = attached.Owner
@@ -248,16 +250,28 @@ func (s *Service) authorizeDraftEdit(ctx context.Context, p Principal, r Record,
 
 // A manager can resubmit the same published work with its recorded license.
 // An instructor claim still needs the owner's current qualification.
-func (s *Service) validateManagedSubmission(tx Transaction, r Record, draft VersionRecord) error {
+func (s *Service) validateManagedReview(ctx context.Context, tx Transaction, r Record, draft VersionRecord, submit bool) error {
 	origin := draft.Version.Metadata.Origin
-	if origin.VerifiedInstructor || origin.Kind == "original" && !validConsent(origin.Consent) {
+	if submit && origin.VerifiedInstructor {
 		return ErrDenied
 	}
-	if origin.Kind != "original" || draft.FileOwner == r.Owner && !requiresCurrentConsent(origin, s.cfg.Terms) {
+	if origin.Kind != "original" {
 		return nil
 	}
-	if r.ActiveID == "" || draft.Version.File == nil {
+	if !validConsent(origin.Consent) {
 		return ErrDenied
+	}
+	failure := ErrDenied
+	if !submit || draft.FileOwner == r.Owner {
+		switch _, err := s.bindCurrentConsent(ctx, origin); err {
+		case nil:
+			return nil
+		case ErrUnavailable:
+			failure = err
+		}
+	}
+	if origin.VerifiedInstructor || r.ActiveID == "" || draft.Version.File == nil {
+		return failure
 	}
 	active, err := tx.Version(r.ActiveID)
 	if err != nil {
@@ -266,12 +280,12 @@ func (s *Service) validateManagedSubmission(tx Transaction, r Record, draft Vers
 	published := active.Version
 	if published.State != "published" || published.File == nil || *published.File != *draft.Version.File ||
 		published.Metadata.Access != draft.Version.Metadata.Access || !sameOriginLicense(origin, published.Metadata.Origin) {
-		return ErrDenied
+		return failure
 	}
 	return nil
 }
 
-func (s *Service) managedDraftMetadata(tx Transaction, r Record, source VersionRecord, in DraftWrite) (Metadata, error) {
+func (s *Service) managedDraftMetadata(ctx context.Context, tx Transaction, r Record, source VersionRecord, in DraftWrite) (Metadata, error) {
 	if source.Version.ID == "" {
 		if r.ActiveID == "" {
 			return Metadata{}, ErrConflict
@@ -284,6 +298,13 @@ func (s *Service) managedDraftMetadata(tx Transaction, r Record, source VersionR
 	}
 	stored := source.Version.Metadata
 	metadata := in.Metadata
+	if given := metadata.Origin.Consent; given != nil && given.DocumentID == "" && stored.Origin.Consent != nil {
+		// Older clients send only version and digest. The stored identifier
+		// remains authoritative for a manager editing the same license.
+		consent := *given
+		consent.DocumentID = stored.Origin.Consent.DocumentID
+		metadata.Origin.Consent = &consent
+	}
 	if !sameOriginLicense(metadata.Origin, stored.Origin) || metadata.Access != stored.Access ||
 		metadata.Origin.VerifiedInstructor && !stored.Origin.VerifiedInstructor ||
 		stored.Origin.VerifiedInstructor && metadata.Associations != stored.Associations {
@@ -291,8 +312,8 @@ func (s *Service) managedDraftMetadata(tx Transaction, r Record, source VersionR
 	}
 	metadata.Origin = stored.Origin
 	inReview := source.Version.State == "pending" || source.Version.State == "preparing"
-	if in.Submit || inReview && requiresCurrentConsent(stored.Origin, s.cfg.Terms) {
-		if err := s.validateManagedSubmission(tx, r, source); err != nil {
+	if in.Submit || inReview && stored.Origin.Kind == "original" {
+		if err := s.validateManagedReview(ctx, tx, r, source, in.Submit); err != nil {
 			return Metadata{}, err
 		}
 	}
@@ -345,7 +366,7 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 	if !ownerWrite && in.MediaVersionID != "" {
 		return out, ErrDenied
 	}
-	if e = s.validateDraft(ctx, in.Metadata, ownerWrite); e != nil {
+	if e = s.validateDraft(ctx, in.Metadata); e != nil {
 		return out, e
 	}
 	if ownerWrite && in.Metadata.Origin.VerifiedInstructor {
@@ -396,11 +417,13 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 			}
 		}
 		metadata := in.Metadata
-		if !ownerWrite {
-			metadata, e = s.managedDraftMetadata(tx, latest, proposal, in)
-			if e != nil {
-				return nil, e
-			}
+		if ownerWrite {
+			metadata.Origin, e = s.bindCurrentConsent(ctx, metadata.Origin)
+		} else {
+			metadata, e = s.managedDraftMetadata(ctx, tx, latest, proposal, in)
+		}
+		if e != nil {
+			return nil, e
 		}
 		if proposal.Version.ID == "" || proposal.Version.State == "rejected" || proposal.Version.State == "pending" || proposal.Version.State == "preparing" {
 			previous := proposal
@@ -520,8 +543,9 @@ func (s *Service) AttachFile(ctx context.Context, p Principal, id, key string, i
 		if v.Version.State != "draft" || file.Access != v.Version.Metadata.Access {
 			return nil, ErrConflict
 		}
-		if requiresCurrentConsent(v.Version.Metadata.Origin, s.cfg.Terms) {
-			return nil, ErrInput
+		v.Version.Metadata.Origin, e = s.bindCurrentConsent(ctx, v.Version.Metadata.Origin)
+		if e != nil {
+			return nil, e
 		}
 		v.Version.File = &file.File
 		v.FileOwner = file.Owner
@@ -648,11 +672,12 @@ func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Co
 			return nil, ErrConflict
 		}
 		if p != r.Owner {
-			if e = s.validateManagedSubmission(tx, r, v); e != nil {
-				return nil, e
-			}
-		} else if requiresCurrentConsent(v.Version.Metadata.Origin, s.cfg.Terms) {
-			return nil, ErrInput
+			e = s.validateManagedReview(ctx, tx, r, v, true)
+		} else {
+			v.Version.Metadata.Origin, e = s.bindCurrentConsent(ctx, v.Version.Metadata.Origin)
+		}
+		if e != nil {
+			return nil, e
 		}
 		if _, e = currentCategory(tx, v.Version.Metadata); e != nil {
 			return nil, e
