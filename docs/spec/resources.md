@@ -1,7 +1,7 @@
 ---
 type: spec
 status: Accepted
-updated: 2026-11-20
+updated: 2026-11-21
 ---
 
 # 资料分类、发布与交付
@@ -36,7 +36,7 @@ GET /api/v1/resources/duplicates 在请求人同时具备学校 discover 与 upl
 
 公开与受限是访问条件。改变文件保护要求时需要匹配用途的新文件。后台执行发布与落库提交时检查当前版本、分类修订和资料状态；分类并发冲突或资料封禁无法激活时异步释放已创建的媒体引用，管理员可重试该资料的失败释放任务，任务租约过期的执行者不能确认结果。
 
-下载分别检查当前身份资格和访问权。管理员限于授权范围；单独授权、购买和会员各自生效，某项失效不会撤销其他权益。普通下架仅保留当前合格已购用户的交付，安全停用停止全部下载。
+预览和下载共用当前准入、动作资格、权益与资料状态校验。管理员可在授权范围内访问。单独授权、购买和会员分别判定，普通下架保留符合当前资格的已购交付，安全停用拒绝全部交付。
 
 下架、投诉和异议先保存申请与待发送任务，提交成功只表示申请已登记。投诉正文、联系方式与证据不包含在公开资料中。申请固定到提交时的资料版本，申请人可查看审核任务和公开决定理由。投递失败后可沿用原键重试，复核需指定已有决定。账务补发、替代交付或退款由对应业务接口承接。
 
@@ -60,11 +60,15 @@ GET /api/v1/resources/directories 在指定 course_id 时支持 tree=true 单次
 
 业务写入、审计和待发送事件在同一事务提交。同一幂等键重试返回原结果，内容不同则拒绝。任务使用稳定外部键恢复响应丢失，限定重试次数并保留失败状态，管理员可恢复同一发布任务。
 
-数据库业务记录最多一百万条、幂等记录最多一千万条、活动任务最多十万条，由分片计数触发器维护。事务提交前取得配额锁并复核计数，超额时回滚业务、审计及幂等写入。仅新建资料检查记录上限，仅入队新任务检查活动任务上限；安全停用、下架、审核驳回与撤销现有有效授权不受配额阻断。业务与审计保留策略由运营确认，当前只自动清理过期资料包快照。
+数据库业务记录最多一百万条、幂等记录最多一千万条、活动任务最多十万条，分片触发器维护计数。事务提交前取得配额锁并复核计数，超额时回滚业务、审计及幂等写入。
+
+新建资料检查记录上限，入队新任务检查活动任务上限。达到配额后仍可执行安全停用、下架、审核驳回与撤销已有有效授权。业务记录与审计的保留期限待确认。
 
 httpapi 支持从宿主请求上下文或受控格式的 X-Request-ID 读取追踪标识，回写响应头并填入错误响应 Problem.request_id。非法或超长追踪头直接忽略，不回显外部输入。
 
-Repository 与 Service 导出只读就绪检查 Ready 与运行指标 OperationalStats，统计记录数、幂等数、各状态任务数、未发 outbox 滞留时间与配额使用率，并提供已确认 outbox、已完成任务和过期投诉限流窗口的分批清理方法。
+`Repository` 与 `Service` 提供只读的 `Ready` 和 `OperationalStats`。指标包括资料数、幂等记录数、各状态任务数、未确认 outbox 的滞留时间以及配额使用率。
+
+宿主定期清理过期下载包快照。仓储还提供已确认 outbox、已完成任务和过期投诉限流窗口的分批清理端口，每批最多 1000 条。
 
 已完成任务从实际完成时间起保留。迁移前已完成且缺少完成时间的任务以迁移时间起算。清理跳过正在更新的限流窗口，后续按新窗口时间判断是否过期。
 
@@ -82,15 +86,14 @@ Repository 与 Service 导出只读就绪检查 Ready 与运行指标 Operationa
 | RES-08 | 远端成功但响应丢失时，恢复同一发布，不重复外部效果 |
 | RES-09 | 独立运行身份不能越界或修改审计，outbox 失败回滚业务写入 |
 | RES-10 | HTTP 按契约拒绝缺失与额外字段，成功写入遵循契约状态，生成 SDK 可以读取资料 |
-| RES-24 | 全部 HTTP 响应符合 OpenAPI 契约，UTF-8 排序规则数据库下分页与本人关联查询按 C 字节序保持一致 |
+| RES-24 | 权益相关 HTTP 响应符合 OpenAPI 契约，UTF-8 排序规则数据库下分页与本人关联查询按 C 字节序保持一致 |
 
 审核员通过当前学校范围权限查看待审版本及原文件，读取前重新检查权限，普通用户不能使用审核入口。本人申请使用分页回执列表，详情读取 moderation 的当前处理结果，证据不复制到公开资料。
 
 | 场景 | 预期结果 |
 | --- | --- |
-| RES-11 | 审核详情与文件只对当前授权审核员开放；单独授权列表包含对应用户身份键，仅管理权限可读 |
-
-| RES-12 | 分类读取要求内容准入，资格撤销或依赖故障时拒绝；分类管理员保留维护能力 |
+| RES-11 | 审核详情与文件仅限当前授权审核员。单独授权列表包含对应用户身份键，仅授权管理员可读 |
+| RES-12 | 分类读取检查内容准入，资格撤销或依赖故障时拒绝。分类管理员按独立权限维护 |
 
 本人上传资料的目录关联名称按登录与归属查询，每批最多 100 个 ID，归属比对与游标分页统一按 C 字节序执行，不受数据库区域排序规则影响。申请回执不授予目录关联查询权。
 
@@ -104,14 +107,16 @@ Repository 与 Service 导出只读就绪检查 Ready 与运行指标 Operationa
 
 流式文件与压缩包每次写出字节后刷新空闲超时，同步元数据调用受操作超时限制。资料详情返回 available_methods 和 unlock_reason，没有访问权申请入口。
 
-单文件预览与下载在通过全部实时权限检查后输出精确 Content-Length、Accept-Ranges 与基于文件 SHA-256 的强 ETag。命中 If-None-Match 返回无字节体的 304，有效单段 Range 请求返回 206，越界或非法区间返回 416。权限失效后条件请求仍直接拒绝，不返回 304。
+单文件请求先执行实时权限检查。文件响应包含精确的 `Content-Length`、`Accept-Ranges: bytes` 和基于 SHA-256 的强 ETag。`If-None-Match` 匹配时返回 304。可满足的单段字节范围返回 206，无法满足或格式非法的单段字节范围返回 416。
+
+`If-Range` 的值与强 ETag 不匹配、范围单位未知或请求多个范围时，接口按完整文件响应。部分文件传输经由宿主的 `RangeFiles` 端口。
 
 | 场景 | 预期结果 |
 | --- | --- |
 | RES-14 | 未授权预览与下载均不读取文件；错误明确缺失或不可用条件，本人元数据在资格故障时仍可读 |
 | RES-20 | 预览与下载输出精确长度与 ETag，实时鉴权通过后支持 304 协商、206 区间读取与 416 越界拒绝 |
 
-账号注销保留原作者、来源、许可证、正文和已发布文件，仅移除上传账号的公开关联。受信模块端口登记永久账号标记后，该账号不能新建草稿，也不能在存量记录上修改草稿、挂载文件或提交审核；管理员与审核员仍可维护存量记录。当前公开 DTO 不含上传者身份，内部归属记录保留供审核。
+账号注销保留原作者、来源、许可证、正文和已发布文件，移除上传账号的公开关联。受信端口登记永久账号标记后，原上传账号的建稿、修改、文件挂载和提审请求均被拒绝。管理员与审核员继续按授权维护存量内容，内部归属保留供审核。
 
 | 场景 | 预期结果 |
 | --- | --- |
@@ -124,15 +129,15 @@ Repository 与 Service 导出只读就绪检查 Ready 与运行指标 Operationa
 
 ## 公开审计查询
 
-AUDIT-01：postgres.Repository.ReadAudit(ctx, auditquery.Request) 返回 auditquery.Batch。backend 适配器负责认证，将当前授权与查询范围求交，再传入 Scopes。Repository 按范围并集与全部条件过滤后分页。
+`postgres.Repository.ReadAudit(ctx, auditquery.Request)` 返回 `auditquery.Batch`。宿主认证请求人，将当前授权与查询范围求交后传入 `Scopes`。Repository 按范围并集与全部条件过滤后分页。
 
 时间为左闭右开区间，每次最多 101 条，按时间、模块、ID 字节序降序。Before 使用全局位置。Snapshot 固定 PostgreSQL 已提交成员，排除回填和延迟提交；删除或修改审计使旧快照失效，调用方须重新查询。
 
-摘要只含模块、内部对象和操作者标识、时间、操作、原因、结果与范围。学校或群不明时使用 *，仅对应全局权限可见。没有原因时为空，超出 512 字节或含控制字符的原因省略；无法证明结果时为 unknown。
+摘要只含模块、内部对象和操作者标识、时间、操作、原因、结果与范围。学校或群不明时使用 `*`，仅对应全局权限可见。超出 512 字节或含控制字符的原因省略，无法确认结果时使用 `unknown`。
 
-表结构直接定义最终形态，不转换历史数据。审计与业务同事务写入。运行身份需要读取 audit_retention，清理修订由固定 schema 的触发器更新。快照超过 256 字节或无效时明确报错。
+审计与业务同事务写入。运行身份读取 `audit_retention`，清理修订由固定 schema 的触发器更新。无效或超过 256 字节的快照返回错误。
 
-postgres/audit_query_test.go 的 TestPublicAuditQuery 使用独立 PostgreSQL 数据库，验证条件筛选、范围、空原因、unknown、脱敏、回填与延迟提交、清理失效和取消。OpenAPI 路径保持现状，本接口供可信 Go 装配使用。
+该查询供宿主通过 Go 调用。隔离 PostgreSQL 用例与实际测试函数见 `module.yaml` 的 `AUDIT-01`。
 
 | 场景 | 验证条件 |
 | --- | --- |
@@ -140,7 +145,9 @@ postgres/audit_query_test.go 的 TestPublicAuditQuery 使用独立 PostgreSQL �
 
 ## 搜索来源与事件投递
 
-contracts/discovery-event.schema.json 固定 search 9e791c6 的 discovery.v1 约定，来源提交和校验值记录在相邻 source.json。投影只有公开标题、学校、课程与教师归属、修订、可见状态和时间，不包含正文、作者、认证材料或评分。
+搜索事件遵循 search 的 `discovery.v1`。契约副本和固定来源见 [Schema](https://github.com/StuHelper/stuhelper-resources/blob/develop/contracts/discovery-event.schema.json) 与 [来源记录](https://github.com/StuHelper/stuhelper-resources/blob/develop/contracts/discovery-event.source.json)。
+
+投影字段限于公开标题、学校、课程和教师归属、修订、可见状态及时间。
 
 搜索文档使用当前已发布版本，kind 为 resource。未发布替代版本不会覆盖公开标题或关联。发布、版本替换、下架、安全停用、恢复和删除决定均逐对象写入；现有删除决定执行下架，并保留不可见墓碑。
 
@@ -156,13 +163,13 @@ backend relay 负责 LISTEN、启动和重连补读，以及每 60 秒的未发�
 
 Service.DiscoveryCurrent(ctx, principal, ids) 接收可信请求人与 1 至 100 个 ID。按当前 discover 权限逐学校过滤，外部授权完成后重新读取发布状态，避免返回授权等待期间已下架的资料。拒绝返回空集合，依赖故障返回错误。
 
-旧 PendingEvents 和 AcknowledgeEvent 已移除。Envelope.Data 为 json.RawMessage，relay 按 Type 解码。来源表直接定义 sent_at 最终结构，不保留旧 delivered 字段或接口签名。
+`Envelope.Data` 使用 `json.RawMessage`，relay 按事件 `Type` 解码。
 
 postgres.Repository.DiscoverySnapshot(ctx, cursor, limit) 供受信重建任务调用，返回 Items 和 Next，单页 1 至 100 条。空 cursor 开始，空 Next 结束。不可变历史与 PostgreSQL 可见性快照固定首轮成员，分页按 ID 字节序递增。
 
 分页期间的修改、删除和延迟提交不会替换首轮版本。游标五分钟有效，历史修改或清理会使旧游标失效，必须中止重建。历史与墓碑不自动清理，保留策略须结合消费者重放期限单独确认。
 
-本次只新增公开 Go 来源接口，不新增或修改 OpenAPI 路径。运行身份需要读取 discovery_history、discovery_retention，追加 discovery_history，并读取、写入和确认 outbox。历史的修改与删除保留给迁移或维护身份。
+搜索来源通过 Go 端口提供。运行身份读取 `discovery_history`、`discovery_retention`，追加 `discovery_history`，并读写确认 outbox。历史记录的修改与删除由迁移或维护身份执行。
 
 | 场景 | 验证条件 |
 | --- | --- |
@@ -194,7 +201,7 @@ Reason 包括 eligible、already_accessible、unauthenticated、not_found、reso
 
 资料详情在有访问权时返回 download，在满足购买条件时返回 purchase。purchase_available 表示资源模块已支持购买协作；backend 仍须确认 billing 可用并合并价格。本模块不保存商业条款或支付资料。
 
-Service.Consume(ctx, Envelope) 是可信 relay 入口。只接受 billing 的三类事件，严格拒绝未知字段。backend 验证生产方并转换本地 DTO，不导入 billing 私有实现。消费方 Schema 与生产方 Schema 须在装配时核对。旧 Dependencies.Entitlements 查询已移除。
+`Service.Consume(ctx, Envelope)` 是受信 relay 入口，仅接受下表中的三类 billing 事件并拒绝未知字段。宿主验证生产方并转换本地 DTO。装配验证消费方与生产方契约兼容。
 
 | 事件 | data 字段 |
 | --- | --- |
@@ -212,7 +219,7 @@ paid 在事务内检查当前资料与版本可交付性。资料不存在、下
 
 每个事件 Schema 保存于 contracts 对应事件名文件，SHA-256 记录在 entitlement-events.sha256.json。
 
-billing 文件是本仓消费方约束，已按 P7a 当前 Schema 核对 owner 对象与 application/json 内容类型。发送沿用 PendingOutbox、ConfirmOutbox 与 resources_outbox 通道。
+`contracts` 中的 billing Schema 用于校验消费事件。权益结果沿用 `PendingOutbox`、`ConfirmOutbox` 及 `resources_outbox` 通道。
 
 运行身份需要 coverage、purchases、memberships 的 SELECT/INSERT/UPDATE，以及 inbox 的 SELECT/INSERT。权益消费不读取其他模块的表。购买来源不自动清理，保留供退款、重投与账号查询使用。
 
