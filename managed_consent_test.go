@@ -1,0 +1,146 @@
+package resources_test
+
+import (
+	"errors"
+	"strings"
+	"testing"
+
+	r "github.com/StuHelper/stuhelper-resources"
+)
+
+func TestManagerMaintainsPublishedMetadataWithoutReplacingConsent(t *testing.T) {
+	h := newFixture(t)
+	old := r.Consent{Accepted: true, Version: h.cfg.Terms.Version, Digest: h.cfg.Terms.Digest}
+	original := metadata("public")
+	original.Origin = r.Origin{Kind: "original", Author: "作者", Consent: &old}
+	draft := createAttachedDraft(t, h, "published-original", original)
+	published := h.publish(t, draft)
+	rotateTerms(t, h)
+	current := r.Consent{Accepted: true, Version: h.cfg.Terms.Version, Digest: h.cfg.Terms.Digest}
+	for key, attempt := range map[string]func(*r.DraftWrite){
+		"replace-consent": func(in *r.DraftWrite) { in.Metadata.Origin.Consent = &current },
+		"replace-author":  func(in *r.DraftWrite) { in.Metadata.Origin.Author = "管理者" },
+		"erase-original":  func(in *r.DraftWrite) { in.Metadata.Origin = r.Origin{Kind: "unknown"} },
+		"replace-file":    func(in *r.DraftWrite) { in.MediaVersionID = "manager-file" },
+		"change-access":   func(in *r.DraftWrite) { in.Metadata.Access = "restricted" },
+		"grant-badge":     func(in *r.DraftWrite) { in.Metadata.Origin.VerifiedInstructor = true },
+	} {
+		t.Run(key, func(t *testing.T) {
+			in := r.DraftWrite{Revision: published.Revision, Metadata: original}
+			attempt(&in)
+			if _, err := h.s.UpdateDraft(h.ctx, manager, published.ID, key, in); !errors.Is(err, r.ErrDenied) {
+				t.Fatalf("expected refusal of manager %s, got %v", key, err)
+			}
+		})
+	}
+	unchanged, err := h.s.Get(h.ctx, uploader, published.ID)
+	must(t, err)
+	if unchanged.Revision != published.Revision || unchanged.Proposal != nil || unchanged.Current == nil || *unchanged.Current.Metadata.Origin.Consent != old {
+		t.Fatal("denied manager writes changed the published record")
+	}
+
+	edited := original
+	edited.Title = "更正后的标题"
+	update := r.DraftWrite{Revision: published.Revision, Metadata: edited}
+	proposal, err := h.s.UpdateDraft(h.ctx, manager, published.ID, "correct-title", update)
+	must(t, err)
+	assertManagedConsent(t, proposal.Proposal, published.Current.File, old, "draft")
+	replay, err := h.s.UpdateDraft(h.ctx, manager, published.ID, "correct-title", update)
+	must(t, err)
+	if replay.Proposal == nil || replay.Proposal.ID != proposal.Proposal.ID || replay.Revision != proposal.Revision {
+		t.Fatal("a metadata correction did not replay its original result")
+	}
+	if _, err = h.s.AttachFile(h.ctx, manager, published.ID, "replace-through-file", r.FileLink{Revision: proposal.Revision, MediaVersionID: "manager-file"}); !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("expected file attachment by manager to be refused, got %v", err)
+	}
+	pending, err := h.s.Submit(h.ctx, manager, published.ID, "submit-correction", r.Command{Revision: proposal.Revision})
+	must(t, err)
+	assertManagedConsent(t, pending.Proposal, published.Current.File, old, "pending")
+	h.drain(t)
+	_, err = h.s.ApplyDecision(h.ctx, manager, published.ID, "approve-correction", r.Decision{ID: "approval-correction", Revision: pending.Revision, VersionID: pending.Proposal.ID, Action: "approve"})
+	must(t, err)
+	h.drain(t)
+	revised, err := h.s.Get(h.ctx, uploader, published.ID)
+	must(t, err)
+	// Publishing may assign a new media version while preserving the original file bytes.
+	if revised.Proposal != nil || revised.Current == nil || revised.Current.Metadata.Title != edited.Title ||
+		*revised.Current.Metadata.Origin.Consent != old || revised.Current.File.SHA256 != published.Current.File.SHA256 {
+		t.Fatal("approved metadata correction lost the original work or consent")
+	}
+	edited.Title = "再次更正标题"
+	direct, err := h.s.UpdateDraft(h.ctx, manager, published.ID, "direct-correction", r.DraftWrite{Revision: revised.Revision, Metadata: edited, Submit: true})
+	must(t, err)
+	assertManagedConsent(t, direct.Proposal, revised.Current.File, old, "pending")
+}
+
+func TestManagerCannotGrantConsentOrSubmitUnpublishedStaleDraft(t *testing.T) {
+	h := newFixture(t)
+	old := r.Consent{Accepted: true, Version: h.cfg.Terms.Version, Digest: h.cfg.Terms.Digest}
+	original := metadata("public")
+	original.Origin = r.Origin{Kind: "original", Consent: &old}
+	draft := createAttachedDraft(t, h, "unpublished-original", original)
+	repost := createAttachedDraft(t, h, "unpublished-repost", metadata("public"))
+	rotateTerms(t, h)
+	current := r.Consent{Accepted: true, Version: h.cfg.Terms.Version, Digest: h.cfg.Terms.Digest}
+	newOriginal := original
+	newOriginal.Origin.Consent = &current
+
+	_, err := h.s.UpdateDraft(h.ctx, manager, repost.ID, "manager-conversion", r.DraftWrite{Revision: repost.Revision, Metadata: newOriginal, Submit: true})
+	if !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("expected manager conversion to original to be refused, got %v", err)
+	}
+	if _, err = h.s.UpdateDraft(h.ctx, manager, draft.ID, "manager-current-consent", r.DraftWrite{Revision: draft.Revision, Metadata: newOriginal}); !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("expected manager replacing draft consent to be refused, got %v", err)
+	}
+	original.Title = "管理侧修正草稿标题"
+	if _, err = h.s.UpdateDraft(h.ctx, manager, draft.ID, "manager-direct-submission", r.DraftWrite{Revision: draft.Revision, Metadata: original, Submit: true}); !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("expected manager direct stale submission to be refused, got %v", err)
+	}
+	corrected, err := h.s.UpdateDraft(h.ctx, manager, draft.ID, "manager-title", r.DraftWrite{Revision: draft.Revision, Metadata: original})
+	must(t, err)
+	assertManagedConsent(t, corrected.Proposal, draft.Proposal.File, old, "draft")
+	if _, err = h.s.Submit(h.ctx, manager, corrected.ID, "manager-submit-legacy", r.Command{Revision: corrected.Revision}); !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("expected manager stale submission after metadata edit to be refused, got %v", err)
+	}
+	unchanged, err := h.s.Get(h.ctx, uploader, corrected.ID)
+	must(t, err)
+	assertManagedConsent(t, unchanged.Proposal, draft.Proposal.File, old, "draft")
+	if unchanged.Revision != corrected.Revision {
+		t.Fatal("denied submission updated the revision")
+	}
+
+	if _, err = h.s.UpdateDraft(h.ctx, uploader, repost.ID, "owner-stale", r.DraftWrite{Revision: repost.Revision, Metadata: original, Submit: true}); !errors.Is(err, r.ErrInput) {
+		t.Fatalf("expected owner conversion with stale terms to be refused, got %v", err)
+	}
+	converted, err := h.s.UpdateDraft(h.ctx, uploader, repost.ID, "owner-current", r.DraftWrite{Revision: repost.Revision, Metadata: newOriginal, Submit: true})
+	must(t, err)
+	assertManagedConsent(t, converted.Proposal, repost.Proposal.File, current, "pending")
+}
+
+func createAttachedDraft(t *testing.T, h *fixture, key string, m r.Metadata) r.Resource {
+	t.Helper()
+	draft, err := h.s.CreateDraft(h.ctx, uploader, key, r.DraftWrite{Metadata: m})
+	must(t, err)
+	file := r.File{VersionID: "media-" + key, Filename: "笔记.pdf", ContentType: "application/pdf", Size: 60, SHA256: strings.Repeat("e", 64)}
+	h.files.items[file.VersionID] = r.FileEvidence{File: file, Owner: uploader, Module: "resources", SchoolID: "school", State: "awaiting_approval", Access: m.Access}
+	result, err := h.s.AttachFile(h.ctx, uploader, draft.ID, "link", r.FileLink{Revision: draft.Revision, MediaVersionID: file.VersionID})
+	must(t, err)
+	return result
+}
+
+func rotateTerms(t *testing.T, h *fixture) {
+	t.Helper()
+	h.cfg.Terms.Version = "fixture-v2"
+	h.cfg.Terms.Digest = strings.Repeat("f", 64)
+	var err error
+	h.s, err = r.New(h.repo, r.Dependencies{Authority: h.auth, Catalog: h.catalog, Files: h.files, Moderation: h.moderation}, h.cfg)
+	must(t, err)
+}
+
+func assertManagedConsent(t *testing.T, v *r.Version, file *r.File, consent r.Consent, state string) {
+	t.Helper()
+	if v == nil || v.State != state || v.File == nil || *v.File != *file ||
+		v.Metadata.Origin.Consent == nil || *v.Metadata.Origin.Consent != consent {
+		t.Fatalf("expected %s with the original file and consent, got %+v", state, v)
+	}
+}
