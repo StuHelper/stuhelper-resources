@@ -64,7 +64,9 @@ GET /api/v1/resources/directories 在指定 course_id 时支持 tree=true 单次
 
 新建资料检查记录上限，入队新任务检查活动任务上限。达到配额后仍可执行安全停用、下架、审核驳回与撤销已有有效授权。
 
-资料、当前配置、仍被引用的分类或版本快照和有效授权随业务用途保留。下架、投诉和异议材料保留至案件处理及复核完成，适用法定期限或有效 `legal_hold` 时延长。购买来源按订单和权益依据的期限保留。[数据保留与删除](https://github.com/StuHelper/stuhelper/blob/develop/docs/spec/data-retention.md)
+资料、当前配置、有效授权及仍有业务用途的分类或版本快照按用途保存。注销完成或服务目的结束后 30 日内，删除或匿名化不再必要的个人信息。内容本身与版权元数据按资料规则处理，购买来源按订单和权益依据的期限保留。[数据保留与删除](https://github.com/StuHelper/stuhelper/blob/develop/docs/spec/data-retention.md)
+
+投诉处理期间只保存办理所需材料。结案后保留 12 个月，仅用于复核、争议处理或履行法定义务。确需延长时，记录保留依据、数据范围、用途和期限。到期后删除或匿名化至无法重新识别个人。[现行条款](https://stuhelper.com/terms.html)
 
 幂等回执保留 24 小时，已确认投递详情保留 90 天，管理与敏感访问审计保留 12 个月。稳定业务唯一键按所属业务事实保留。[数据保留与删除](https://github.com/StuHelper/stuhelper/blob/develop/docs/spec/data-retention.md)
 
@@ -173,7 +175,9 @@ postgres.Repository.DiscoverySnapshot(ctx, cursor, limit) 供受信重建任务�
 
 分页期间的修改、删除和延迟提交不会替换首轮版本。游标五分钟有效，历史修改或清理会使旧游标失效，必须中止重建。
 
-搜索旧修订自被替代起、最小墓碑自产生起保留 90 天。清理墓碑前须确认各订阅方已处理该墓碑、较早事件无法重放且无有效 `legal_hold`。自动清理待实施。[数据保留与删除](https://github.com/StuHelper/stuhelper/blob/develop/docs/spec/data-retention.md)
+搜索旧修订自被替代起、最小墓碑自产生起默认保留 90 天。清理墓碑前须确认各订阅方已处理该墓碑、较早事件无法重放且无有效 `legal_hold`。墓碑仅保存识别对象及修订顺序所需的数据。
+
+全文、投影、历史修订和事件载荷中仍可关联个人的信息，按适用期限中较早到期的时间删除或匿名化。到期后只保留必要且无法重新识别个人的元数据。搜索记录的自动清理待实施。[现行条款第 4 节](https://stuhelper.com/terms.html) · [数据保留与删除](https://github.com/StuHelper/stuhelper/blob/develop/docs/spec/data-retention.md)
 
 搜索来源通过 Go 端口提供。运行身份读取 `discovery_history`、`discovery_retention`，追加 `discovery_history`，并读写确认 outbox。历史记录的修改与删除由迁移或维护身份执行。
 
