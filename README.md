@@ -1,33 +1,44 @@
+---
+type: index
+status: Accepted
+updated: 2026-11-21
+---
+
 # StuHelper Resources
 
-资料模块管理分类、课程关联、资料版本、审核发布、访问授权和目录下载包。文件字节交给 media，学术对象通过 catalog 校验，审核通过 moderation 处理。各模块使用独立数据库身份。
+资料模块管理资料分类、学校与课程目录、版本、发布状态、访问权和下载包。分类与字段来自持久化配置。读写按稳定的分类 ID 和配置修订执行，提交资料时保存分类快照。
 
-课件、往年题、教材和习题来自可修改的初始配置。分类使用稳定 ID，字段支持文本、整数和选项。往年题的年份只是配置中的整数型字段，可筛选和分组，业务逻辑不根据分类名称分支。
+## 模块边界
 
-分类修订和发布版本保留快照。新版本待审时继续展示和下载旧版本。下载和打包检查当前资格、访问权及资料状态，普通下架保留已购交付，安全停用阻止全部下载。
+[module.yaml](module.yaml) 声明必需依赖 platform、catalog、media、moderation。catalog 提供学术关联，media 管理文件及发布引用，moderation 管理审核和申诉。宿主通过 `Dependencies` 注入当前动作资格及三方公开接口。资料与审核决定分别由各自模块保存。
 
-公共内容、目录和分类读取由当前内容准入授权。应用提供有效校园或教师资格，资格缺失返回拒绝，依赖故障返回暂不可用。本人记录与范围内管理操作保留独立授权。分类管理使用 taxonomy.manage 权限。
+verification、billing、identity 是可选模块。identity 是 `resources.read`、`resources.write`、`resources.manage` 的能力依赖。内容准入和动作资格读取宿主配置及当前事实。所需事实不可用时，受影响的动作返回暂不可用，本人记录与管理入口仍按各自权限校验。
 
-## 检查与接入
+billing 维护价格、扣费和退款。resources 保存独立授权、购买来源、会员投影和套餐覆盖规则，通过账务事件更新投影。下载及文件预览重新检查资格、权益与资料状态。普通下架保留符合当前资格的已购交付，安全停用停止下载。
+
+## 契约与规格
+
+[OpenAPI](contracts/resources.openapi.json) 定义资料 HTTP 接口，变更后用 `make generate` 更新 Go 和 TypeScript SDK。
+
+| 文档 | 内容 |
+| --- | --- |
+| [资料分类、发布与交付](docs/spec/resources.md) | 审核发布、下载、账务投影、审计和搜索事件 |
+| [按账号信息查询](docs/spec/account-query.md) | Go 查询端口、字段与授权范围 |
+| [资料列表与计数](docs/spec/ui-data.md) | 排序、筛选、可见计数与本人统计 |
+
+## 验证
+
+安装仓库声明的工具链与 PostgreSQL 后，在仓库根目录执行与 CI 一致的检查。
 
 ```bash
 make setup
-make generate
 bash scripts/check-with-postgres.sh
 ```
 
-检查使用独立 PostgreSQL 集群，覆盖事务、权限、并发幂等、审核连续性和恢复。OpenAPI 生成 Go 与 TypeScript 客户端，HTTP 同时按该契约校验请求。
+检查创建独立的 PostgreSQL 测试集群，并核对生成产物与文档。清单中的 `specifications` 指向场景条目，`scenario_tests` 通过 `文件#函数` 指向现有测试。数据库测试检查角色隔离、事务回滚、授权撤销、重复提交及发布恢复，外部依赖使用受控替身。
 
-迁移身份执行 postgres.Migrate，运行身份通过 CheckRuntime 检查。服务通过 Dependencies 接入当前身份与资格、目录、文件和审核接口。购买与会员通过 billing 事件投影到本模块。覆盖范围、单独授权和购买来源独立保存，下载时读取当前资格与权益。价格及扣费由 backend 接入 billing。
+## 生产验收
 
-当前本仓测试使用可控外部接口。应用装配、页面、真实账号与生产验收在对应仓库分别记录。完整规则见[模块规格](docs/spec/resources.md)，许可证为 AGPL-3.0-only。
+StuHelper v0.1.31 的锁定组合使用 resources v0.1.3，资料页面已通过匿名访问核验。使用真实账号完成上传、审核和权限下载仍待验收。开发分支的变更随对应后端组合晋级。 [正式组合](https://github.com/StuHelper/stuhelper/releases/tag/v0.1.31)
 
-本人上传关联的名称由 /resources/me/references 按登录和归属返回，不受当前资格失效影响。投诉回执的 resource_title 只在提交时通过内容准入且目标可见时保存，后续恢复资格不会补入标题。
-
-预览与下载共用当前准入、资格、权益和状态检查。接口返回实际缺失或不可用的条件，不把服务故障解释为缺少权益。资格服务故障不隐藏本人资料元数据，文件仍暂停访问。
-
-列表、打包清单与分卷下载在单次请求内按账号、学校和动作复用资格及管理权限结论，并批量加载版本与授权权益数据；后续请求重新检查当前事实，不使用跨请求缓存。单文件预览与下载合并为单次权限与记录校验。
-
-按账号信息查询的 Go 接口、能力、字段与范围限制见[账号查询规格](docs/spec/account-query.md)。
-
-最新排序、文件类型筛选、可见计数和本人统计见[原型资料接口](docs/spec/ui-data.md)。批量下载继续使用现有打包接口。
+本仓使用 AGPL-3.0-only。
