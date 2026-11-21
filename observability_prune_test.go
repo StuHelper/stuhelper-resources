@@ -133,10 +133,10 @@ func TestRequestIDCorrelationOperationalReadinessStatsAndBoundedPruning(t *testi
 	}
 
 	// PruneSubmissionLimits deletes only expired windows while keeping active window.
-	_, err = h.s.CreateRequest(h.ctx, reader, pub.ID, "limit-expired", r.Request{Kind: "complaint", Reason: "expired window", Contact: "a@example.invalid", Evidence: []string{"ev"}})
+	_, err = h.s.CreateRequest(h.ctx, reader, pub.ID, "limit-expired", r.Request{Kind: "complaint", Category: "copyright", Reason: "expired window", Contact: "a@example.invalid", Evidence: []string{"ev"}})
 	must(t, err)
 	h.clock.Add(2 * time.Minute)
-	_, err = h.s.CreateRequest(h.ctx, uploader, pub.ID, "limit-active", r.Request{Kind: "complaint", Reason: "active window", Contact: "b@example.invalid", Evidence: []string{"ev"}})
+	_, err = h.s.CreateRequest(h.ctx, uploader, pub.ID, "limit-active", r.Request{Kind: "complaint", Category: "copyright", Reason: "active window", Contact: "b@example.invalid", Evidence: []string{"ev"}})
 	must(t, err)
 
 	prunedLimits, err := h.repo.PruneSubmissionLimits(h.ctx, h.clock.Now(), 10)

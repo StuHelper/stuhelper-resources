@@ -840,6 +840,7 @@ export interface components {
             state: "published" | "unlisted" | "blocked";
             reason: string;
         };
+        /** @description New complaints require a category, nonblank contact details and one to four evidence entries. Withdrawals and appeals omit category. All requests require a nonblank reason of at most 2000 Unicode characters. For other, explain the violation in reason. A legacy complaint can replay its already accepted request using its original body and idempotency key. */
         Request: {
             /** @enum {string} */
             kind: "withdrawal" | "complaint" | "appeal";
@@ -847,6 +848,7 @@ export interface components {
             contact?: string;
             evidence?: string[];
             previous_task_id?: string;
+            category?: components["schemas"]["ViolationCategory"];
         };
         RequestReceipt: {
             id: string;
@@ -861,6 +863,7 @@ export interface components {
             can_appeal: boolean;
             /** @description Title snapshot at request submission. Present for an owner request, or when a complaint passed current content admission at submission. Omitted for other complaints and historical requests without an admission snapshot. */
             resource_title?: string;
+            category?: components["schemas"]["ViolationCategory"];
         };
         GrantWrite: {
             /** Format: int64 */
@@ -1023,6 +1026,11 @@ export interface components {
             value: components["schemas"]["Value"];
             count: number;
         };
+        /**
+         * @description Fixed Moderation violation category used for resource complaints. illegal_content (违法违规), pornography (色情低俗), gambling_drugs (赌博毒品违禁品), fraud (诈骗钓鱼), violence_threat (暴力威胁), minors_harm (危害未成年人), personal_attack (辱骂攻击), harassment_discrimination (骚扰歧视), defamation_rumor (诽谤谣言), privacy_leak (泄露隐私), impersonation (冒充他人), copyright (侵犯著作权), other_ip (侵犯其他权益), academic_integrity (学术不端), leaked_exam (泄露试题), fake_review (不实评价), wrong_teacher (教师或课程对应错误), wrong_info (信息错误), spam (广告垃圾), malware (恶意文件或链接), duplicate (重复内容), low_quality (内容质量低), author_update (作者要求更新), other (其他).
+         * @enum {string}
+         */
+        ViolationCategory: "illegal_content" | "pornography" | "gambling_drugs" | "fraud" | "violence_threat" | "minors_harm" | "personal_attack" | "harassment_discrimination" | "defamation_rumor" | "privacy_leak" | "impersonation" | "copyright" | "other_ip" | "academic_integrity" | "leaked_exam" | "fake_review" | "wrong_teacher" | "wrong_info" | "spam" | "malware" | "duplicate" | "low_quality" | "author_update" | "other";
     };
     responses: never;
     parameters: never;
@@ -2233,7 +2241,7 @@ export interface operations {
                     "application/json": components["schemas"]["RequestReceipt"];
                 };
             };
-            /** @description Invalid request */
+            /** @description resources_invalid_input for invalid input, including missing category on a new complaint, an unknown category, or a blank reason. */
             400: {
                 headers: {
                     [name: string]: unknown;

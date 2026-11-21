@@ -107,6 +107,7 @@ func TestIdempotencyGuardsConcurrentRequestPinningAndConfigValidation(t *testing
 	}
 	receipt, e := h.s.CreateRequest(h.ctx, reader, published.ID, "concurrent-complaint", r.Request{
 		Kind:     "complaint",
+		Category: "copyright",
 		Reason:   "版权核实",
 		Contact:  "reader@example.invalid",
 		Evidence: []string{"https://example.invalid/evidence"},
