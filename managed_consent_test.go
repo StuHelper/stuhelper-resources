@@ -80,12 +80,17 @@ func TestManagerCannotGrantConsentOrSubmitUnpublishedStaleDraft(t *testing.T) {
 	original.Origin = r.Origin{Kind: "original", Consent: &old}
 	draft := createAttachedDraft(t, h, "unpublished-original", original)
 	repost := createAttachedDraft(t, h, "unpublished-repost", metadata("public"))
+	published := h.publish(t, createAttachedDraft(t, h, "another-published-original", original))
+	replacement, err := h.s.UpdateDraft(h.ctx, uploader, published.ID, "replace-before-rotation", r.DraftWrite{
+		Revision: published.Revision, Metadata: original, MediaVersionID: draft.Proposal.File.VersionID,
+	})
+	must(t, err)
 	rotateTerms(t, h)
 	current := r.Consent{Accepted: true, Version: h.cfg.Terms.Version, Digest: h.cfg.Terms.Digest}
 	newOriginal := original
 	newOriginal.Origin.Consent = &current
 
-	_, err := h.s.UpdateDraft(h.ctx, manager, repost.ID, "manager-conversion", r.DraftWrite{Revision: repost.Revision, Metadata: newOriginal, Submit: true})
+	_, err = h.s.UpdateDraft(h.ctx, manager, repost.ID, "manager-conversion", r.DraftWrite{Revision: repost.Revision, Metadata: newOriginal, Submit: true})
 	if !errors.Is(err, r.ErrDenied) {
 		t.Fatalf("expected manager conversion to original to be refused, got %v", err)
 	}
@@ -102,6 +107,9 @@ func TestManagerCannotGrantConsentOrSubmitUnpublishedStaleDraft(t *testing.T) {
 	if _, err = h.s.Submit(h.ctx, manager, corrected.ID, "manager-submit-legacy", r.Command{Revision: corrected.Revision}); !errors.Is(err, r.ErrDenied) {
 		t.Fatalf("expected manager stale submission after metadata edit to be refused, got %v", err)
 	}
+	if _, err = h.s.Submit(h.ctx, manager, replacement.ID, "manager-submit-replacement", r.Command{Revision: replacement.Revision}); !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("expected manager to be refused when replacing the old work with a different media version of the same digest, got %v", err)
+	}
 	unchanged, err := h.s.Get(h.ctx, uploader, corrected.ID)
 	must(t, err)
 	assertManagedConsent(t, unchanged.Proposal, draft.Proposal.File, old, "draft")
@@ -115,6 +123,40 @@ func TestManagerCannotGrantConsentOrSubmitUnpublishedStaleDraft(t *testing.T) {
 	converted, err := h.s.UpdateDraft(h.ctx, uploader, repost.ID, "owner-current", r.DraftWrite{Revision: repost.Revision, Metadata: newOriginal, Submit: true})
 	must(t, err)
 	assertManagedConsent(t, converted.Proposal, repost.Proposal.File, current, "pending")
+}
+
+func TestManagerMetadataEditDoesNotResubmitInstructorClaim(t *testing.T) {
+	h := newFixture(t)
+	teacherKey := uploader.Key() + "|school|course"
+	ic := &instructorAliasCatalog{catalog: h.catalog, allowed: map[string]bool{teacherKey: true}}
+	var err error
+	h.s, err = r.New(h.repo, r.Dependencies{Authority: h.auth, Catalog: ic, Files: h.files, Moderation: h.moderation}, h.cfg)
+	must(t, err)
+	m := metadata("public")
+	m.Origin.VerifiedInstructor = true
+	published := h.publish(t, createAttachedDraft(t, h, "published-instructor", m))
+	delete(ic.allowed, teacherKey)
+
+	changedCourse := m
+	changedCourse.Associations.CourseID = "legacy-course"
+	if _, err = h.s.UpdateDraft(h.ctx, manager, published.ID, "move-course", r.DraftWrite{Revision: published.Revision, Metadata: changedCourse}); !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("expected the manager to be unable to move the instructor claim to another course, got %v", err)
+	}
+	m.Title = "任课资料更正"
+	if _, err = h.s.UpdateDraft(h.ctx, manager, published.ID, "submit-title", r.DraftWrite{Revision: published.Revision, Metadata: m, Submit: true}); !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("expected the manager to be unable to resubmit the instructor claim, got %v", err)
+	}
+	draft, err := h.s.UpdateDraft(h.ctx, manager, published.ID, "save-title", r.DraftWrite{Revision: published.Revision, Metadata: m})
+	must(t, err)
+	if draft.Proposal == nil || !draft.Proposal.Metadata.Origin.VerifiedInstructor || draft.Proposal.VerifiedInstructor {
+		t.Fatal("saving metadata did not preserve the declaration separately from the verified snapshot")
+	}
+	if _, err = h.s.Submit(h.ctx, manager, draft.ID, "manager-submit", r.Command{Revision: draft.Revision}); !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("expected the manager to be unable to submit the instructor draft, got %v", err)
+	}
+	if _, err = h.s.Submit(h.ctx, uploader, draft.ID, "owner-submit", r.Command{Revision: draft.Revision}); !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("expected the owner to require current instructor qualification to submit, got %v", err)
+	}
 }
 
 func createAttachedDraft(t *testing.T, h *fixture, key string, m r.Metadata) r.Resource {
