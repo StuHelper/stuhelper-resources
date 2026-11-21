@@ -453,6 +453,9 @@ func (s *Service) AttachFile(ctx context.Context, p Principal, id, key string, i
 		if v.Version.State != "draft" || file.Access != v.Version.Metadata.Access {
 			return nil, ErrConflict
 		}
+		if requiresCurrentConsent(v.Version.Metadata.Origin, s.cfg.Terms) {
+			return nil, ErrInput
+		}
 		v.Version.File = &file.File
 		v.FileOwner = file.Owner
 		r.Revision++
@@ -579,6 +582,9 @@ func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Co
 		}
 		if v.Version.State != "draft" || v.Version.File == nil {
 			return nil, ErrConflict
+		}
+		if requiresCurrentConsent(v.Version.Metadata.Origin, s.cfg.Terms) {
+			return nil, ErrInput
 		}
 		if _, e = currentCategory(tx, v.Version.Metadata); e != nil {
 			return nil, e

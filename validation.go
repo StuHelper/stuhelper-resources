@@ -64,6 +64,11 @@ func validTerms(t Terms) bool {
 	return validID(t.Version) && digestPattern.MatchString(t.Digest) && e == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && len(t.URL) <= 2000
 }
 
+func requiresCurrentConsent(origin Origin, terms Terms) bool {
+	c := origin.Consent
+	return origin.Kind == "original" && (c == nil || !c.Accepted || c.Version != terms.Version || c.Digest != terms.Digest)
+}
+
 // ValidateCategory checks the configurable schema, never a category name or ID.
 func ValidateCategory(c CategoryWrite) error {
 	if c.Revision < 0 || !names(c.Names) || c.Order < 0 || c.Order > 10000 || len(c.Fields) > 20 {
@@ -204,7 +209,7 @@ func validateMetadata(m Metadata, terms Terms) error {
 	}
 	switch o.Kind {
 	case "original":
-		if o.Source != "" || o.License != "" || o.Consent == nil || !o.Consent.Accepted || o.Consent.Version != terms.Version || o.Consent.Digest != terms.Digest {
+		if o.Source != "" || o.License != "" || requiresCurrentConsent(o, terms) {
 			return ErrInput
 		}
 	case "known":
