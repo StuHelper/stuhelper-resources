@@ -48,14 +48,14 @@ func TestOwnResourceNamesRequireUploadOwnershipAndKeepContentPrivate(t *testing.
 	call("/api/v1/resources/me/references?ids=course,unknown", "Bearer owner", 404)
 	call("/api/v1/resources/me/references?ids="+strings.Repeat("course,", 100)+"course", "Bearer owner", 400)
 	// A login-only complaint never grants catalog association ownership.
-	_, e = h.s.CreateRequest(h.ctx, reader, item.ID, "complaint", r.Request{Kind: "complaint", Reason: "Evidence", Contact: "Contact", Evidence: []string{"Proof"}})
+	_, e = h.s.CreateRequest(h.ctx, reader, item.ID, "complaint", r.Request{Kind: "complaint", Category: "copyright", Reason: "Evidence", Contact: "Contact", Evidence: []string{"Proof"}})
 	must(t, e)
 	call(path, "Bearer reader", 404)
 }
 func TestComplaintTitleSnapshotRequiresAdmissionAtSubmission(t *testing.T) {
 	h := newFixture(t)
 	item := h.publish(t, h.draft(t, "titles", "restricted"))
-	in := r.Request{Kind: "complaint", Reason: "Evidence", Contact: "Contact", Evidence: []string{"Proof"}}
+	in := r.Request{Kind: "complaint", Category: "copyright", Reason: "Evidence", Contact: "Contact", Evidence: []string{"Proof"}}
 	h.auth.set("discover", true)
 	without, e := h.s.CreateRequest(h.ctx, reader, item.ID, "without", in)
 	must(t, e)

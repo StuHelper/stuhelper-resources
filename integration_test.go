@@ -172,9 +172,10 @@ func (f *files) Archive(_ context.Context, _ resources.Principal, items []resour
 }
 
 type moderation struct {
-	mu       sync.Mutex
-	items    map[string]resources.ReviewSubmission
-	requests int
+	mu          sync.Mutex
+	items       map[string]resources.ReviewSubmission
+	requests    int
+	lastRequest resources.Request
 }
 
 func (m *moderation) Submit(_ context.Context, key string, in resources.ReviewSubmission) (string, error) {
@@ -187,6 +188,7 @@ func (m *moderation) Request(_ context.Context, key, id string, _ resources.Prin
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.requests++
+	m.lastRequest = in
 	return "request-" + key[:12], nil
 }
 
@@ -801,7 +803,7 @@ func TestListReusesRequestAuthorizationButRechecksNextRequest(t *testing.T) {
 func TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting(t *testing.T) {
 	h := newFixture(t)
 	item := h.publish(t, h.draft(t, "quota", "public"))
-	in := resources.Request{Kind: "complaint", Reason: "Synthetic complaint", Contact: "contact@example.invalid", Evidence: []string{"Synthetic evidence"}}
+	in := resources.Request{Kind: "complaint", Category: "copyright", Reason: "Synthetic complaint", Contact: "contact@example.invalid", Evidence: []string{"Synthetic evidence"}}
 	for i := 0; i < 10; i++ {
 		_, e := h.s.CreateRequest(h.ctx, reader, item.ID, fmt.Sprintf("complaint-%d", i), in)
 		must(t, e)

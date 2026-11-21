@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/StuHelper/stuhelper-resources/sdk"
 )
 
 type AccessFactTarget struct {
@@ -995,6 +997,9 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 	if in.Kind != "withdrawal" && in.Kind != "appeal" && in.Kind != "complaint" {
 		return out, ErrInput
 	}
+	if in.Category != "" && (in.Kind != "complaint" || !sdk.ViolationCategory(in.Category).Valid() || strings.TrimSpace(in.Contact) == "") {
+		return out, ErrInput
+	}
 	if in.Kind == "complaint" && (in.Contact == "" || len(in.Evidence) == 0) {
 		return out, ErrInput
 	}
@@ -1004,6 +1009,16 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 	}
 	if (in.Kind == "withdrawal" || in.Kind == "appeal") && r.Owner != p {
 		return out, ErrDenied
+	}
+	if in.Kind == "complaint" && in.Category == "" {
+		// An unclassified request can only replay an already accepted receipt.
+		if e = s.auth(ctx, p, "request", r.SchoolID); e != nil {
+			return out, e
+		}
+		if replayed, e := s.precheckReplay(ctx, p, "request", id, key, in, &out); e != nil || replayed {
+			return out, e
+		}
+		return out, ErrInput
 	}
 	// Title disclosure is fixed at submission. A later qualification change or
 	// idempotent retry cannot add a title to a receipt created without admission.
@@ -1045,7 +1060,7 @@ func (s *Service) CreateRequest(ctx context.Context, p Principal, id, key string
 		if !includeTitle && latest.State == "published" && latest.ActiveID != "" {
 			includeTitle = discoverOK
 		}
-		out = RequestReceipt{ID: newID(), State: "pending", ResourceID: id, Kind: in.Kind, CreatedAt: s.now()}
+		out = RequestReceipt{ID: newID(), State: "pending", ResourceID: id, Kind: in.Kind, Category: in.Category, CreatedAt: s.now()}
 		if includeTitle {
 			version, e := tx.Version(versionID)
 			if e != nil {

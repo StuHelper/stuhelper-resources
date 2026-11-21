@@ -253,6 +253,7 @@ type StateChange struct {
 type Request struct {
 	PreviousTaskID string   `json:"previous_task_id,omitempty"`
 	Kind           string   `json:"kind"`
+	Category       string   `json:"category,omitempty"`
 	Reason         string   `json:"reason"`
 	Contact        string   `json:"contact,omitempty"`
 	Evidence       []string `json:"evidence,omitempty"`
@@ -262,6 +263,7 @@ type RequestReceipt struct {
 	TaskID         string    `json:"task_id,omitempty"`
 	ResourceID     string    `json:"resource_id,omitempty"`
 	Kind           string    `json:"kind,omitempty"`
+	Category       string    `json:"category,omitempty"`
 	DecisionReason string    `json:"decision_reason,omitempty"`
 	CanAppeal      bool      `json:"can_appeal"`
 	ID             string    `json:"id"`

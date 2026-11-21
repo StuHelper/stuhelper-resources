@@ -126,6 +126,10 @@ scenario_tests:
     - performance_test.go#TestBatchQueriesRequestAuthReuseAndVersionIndexes
   RES-17:
     - integration_test.go#TestComplaintQuotaPreservesIdempotencyAndRejectsBeforeWriting
+  RS-27:
+    - references_test.go#TestComplaintTitleSnapshotRequiresAdmissionAtSubmission
+    - complaint_category_test.go#TestResourceComplaintCategoryHTTPAndDelivery
+    - complaint_category_test.go#TestLegacyComplaintCategoryMigrationPreservesReplay
   RES-23:
     - observability_prune_test.go#TestPruningUsesCompletionTimeAndSkipsRenewingWindows
     - observability_prune_test.go#TestRequestIDCorrelationOperationalReadinessStatsAndBoundedPruning
