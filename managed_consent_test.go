@@ -62,9 +62,8 @@ func TestManagerMaintainsPublishedMetadataWithoutReplacingConsent(t *testing.T) 
 	h.drain(t)
 	revised, err := h.s.Get(h.ctx, uploader, published.ID)
 	must(t, err)
-	// Publishing may assign a new media version while preserving the original file bytes.
 	if revised.Proposal != nil || revised.Current == nil || revised.Current.Metadata.Title != edited.Title ||
-		*revised.Current.Metadata.Origin.Consent != old || revised.Current.File.SHA256 != published.Current.File.SHA256 {
+		*revised.Current.Metadata.Origin.Consent != old || *revised.Current.File != *published.Current.File {
 		t.Fatal("approved metadata correction lost the original work or consent")
 	}
 	edited.Title = "再次更正标题"
@@ -83,6 +82,14 @@ func TestManagerCannotGrantConsentOrSubmitUnpublishedStaleDraft(t *testing.T) {
 	published := h.publish(t, createAttachedDraft(t, h, "another-published-original", original))
 	replacement, err := h.s.UpdateDraft(h.ctx, uploader, published.ID, "replace-before-rotation", r.DraftWrite{
 		Revision: published.Revision, Metadata: original, MediaVersionID: draft.Proposal.File.VersionID,
+	})
+	must(t, err)
+	toReject := createAttachedDraft(t, h, "another-unpublished-original", original)
+	pending, err := h.s.Submit(h.ctx, uploader, toReject.ID, "submit-before-rotation", r.Command{Revision: toReject.Revision})
+	must(t, err)
+	h.drain(t)
+	rejected, err := h.s.ApplyDecision(h.ctx, manager, pending.ID, "reject-before-rotation", r.Decision{
+		ID: "reject-old-proposal", Revision: pending.Revision, VersionID: pending.Proposal.ID, Action: "reject", Reason: "请更正标题",
 	})
 	must(t, err)
 	rotateTerms(t, h)
@@ -115,6 +122,12 @@ func TestManagerCannotGrantConsentOrSubmitUnpublishedStaleDraft(t *testing.T) {
 	assertManagedConsent(t, unchanged.Proposal, draft.Proposal.File, old, "draft")
 	if unchanged.Revision != corrected.Revision {
 		t.Fatal("denied submission updated the revision")
+	}
+	fixedTitle, err := h.s.UpdateDraft(h.ctx, manager, rejected.ID, "correct-rejected-title", r.DraftWrite{Revision: rejected.Revision, Metadata: original})
+	must(t, err)
+	assertManagedConsent(t, fixedTitle.Proposal, rejected.Proposal.File, old, "draft")
+	if _, err = h.s.Submit(h.ctx, manager, fixedTitle.ID, "manager-submit-rejected-correction", r.Command{Revision: fixedTitle.Revision}); !errors.Is(err, r.ErrDenied) {
+		t.Fatalf("expected stale rejected draft correction to require the owner's current consent before submission, got %v", err)
 	}
 
 	if _, err = h.s.UpdateDraft(h.ctx, uploader, repost.ID, "owner-stale", r.DraftWrite{Revision: repost.Revision, Metadata: original, Submit: true}); !errors.Is(err, r.ErrInput) {

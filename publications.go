@@ -290,8 +290,8 @@ func (s *Service) managedDraftMetadata(tx Transaction, r Record, source VersionR
 		return Metadata{}, ErrDenied
 	}
 	metadata.Origin = stored.Origin
-	changingLegacyProposal := source.Version.ID != r.ActiveID && source.Version.State != "draft" && requiresCurrentConsent(stored.Origin, s.cfg.Terms)
-	if in.Submit || changingLegacyProposal {
+	inReview := source.Version.State == "pending" || source.Version.State == "preparing"
+	if in.Submit || inReview && requiresCurrentConsent(stored.Origin, s.cfg.Terms) {
 		if err := s.validateManagedSubmission(tx, r, source); err != nil {
 			return Metadata{}, err
 		}
