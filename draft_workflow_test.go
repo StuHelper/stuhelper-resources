@@ -13,6 +13,106 @@ import (
 	"github.com/StuHelper/stuhelper-resources/sdk"
 )
 
+func TestTermsRotationRequiresCurrentOriginalConsentForDraftSubmission(t *testing.T) {
+	h := newFixture(t)
+	metadata := metadata("public")
+	oldConsent := r.Consent{Accepted: true, Version: h.cfg.Terms.Version, Digest: h.cfg.Terms.Digest}
+	metadata.Origin = r.Origin{Kind: "original", Consent: &oldConsent}
+	original := r.DraftWrite{Metadata: metadata}
+	fileless, err := h.s.CreateDraft(h.ctx, uploader, "old-fileless", original)
+	must(t, err)
+	file := r.File{VersionID: "file-original", Filename: "笔记.pdf", ContentType: "application/pdf", Size: 60, SHA256: strings.Repeat("c", 64)}
+	h.files.items[file.VersionID] = r.FileEvidence{File: file, Owner: uploader, Module: "resources", SchoolID: "school", State: "awaiting_approval", Access: "public"}
+	newOldDraftWithFile := func(key string) (r.Resource, r.FileLink) {
+		t.Helper()
+		draft, err := h.s.CreateDraft(h.ctx, uploader, key, original)
+		must(t, err)
+		link := r.FileLink{Revision: draft.Revision, MediaVersionID: file.VersionID}
+		attached, err := h.s.AttachFile(h.ctx, uploader, draft.ID, "attach", link)
+		must(t, err)
+		return attached, link
+	}
+	staleAttached, priorLink := newOldDraftWithFile("old-attached")
+	toSubmit, _ := newOldDraftWithFile("old-submitted")
+	priorSubmit := r.Command{Revision: toSubmit.Revision}
+	submitted, err := h.s.Submit(h.ctx, uploader, toSubmit.ID, "submit", priorSubmit)
+	must(t, err)
+	oldCounts, err := h.s.OperationalStats(h.ctx)
+	must(t, err)
+
+	h.cfg.Terms.Version = "fixture-v2"
+	h.cfg.Terms.Digest = strings.Repeat("d", 64)
+	h.s, err = r.New(h.repo, r.Dependencies{Authority: h.auth, Catalog: h.catalog, Files: h.files, Moderation: h.moderation}, h.cfg)
+	must(t, err)
+	link := r.FileLink{Revision: fileless.Revision, MediaVersionID: file.VersionID}
+	if _, err = h.s.AttachFile(h.ctx, uploader, fileless.ID, "attach-current", link); !errors.Is(err, r.ErrInput) {
+		t.Fatalf("expected to refuse a new file under stale terms, got %v", err)
+	}
+	command := r.Command{Revision: staleAttached.Revision}
+	if _, err = h.s.Submit(h.ctx, uploader, staleAttached.ID, "submit-current", command); !errors.Is(err, r.ErrInput) {
+		t.Fatalf("expected to refuse first submission under stale terms, got %v", err)
+	}
+	if _, err = h.s.CreateDraft(h.ctx, uploader, "fresh-with-stale-terms", original); !errors.Is(err, r.ErrInput) {
+		t.Fatalf("expected to refuse a new draft under stale terms, got %v", err)
+	}
+
+	// An unknown outcome can be recovered without submitting a new operation.
+	replay, err := h.s.CreateDraft(h.ctx, uploader, "old-fileless", original)
+	must(t, err)
+	if replay.ID != fileless.ID || replay.Revision != fileless.Revision || replay.Proposal.File != nil || *replay.Proposal.Metadata.Origin.Consent != oldConsent {
+		t.Fatal("old create result changed")
+	}
+	replay, err = h.s.AttachFile(h.ctx, uploader, staleAttached.ID, "attach", priorLink)
+	must(t, err)
+	if replay.Revision != staleAttached.Revision || replay.Proposal.File.VersionID != file.VersionID || *replay.Proposal.Metadata.Origin.Consent != oldConsent {
+		t.Fatal("old attachment result changed")
+	}
+	replay, err = h.s.Submit(h.ctx, uploader, submitted.ID, "submit", priorSubmit)
+	must(t, err)
+	if replay.Revision != submitted.Revision || replay.Proposal.State != "pending" || *replay.Proposal.Metadata.Origin.Consent != oldConsent {
+		t.Fatal("old submission result changed")
+	}
+	currentFileless, err := h.s.Get(h.ctx, uploader, fileless.ID)
+	must(t, err)
+	if currentFileless.Revision != fileless.Revision || currentFileless.Proposal.File != nil || *currentFileless.Proposal.Metadata.Origin.Consent != oldConsent {
+		t.Fatal("refused attachment changed the stored draft")
+	}
+	currentAttached, err := h.s.Get(h.ctx, uploader, staleAttached.ID)
+	must(t, err)
+	if currentAttached.Revision != staleAttached.Revision || currentAttached.Proposal.State != "draft" || *currentAttached.Proposal.Metadata.Origin.Consent != oldConsent {
+		t.Fatal("refused submission changed the stored draft")
+	}
+	counts, err := h.s.OperationalStats(h.ctx)
+	must(t, err)
+	if counts.Records != oldCounts.Records || counts.Operations != oldCounts.Operations || counts.ActiveJobs != oldCounts.ActiveJobs {
+		t.Fatal("refused and replayed writes changed resource, replay or job counts")
+	}
+
+	// A review started before the change still uses the original consent.
+	h.drain(t)
+	_, err = h.s.ApplyDecision(h.ctx, manager, submitted.ID, "approve", r.Decision{ID: "approve-old", Revision: submitted.Revision, VersionID: submitted.Proposal.ID, Action: "approve"})
+	must(t, err)
+	h.drain(t)
+	published, err := h.s.Get(h.ctx, uploader, submitted.ID)
+	must(t, err)
+	if published.Current == nil || *published.Current.Metadata.Origin.Consent != oldConsent {
+		t.Fatal("publication replaced historical consent")
+	}
+
+	currentConsent := r.Consent{Accepted: true, Version: h.cfg.Terms.Version, Digest: h.cfg.Terms.Digest}
+	metadata.Origin.Consent = &currentConsent
+	updated, err := h.s.UpdateDraft(h.ctx, uploader, fileless.ID, "accept-current", r.DraftWrite{Revision: fileless.Revision, Metadata: metadata})
+	must(t, err)
+	link.Revision = updated.Revision
+	attached, err := h.s.AttachFile(h.ctx, uploader, updated.ID, "attach-current", link)
+	must(t, err)
+	pending, err := h.s.Submit(h.ctx, uploader, attached.ID, "submit-current", r.Command{Revision: attached.Revision})
+	must(t, err)
+	if pending.Proposal.State != "pending" || *pending.Proposal.Metadata.Origin.Consent != currentConsent {
+		t.Fatal("new submission did not preserve current consent")
+	}
+}
+
 func TestDraftOneStepSubmitRejectionReasonWithdrawAndDelete(t *testing.T) {
 	h := newFixture(t)
 	handler, err := httpapi.New(h.s, authenticator{})
