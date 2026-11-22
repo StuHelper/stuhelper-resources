@@ -121,7 +121,7 @@ func (s *Service) inspectDraftFile(ctx context.Context, p Principal, schoolID, m
 }
 
 func (s *Service) validateDraft(ctx context.Context, m Metadata) error {
-	if e := validateMetadata(m, s.cfg.Terms); e != nil {
+	if e := validateMetadata(m); e != nil {
 		return e
 	}
 	work, cancel := context.WithTimeout(ctx, s.cfg.OperationTimeout)
@@ -197,9 +197,14 @@ func (s *Service) CreateDraft(ctx context.Context, p Principal, key string, in D
 		if e = validateDirectory(tx, in.Metadata); e != nil {
 			return nil, e
 		}
+		metadata := in.Metadata
+		metadata.Origin, e = s.bindCurrentConsent(ctx, metadata.Origin)
+		if e != nil {
+			return nil, e
+		}
 		now := s.now()
 		r := Record{ID: newID(), Owner: p, SchoolID: in.Metadata.Associations.SchoolID, Revision: 1, State: "draft", ProposalID: newID(), NextVersion: 2, CreatedAt: now}
-		v := VersionRecord{ResourceID: r.ID, Version: Version{ID: r.ProposalID, Number: 1, Metadata: in.Metadata, Category: category, State: "draft", CreatedAt: now}}
+		v := VersionRecord{ResourceID: r.ID, Version: Version{ID: r.ProposalID, Number: 1, Metadata: metadata, Category: category, State: "draft", CreatedAt: now}}
 		if attached != nil {
 			v.Version.File = &attached.File
 			v.FileOwner = attached.Owner
@@ -241,6 +246,78 @@ func (s *Service) authorizeDraftEdit(ctx context.Context, p Principal, r Record,
 		return "", e
 	}
 	return "upload", nil
+}
+
+// A manager can resubmit the same published work with its recorded license.
+// An instructor claim still needs the owner's current qualification.
+func (s *Service) validateManagedReview(ctx context.Context, tx Transaction, r Record, draft VersionRecord, submit bool) error {
+	origin := draft.Version.Metadata.Origin
+	if submit && origin.VerifiedInstructor {
+		return ErrDenied
+	}
+	if origin.Kind != "original" {
+		return nil
+	}
+	if !validConsent(origin.Consent) {
+		return ErrDenied
+	}
+	failure := ErrDenied
+	if !submit || draft.FileOwner == r.Owner {
+		switch _, err := s.bindCurrentConsent(ctx, origin); err {
+		case nil:
+			return nil
+		case ErrUnavailable:
+			failure = err
+		}
+	}
+	if origin.VerifiedInstructor || r.ActiveID == "" || draft.Version.File == nil {
+		return failure
+	}
+	active, err := tx.Version(r.ActiveID)
+	if err != nil {
+		return err
+	}
+	published := active.Version
+	if published.State != "published" || published.File == nil || *published.File != *draft.Version.File ||
+		published.Metadata.Access != draft.Version.Metadata.Access || !sameOriginLicense(origin, published.Metadata.Origin) {
+		return failure
+	}
+	return nil
+}
+
+func (s *Service) managedDraftMetadata(ctx context.Context, tx Transaction, r Record, source VersionRecord, in DraftWrite) (Metadata, error) {
+	if source.Version.ID == "" {
+		if r.ActiveID == "" {
+			return Metadata{}, ErrConflict
+		}
+		var err error
+		source, err = tx.Version(r.ActiveID)
+		if err != nil {
+			return Metadata{}, err
+		}
+	}
+	stored := source.Version.Metadata
+	metadata := in.Metadata
+	if given := metadata.Origin.Consent; given != nil && given.DocumentID == "" && stored.Origin.Consent != nil {
+		// Older clients send only version and digest. The stored identifier
+		// remains authoritative for a manager editing the same license.
+		consent := *given
+		consent.DocumentID = stored.Origin.Consent.DocumentID
+		metadata.Origin.Consent = &consent
+	}
+	if !sameOriginLicense(metadata.Origin, stored.Origin) || metadata.Access != stored.Access ||
+		metadata.Origin.VerifiedInstructor && !stored.Origin.VerifiedInstructor ||
+		stored.Origin.VerifiedInstructor && metadata.Associations != stored.Associations {
+		return Metadata{}, ErrDenied
+	}
+	metadata.Origin = stored.Origin
+	inReview := source.Version.State == "pending" || source.Version.State == "preparing"
+	if in.Submit || inReview && stored.Origin.Kind == "original" {
+		if err := s.validateManagedReview(ctx, tx, r, source, in.Submit); err != nil {
+			return Metadata{}, err
+		}
+	}
+	return metadata, nil
 }
 
 func (s *Service) applyProposalDecision(tx Transaction, r Record, v *VersionRecord, in Decision, approve bool) error {
@@ -285,13 +362,14 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 	if hit, e := s.precheckReplay(ctx, p, action, id, key, in, &out); e != nil || hit {
 		return out, e
 	}
+	ownerWrite := p == r.Owner
+	if !ownerWrite && in.MediaVersionID != "" {
+		return out, ErrDenied
+	}
 	if e = s.validateDraft(ctx, in.Metadata); e != nil {
 		return out, e
 	}
-	if in.Metadata.Origin.VerifiedInstructor {
-		if r.Owner != p {
-			return out, ErrDenied
-		}
+	if ownerWrite && in.Metadata.Origin.VerifiedInstructor {
 		if e = s.verifyInstructor(ctx, p, in.Metadata.Associations); e != nil {
 			return out, e
 		}
@@ -338,6 +416,15 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 				return nil, ErrConflict
 			}
 		}
+		metadata := in.Metadata
+		if ownerWrite {
+			metadata.Origin, e = s.bindCurrentConsent(ctx, metadata.Origin)
+		} else {
+			metadata, e = s.managedDraftMetadata(ctx, tx, latest, proposal, in)
+		}
+		if e != nil {
+			return nil, e
+		}
 		if proposal.Version.ID == "" || proposal.Version.State == "rejected" || proposal.Version.State == "pending" || proposal.Version.State == "preparing" {
 			previous := proposal
 			if previous.Version.ID != "" {
@@ -358,7 +445,7 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 				proposal.FileOwner = previous.FileOwner
 				proposal.Version.Metadata.Access = previous.Version.Metadata.Access
 			}
-			if proposal.Version.File == nil && latest.ActiveID != "" {
+			if proposal.Version.File == nil && latest.ActiveID != "" && (ownerWrite || previous.Version.ID == "") {
 				old, e := tx.Version(latest.ActiveID)
 				if e != nil {
 					return nil, e
@@ -377,14 +464,14 @@ func (s *Service) UpdateDraft(ctx context.Context, p Principal, id, key string, 
 			proposal.Version.File = &attached.File
 			proposal.FileOwner = attached.Owner
 		}
-		proposal.Version.Metadata = in.Metadata
+		proposal.Version.Metadata = metadata
 		proposal.Version.Category = category
 		if in.Submit {
 			if proposal.Version.File == nil {
 				return nil, ErrConflict
 			}
 			now := s.now()
-			proposal.Version.VerifiedInstructor = in.Metadata.Origin.VerifiedInstructor
+			proposal.Version.VerifiedInstructor = metadata.Origin.VerifiedInstructor
 			proposal.Version.State = "pending"
 			proposal.Version.SubmittedAt = &now
 			proposal.Version.DecisionReason = ""
@@ -428,6 +515,9 @@ func (s *Service) AttachFile(ctx context.Context, p Principal, id, key string, i
 	if hit, e := s.precheckReplay(ctx, p, action, id, key, in, &out); e != nil || hit {
 		return out, e
 	}
+	if p != r.Owner {
+		return out, ErrDenied
+	}
 	file, e := s.inspectDraftFile(ctx, p, r.SchoolID, in.MediaVersionID)
 	if e != nil {
 		return out, normalizeDepError(ctx, e)
@@ -452,6 +542,10 @@ func (s *Service) AttachFile(ctx context.Context, p Principal, id, key string, i
 		}
 		if v.Version.State != "draft" || file.Access != v.Version.Metadata.Access {
 			return nil, ErrConflict
+		}
+		v.Version.Metadata.Origin, e = s.bindCurrentConsent(ctx, v.Version.Metadata.Origin)
+		if e != nil {
+			return nil, e
 		}
 		v.Version.File = &file.File
 		v.FileOwner = file.Owner
@@ -541,15 +635,12 @@ func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Co
 	if e != nil {
 		return out, e
 	}
-	if r.ProposalID != "" {
+	if r.ProposalID != "" && r.Owner == p {
 		pv, e := s.version(ctx, r.ProposalID)
 		if e != nil {
 			return out, e
 		}
 		if pv.Version.Metadata.Origin.VerifiedInstructor {
-			if r.Owner != p {
-				return out, ErrDenied
-			}
 			if e = s.verifyInstructor(ctx, p, pv.Version.Metadata.Associations); e != nil {
 				return out, e
 			}
@@ -580,14 +671,19 @@ func (s *Service) Submit(ctx context.Context, p Principal, id, key string, in Co
 		if v.Version.State != "draft" || v.Version.File == nil {
 			return nil, ErrConflict
 		}
+		if p != r.Owner {
+			e = s.validateManagedReview(ctx, tx, r, v, true)
+		} else {
+			v.Version.Metadata.Origin, e = s.bindCurrentConsent(ctx, v.Version.Metadata.Origin)
+		}
+		if e != nil {
+			return nil, e
+		}
 		if _, e = currentCategory(tx, v.Version.Metadata); e != nil {
 			return nil, e
 		}
 		if e = validateDirectory(tx, v.Version.Metadata); e != nil {
 			return nil, e
-		}
-		if v.Version.Metadata.Origin.VerifiedInstructor && r.Owner != p {
-			return nil, ErrDenied
 		}
 		v.Version.VerifiedInstructor = v.Version.Metadata.Origin.VerifiedInstructor
 		now := s.now()

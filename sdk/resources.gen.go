@@ -17,6 +17,21 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for ConsentDocumentId.
+const (
+	ConsentDocumentIdUploadLicense ConsentDocumentId = "upload-license"
+)
+
+// Valid indicates whether the value is a known member of the ConsentDocumentId enum.
+func (e ConsentDocumentId) Valid() bool {
+	switch e {
+	case ConsentDocumentIdUploadLicense:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DecisionAction.
 const (
 	Approve DecisionAction = "approve"
@@ -413,6 +428,21 @@ func (e StateChangeState) Valid() bool {
 	}
 }
 
+// Defines values for TermsDocumentId.
+const (
+	TermsDocumentIdUploadLicense TermsDocumentId = "upload-license"
+)
+
+// Valid indicates whether the value is a known member of the TermsDocumentId enum.
+func (e TermsDocumentId) Valid() bool {
+	switch e {
+	case TermsDocumentIdUploadLicense:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UploadProfileAccess.
 const (
 	UploadProfileAccessPublic     UploadProfileAccess = "public"
@@ -461,6 +491,90 @@ func (e VersionState) Valid() bool {
 	case VersionStateRejected:
 		return true
 	case VersionStateSuperseded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ViolationCategory.
+const (
+	AcademicIntegrity        ViolationCategory = "academic_integrity"
+	AuthorUpdate             ViolationCategory = "author_update"
+	Copyright                ViolationCategory = "copyright"
+	DefamationRumor          ViolationCategory = "defamation_rumor"
+	Duplicate                ViolationCategory = "duplicate"
+	FakeReview               ViolationCategory = "fake_review"
+	Fraud                    ViolationCategory = "fraud"
+	GamblingDrugs            ViolationCategory = "gambling_drugs"
+	HarassmentDiscrimination ViolationCategory = "harassment_discrimination"
+	IllegalContent           ViolationCategory = "illegal_content"
+	Impersonation            ViolationCategory = "impersonation"
+	LeakedExam               ViolationCategory = "leaked_exam"
+	LowQuality               ViolationCategory = "low_quality"
+	Malware                  ViolationCategory = "malware"
+	MinorsHarm               ViolationCategory = "minors_harm"
+	Other                    ViolationCategory = "other"
+	OtherIp                  ViolationCategory = "other_ip"
+	PersonalAttack           ViolationCategory = "personal_attack"
+	Pornography              ViolationCategory = "pornography"
+	PrivacyLeak              ViolationCategory = "privacy_leak"
+	Spam                     ViolationCategory = "spam"
+	ViolenceThreat           ViolationCategory = "violence_threat"
+	WrongInfo                ViolationCategory = "wrong_info"
+	WrongTeacher             ViolationCategory = "wrong_teacher"
+)
+
+// Valid indicates whether the value is a known member of the ViolationCategory enum.
+func (e ViolationCategory) Valid() bool {
+	switch e {
+	case AcademicIntegrity:
+		return true
+	case AuthorUpdate:
+		return true
+	case Copyright:
+		return true
+	case DefamationRumor:
+		return true
+	case Duplicate:
+		return true
+	case FakeReview:
+		return true
+	case Fraud:
+		return true
+	case GamblingDrugs:
+		return true
+	case HarassmentDiscrimination:
+		return true
+	case IllegalContent:
+		return true
+	case Impersonation:
+		return true
+	case LeakedExam:
+		return true
+	case LowQuality:
+		return true
+	case Malware:
+		return true
+	case MinorsHarm:
+		return true
+	case Other:
+		return true
+	case OtherIp:
+		return true
+	case PersonalAttack:
+		return true
+	case Pornography:
+		return true
+	case PrivacyLeak:
+		return true
+	case Spam:
+		return true
+	case ViolenceThreat:
+		return true
+	case WrongInfo:
+		return true
+	case WrongTeacher:
 		return true
 	default:
 		return false
@@ -717,8 +831,14 @@ type Command struct {
 type Consent struct {
 	Accepted bool   `json:"accepted"`
 	Digest   string `json:"digest"`
-	Version  string `json:"version"`
+
+	// DocumentId The server records this identifier when validating original-upload consent against managed legal documents. Clients may omit it on writes. Older records may omit it.
+	DocumentId *ConsentDocumentId `json:"document_id,omitempty"`
+	Version    string             `json:"version"`
 }
+
+// ConsentDocumentId The server records this identifier when validating original-upload consent against managed legal documents. Clients may omit it on writes. Older records may omit it.
+type ConsentDocumentId string
 
 // CourseResourceCount defines model for CourseResourceCount.
 type CourseResourceCount struct {
@@ -974,13 +1094,15 @@ type References struct {
 	MissingIds []string    `json:"missing_ids"`
 }
 
-// Request defines model for Request.
+// Request New complaints require a category, nonblank contact details and one to four evidence entries. Withdrawals and appeals omit category. All requests require a nonblank reason of at most 2000 Unicode characters. For other, explain the violation in reason. A legacy complaint can replay its already accepted request using its original body and idempotency key.
 type Request struct {
-	Contact        *string     `json:"contact,omitempty"`
-	Evidence       *[]string   `json:"evidence,omitempty"`
-	Kind           RequestKind `json:"kind"`
-	PreviousTaskId *string     `json:"previous_task_id,omitempty"`
-	Reason         string      `json:"reason"`
+	// Category Fixed Moderation violation category used for resource complaints. illegal_content (违法违规), pornography (色情低俗), gambling_drugs (赌博毒品违禁品), fraud (诈骗钓鱼), violence_threat (暴力威胁), minors_harm (危害未成年人), personal_attack (辱骂攻击), harassment_discrimination (骚扰歧视), defamation_rumor (诽谤谣言), privacy_leak (泄露隐私), impersonation (冒充他人), copyright (侵犯著作权), other_ip (侵犯其他权益), academic_integrity (学术不端), leaked_exam (泄露试题), fake_review (不实评价), wrong_teacher (教师或课程对应错误), wrong_info (信息错误), spam (广告垃圾), malware (恶意文件或链接), duplicate (重复内容), low_quality (内容质量低), author_update (作者要求更新), other (其他).
+	Category       *ViolationCategory `json:"category,omitempty"`
+	Contact        *string            `json:"contact,omitempty"`
+	Evidence       *[]string          `json:"evidence,omitempty"`
+	Kind           RequestKind        `json:"kind"`
+	PreviousTaskId *string            `json:"previous_task_id,omitempty"`
+	Reason         string             `json:"reason"`
 }
 
 // RequestKind defines model for Request.Kind.
@@ -994,12 +1116,15 @@ type RequestPage struct {
 
 // RequestReceipt defines model for RequestReceipt.
 type RequestReceipt struct {
-	CanAppeal      bool      `json:"can_appeal"`
-	CreatedAt      time.Time `json:"created_at"`
-	DecisionReason *string   `json:"decision_reason,omitempty"`
-	Id             string    `json:"id"`
-	Kind           *string   `json:"kind,omitempty"`
-	ResourceId     *string   `json:"resource_id,omitempty"`
+	CanAppeal bool `json:"can_appeal"`
+
+	// Category Fixed Moderation violation category used for resource complaints. illegal_content (违法违规), pornography (色情低俗), gambling_drugs (赌博毒品违禁品), fraud (诈骗钓鱼), violence_threat (暴力威胁), minors_harm (危害未成年人), personal_attack (辱骂攻击), harassment_discrimination (骚扰歧视), defamation_rumor (诽谤谣言), privacy_leak (泄露隐私), impersonation (冒充他人), copyright (侵犯著作权), other_ip (侵犯其他权益), academic_integrity (学术不端), leaked_exam (泄露试题), fake_review (不实评价), wrong_teacher (教师或课程对应错误), wrong_info (信息错误), spam (广告垃圾), malware (恶意文件或链接), duplicate (重复内容), low_quality (内容质量低), author_update (作者要求更新), other (其他).
+	Category       *ViolationCategory `json:"category,omitempty"`
+	CreatedAt      time.Time          `json:"created_at"`
+	DecisionReason *string            `json:"decision_reason,omitempty"`
+	Id             string             `json:"id"`
+	Kind           *string            `json:"kind,omitempty"`
+	ResourceId     *string            `json:"resource_id,omitempty"`
 
 	// ResourceTitle Title snapshot at request submission. Present for an owner request, or when a complaint passed current content admission at submission. Omitted for other complaints and historical requests without an admission snapshot.
 	ResourceTitle *string             `json:"resource_title,omitempty"`
@@ -1089,10 +1214,16 @@ type StateChangeState string
 
 // Terms defines model for Terms.
 type Terms struct {
-	Digest  string `json:"digest"`
-	Url     string `json:"url"`
-	Version string `json:"version"`
+	Digest string `json:"digest"`
+
+	// DocumentId Document identifier for a managed original-upload license.
+	DocumentId *TermsDocumentId `json:"document_id,omitempty"`
+	Url        string           `json:"url"`
+	Version    string           `json:"version"`
 }
+
+// TermsDocumentId Document identifier for a managed original-upload license.
+type TermsDocumentId string
 
 // UploadProfile defines model for UploadProfile.
 type UploadProfile struct {
@@ -1129,6 +1260,9 @@ type Version struct {
 
 // VersionState defines model for Version.State.
 type VersionState string
+
+// ViolationCategory Fixed Moderation violation category used for resource complaints. illegal_content (违法违规), pornography (色情低俗), gambling_drugs (赌博毒品违禁品), fraud (诈骗钓鱼), violence_threat (暴力威胁), minors_harm (危害未成年人), personal_attack (辱骂攻击), harassment_discrimination (骚扰歧视), defamation_rumor (诽谤谣言), privacy_leak (泄露隐私), impersonation (冒充他人), copyright (侵犯著作权), other_ip (侵犯其他权益), academic_integrity (学术不端), leaked_exam (泄露试题), fake_review (不实评价), wrong_teacher (教师或课程对应错误), wrong_info (信息错误), spam (广告垃圾), malware (恶意文件或链接), duplicate (重复内容), low_quality (内容质量低), author_update (作者要求更新), other (其他).
+type ViolationCategory string
 
 // ListResourcesParams defines parameters for ListResources.
 type ListResourcesParams struct {
@@ -1537,6 +1671,8 @@ type ClientInterface interface {
 
 	// GetCapabilities GetCapabilities
 	//
+	// Returns the current original-upload license reference. With a managed legal source, the URL is pinned to the same version as the digest. An unavailable current license returns 503.
+	//
 	// Corresponds with GET /api/v1/resources/capabilities (the `GetCapabilities` operationId).
 	GetCapabilities(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1921,6 +2057,8 @@ func (c *Client) CreateDraft(ctx context.Context, params *CreateDraftParams, bod
 }
 
 // GetCapabilities GetCapabilities
+//
+// Returns the current original-upload license reference. With a managed legal source, the URL is pinned to the same version as the digest. An unavailable current license returns 503.
 //
 // Corresponds with GET /api/v1/resources/capabilities (the `GetCapabilities` operationId).
 func (c *Client) GetCapabilities(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -5762,6 +5900,8 @@ type ClientWithResponsesInterface interface {
 	CreateDraftWithResponse(ctx context.Context, params *CreateDraftParams, body CreateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateDraftResponse, error)
 
 	// GetCapabilitiesWithResponse GetCapabilities
+	//
+	// Returns the current original-upload license reference. With a managed legal source, the URL is pinned to the same version as the digest. An unavailable current license returns 503.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -9759,6 +9899,8 @@ func (c *ClientWithResponses) CreateDraftWithResponse(ctx context.Context, param
 }
 
 // GetCapabilitiesWithResponse GetCapabilities
+//
+// Returns the current original-upload license reference. With a managed legal source, the URL is pinned to the same version as the digest. An unavailable current license returns 503.
 //
 // Returns a wrapper object for the known response body format(s).
 //

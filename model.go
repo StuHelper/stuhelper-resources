@@ -107,9 +107,10 @@ type Associations struct {
 	TeacherID  string `json:"teacher_id,omitempty"`
 }
 type Consent struct {
-	Accepted bool   `json:"accepted"`
-	Version  string `json:"version"`
-	Digest   string `json:"digest"`
+	Accepted   bool   `json:"accepted"`
+	Version    string `json:"version"`
+	Digest     string `json:"digest"`
+	DocumentID string `json:"document_id,omitempty"`
 }
 type Origin struct {
 	Kind               string   `json:"kind"`
@@ -253,6 +254,7 @@ type StateChange struct {
 type Request struct {
 	PreviousTaskID string   `json:"previous_task_id,omitempty"`
 	Kind           string   `json:"kind"`
+	Category       string   `json:"category,omitempty"`
 	Reason         string   `json:"reason"`
 	Contact        string   `json:"contact,omitempty"`
 	Evidence       []string `json:"evidence,omitempty"`
@@ -262,6 +264,7 @@ type RequestReceipt struct {
 	TaskID         string    `json:"task_id,omitempty"`
 	ResourceID     string    `json:"resource_id,omitempty"`
 	Kind           string    `json:"kind,omitempty"`
+	Category       string    `json:"category,omitempty"`
 	DecisionReason string    `json:"decision_reason,omitempty"`
 	CanAppeal      bool      `json:"can_appeal"`
 	ID             string    `json:"id"`
@@ -346,9 +349,10 @@ type PackageRecord struct {
 	Selections [][]Selection
 }
 type Terms struct {
-	Version string `json:"version"`
-	Digest  string `json:"digest"`
-	URL     string `json:"url"`
+	Version    string `json:"version"`
+	Digest     string `json:"digest"`
+	URL        string `json:"url"`
+	DocumentID string `json:"document_id,omitempty"`
 }
 type Capabilities struct {
 	UploadProfiles    []UploadProfile `json:"upload_profiles"`
@@ -430,10 +434,11 @@ type Entitlement struct {
 	Member    bool
 }
 type Dependencies struct {
-	Authority  Authority
-	Catalog    Catalog
-	Files      Files
-	Moderation Moderation
+	Authority   Authority
+	Catalog     Catalog
+	Files       Files
+	Moderation  Moderation
+	TermsSource TermsSource
 }
 type Config struct {
 	UploadProfiles                                                                          []UploadProfile

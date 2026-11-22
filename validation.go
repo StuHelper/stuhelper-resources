@@ -61,7 +61,24 @@ func hash(value any) string {
 }
 func validTerms(t Terms) bool {
 	u, e := url.Parse(t.URL)
-	return validID(t.Version) && digestPattern.MatchString(t.Digest) && e == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && len(t.URL) <= 2000
+	return validID(t.Version) && digestPattern.MatchString(t.Digest) && validConsentDocument(t.DocumentID) && e == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && len(t.URL) <= 2000
+}
+
+func validConsent(c *Consent) bool {
+	return c != nil && c.Accepted && validID(c.Version) && digestPattern.MatchString(c.Digest) && validConsentDocument(c.DocumentID)
+}
+
+func validConsentDocument(id string) bool {
+	return id == "" || id == UploadLicenseDocumentID
+}
+
+func sameOriginLicense(a, b Origin) bool {
+	if (a.Consent == nil) != (b.Consent == nil) || a.Consent != nil && *a.Consent != *b.Consent {
+		return false
+	}
+	a.Consent = b.Consent
+	a.VerifiedInstructor = b.VerifiedInstructor
+	return a == b
 }
 
 // ValidateCategory checks the configurable schema, never a category name or ID.
@@ -172,7 +189,7 @@ func ValidateAttributes(c Category, values map[string]Value, filter bool) error 
 	}
 	return nil
 }
-func validateMetadata(m Metadata, terms Terms) error {
+func validateMetadata(m Metadata) error {
 	if strings.TrimSpace(m.Title) == "" || !text(m.Title, 200) || !text(m.Description, 8000) || len(m.Tags) > 20 || !validID(m.CategoryID) || m.CategoryRevision < 1 || !optionalID(m.DirectoryID) || !slices.Contains([]string{"public", "restricted"}, m.Access) {
 		return ErrInput
 	}
@@ -204,7 +221,7 @@ func validateMetadata(m Metadata, terms Terms) error {
 	}
 	switch o.Kind {
 	case "original":
-		if o.Source != "" || o.License != "" || o.Consent == nil || !o.Consent.Accepted || o.Consent.Version != terms.Version || o.Consent.Digest != terms.Digest {
+		if o.Source != "" || o.License != "" || !validConsent(o.Consent) {
 			return ErrInput
 		}
 	case "known":

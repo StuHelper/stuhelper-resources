@@ -15,7 +15,7 @@ type Service struct {
 }
 
 func New(repo Repository, deps Dependencies, cfg Config) (*Service, error) {
-	if repo == nil || deps.Authority == nil || deps.Catalog == nil || deps.Files == nil || deps.Moderation == nil || !validTerms(cfg.Terms) || len(cfg.UploadProfiles) > 100 || len(cfg.AllowedTypes) == 0 || len(cfg.AllowedTypes) > 100 || cfg.MaxFileSize < 1 || cfg.MaxFileSize > 1<<30 || cfg.MaxPackageBytes < cfg.MaxFileSize || cfg.MaxPackageBytes > 4<<30 || cfg.MaxPackageFiles < 1 || cfg.MaxPackageFiles > 100 || cfg.MaxPackageParts < 1 || cfg.MaxPackageParts > 100 || cfg.MaxDirectoryDepth < 1 || cfg.MaxDirectoryDepth > 16 || cfg.MaxRecords < 1 || cfg.MaxRecords > 1000000 || cfg.MaxOperations < 1 || cfg.MaxOperations > 10000000 || cfg.MaxJobs < 1 || cfg.MaxJobs > 100000 || cfg.OperationTimeout < time.Second || cfg.OperationTimeout > time.Minute || cfg.PackageTTL < time.Minute || cfg.PackageTTL > time.Hour || cfg.Lease < 2*cfg.OperationTimeout || cfg.Lease > 10*time.Minute || cfg.MaxAttempts < 1 || cfg.MaxAttempts > 10 {
+	if repo == nil || deps.Authority == nil || deps.Catalog == nil || deps.Files == nil || deps.Moderation == nil || (deps.TermsSource == nil && !validTerms(cfg.Terms)) || len(cfg.UploadProfiles) > 100 || len(cfg.AllowedTypes) == 0 || len(cfg.AllowedTypes) > 100 || cfg.MaxFileSize < 1 || cfg.MaxFileSize > 1<<30 || cfg.MaxPackageBytes < cfg.MaxFileSize || cfg.MaxPackageBytes > 4<<30 || cfg.MaxPackageFiles < 1 || cfg.MaxPackageFiles > 100 || cfg.MaxPackageParts < 1 || cfg.MaxPackageParts > 100 || cfg.MaxDirectoryDepth < 1 || cfg.MaxDirectoryDepth > 16 || cfg.MaxRecords < 1 || cfg.MaxRecords > 1000000 || cfg.MaxOperations < 1 || cfg.MaxOperations > 10000000 || cfg.MaxJobs < 1 || cfg.MaxJobs > 100000 || cfg.OperationTimeout < time.Second || cfg.OperationTimeout > time.Minute || cfg.PackageTTL < time.Minute || cfg.PackageTTL > time.Hour || cfg.Lease < 2*cfg.OperationTimeout || cfg.Lease > 10*time.Minute || cfg.MaxAttempts < 1 || cfg.MaxAttempts > 10 {
 		return nil, ErrInput
 	}
 	seenPurpose := map[string]bool{}
@@ -37,14 +37,30 @@ func New(repo Repository, deps Dependencies, cfg Config) (*Service, error) {
 	if clock == nil {
 		clock = time.Now
 	}
+	if deps.TermsSource != nil {
+		cfg.Terms = Terms{}
+	}
 	return &Service{repo: repo, deps: deps, cfg: cfg, now: func() time.Time { return clock().UTC() }}, nil
 }
 
 // OperationTimeout bounds stream preflight and a single stalled transfer operation.
 func (s *Service) OperationTimeout() time.Duration { return s.cfg.OperationTimeout }
 
-func (s *Service) Capabilities() Capabilities {
-	return Capabilities{UploadProfiles: append([]UploadProfile{}, s.cfg.UploadProfiles...), Terms: s.cfg.Terms, AllowedTypes: append([]string{}, s.cfg.AllowedTypes...), MaxFileSize: s.cfg.MaxFileSize, MaxPackageBytes: s.cfg.MaxPackageBytes, MaxPackageFiles: s.cfg.MaxPackageFiles, PurchaseAvailable: true}
+// Capabilities returns static configuration. Use CurrentCapabilities when a
+// managed source provides the original-upload license.
+func (s *Service) Capabilities() Capabilities { return s.capabilities(s.cfg.Terms) }
+
+// CurrentCapabilities resolves the license that a new original upload must accept.
+func (s *Service) CurrentCapabilities(ctx context.Context) (Capabilities, error) {
+	terms, err := s.currentTerms(ctx)
+	if err != nil {
+		return Capabilities{}, err
+	}
+	return s.capabilities(terms), nil
+}
+
+func (s *Service) capabilities(terms Terms) Capabilities {
+	return Capabilities{UploadProfiles: append([]UploadProfile{}, s.cfg.UploadProfiles...), Terms: terms, AllowedTypes: append([]string{}, s.cfg.AllowedTypes...), MaxFileSize: s.cfg.MaxFileSize, MaxPackageBytes: s.cfg.MaxPackageBytes, MaxPackageFiles: s.cfg.MaxPackageFiles, PurchaseAvailable: true}
 }
 func (s *Service) Ready(ctx context.Context) error {
 	port, ok := s.repo.(OperationalReader)
