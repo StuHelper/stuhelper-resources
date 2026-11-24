@@ -45,6 +45,12 @@ specifications:
   - docs/spec/resources.md
   - docs/spec/ui-data.md
 scenario_tests:
+  RET-12:
+    - discovery_retention_test.go#TestDiscoveryRetentionRequiresSupersessionDeliveryAndNoHold
+  RES-RET-01:
+    - closure_retention_test.go#TestTransferredComplaintPurgeIsScopedAndRepeatable
+  RET-11:
+    - closure_retention_test.go#TestClosedOwnerExpiresOnlyAfterRecordedCompletion
   IQ-02:
     - postgres/query_write_test.go#TestAccountQueryRepositoryWritesRefreshTime
     - accountquery/query_test.go#TestAccountQueryAuthorizationAndFailures
